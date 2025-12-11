@@ -110,7 +110,22 @@ def objective_function(optimized_parameters: Float[Array, "{self.n_params}"],) -
     ...
 ```
 
-### 4. Wall time tracking
+### 4. Application of algorithms (`./scripts/`)
+
+Algorithms can be applied in the simplest way by:
+
+```python
+from dfbench import VoyagerProblem, AdamGD
+
+vp = VoyagerProblem()
+
+optimizer = AdamGD(vp)
+
+optimizer.optimize(save_to_file=True, max_iterations=200)
+```
+(You can add hyperparams to `optimize()` as needed.)
+
+### 5. Wall time tracking
 
 For benchmarking we track progress at specific wall times. The pattern is:
 
@@ -137,7 +152,9 @@ while (time.time() - start_time) < max_wall_time:
     iteration += 1
 ```
 
-### 5. Register it
+So the algorithms run until the max wall time is reached, and we keep track of which iteration corresponds to each wall time checkpoint.
+
+### 6. Register it
 
 Add import to `src/dfbench/algorithms/<category>/__init__.py` and `src/dfbench/__init__.py`.
 
@@ -148,6 +165,10 @@ Look at existing implementations:
 - `random_search.py` - simplest example, good starting point
 - `adam_gd.py` - gradient-based pattern
 - `evox_pso.py` - more complex, wraps external library
+- `./scripts/` - for different kinds of applications of these algorithms
+    - `voyager_adam_gd.py` just a simple script
+    - `voyager_evox_pso.py` has cli arguments
+    - `voyager_benchmark.py`
 
 ## Running a Benchmark
 
