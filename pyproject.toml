@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dfbench"
+version = "0.1.0"
+description = "Differometor Benchmark - Optimization algorithms and problem definitions"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "beartype>=0.22.8",
+    "botorch>=0.16.1",
+    "differometor>=0.0.2",
+    "evox>=1.3.0",
+    "jaxlib>=0.5.0",
+    "jaxtyping>=0.3.3",
+    "torchaudio>=2.9.1",
+    "torchvision>=0.24.1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dfbench"]
+
+[dependency-groups]
+cuda12 = [
+    "jax[cuda12]>=0.5.0",
+]
+dev = [
+    "equinox>=0.13.2",
+    "ipykernel>=7.1.0",
+    "ipywidgets>=8.1.8",
+    "ruff>=0.14.8",
+    "snakeviz>=2.2.2",
+    "tueplots>=0.2.1",
+]
