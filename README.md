@@ -102,6 +102,14 @@ The problem gives you two objective functions:
 - `problem.objective_function` - expects params within bounds, use this for evolutionary/population-based stuff
 - `problem.sigmoid_objective_function` - expects unbounded params (-inf, +inf), applies sigmoid internally. Use for gradient-based methods.
 
+Both expect a `jnp.array` of shape `(n_params,)` and return a scalar loss:
+
+```python
+@jax.jit
+def objective_function(optimized_parameters: Float[Array, "{self.n_params}"],) -> Float:
+    ...
+```
+
 ### 4. Wall time tracking
 
 For benchmarking we track progress at specific wall times. The pattern is:
