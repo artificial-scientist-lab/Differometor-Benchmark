@@ -39,8 +39,6 @@ class SAGD(OptimizationAlgorithm):
         algorithm_str (str): Identifier string for this algorithm ("sagd").
         algorithm_type (AlgorithmType): Type classification (GRADIENT_BASED).
         _problem (ContinuousProblem): The optimization problem instance.
-        max_iterations (int): Maximum number of optimization iterations.
-        patience (int): Early stopping patience (iterations without improvement).
         _grad_fn (Callable): JIT-compiled gradient function for the objective.
 
     Note:
@@ -49,10 +47,11 @@ class SAGD(OptimizationAlgorithm):
 
     Example:
         >>> problem = VoyagerProblem()
-        >>> optimizer = SAGD(problem, max_iterations=10000)
+        >>> optimizer = SAGD(problem)
         >>> best_params, history, losses, wall_indices = optimizer.optimize(
         ...     learning_rate=0.1,
         ...     T0=1.0,
+        ...     max_iterations=10000,
         ...     wall_times=[30, 60, 120],
         ... )
     """
@@ -60,23 +59,13 @@ class SAGD(OptimizationAlgorithm):
     algorithm_str: str = "sagd"
     algorithm_type: AlgorithmType = AlgorithmType.GRADIENT_BASED
 
-    def __init__(
-        self,
-        problem: ContinuousProblem,
-        max_iterations: int = 50000,
-        patience: int = 1000,
-    ) -> None:
+    def __init__(self, problem: ContinuousProblem) -> None:
         """Initialize SA-GD optimizer.
 
         Args:
             problem (ContinuousProblem): The continuous optimization problem to solve.
-            max_iterations (int): Maximum number of optimization iterations. Defaults to 50,000.
-            patience (int): Stop if no improvement (>1e-4) after this many iterations.
-                Only applies when wall_times is not set. Defaults to 1,000.
         """
         self._problem = problem
-        self.max_iterations = max_iterations
-        self.patience = patience
 
         self._grad_fn = jax.jit(
             jax.value_and_grad(self._problem.sigmoid_objective_function)
@@ -168,6 +157,8 @@ class SAGD(OptimizationAlgorithm):
         random_seed: int | None = None,
         wall_times: list[int | float] | None = None,
         learning_rate: float = 0.1,
+        max_iterations: int = 50000,
+        patience: int = 1000,
         T0: float = 15.0,
         sigma: float = 1.0,
         max_ascent_prob: float = 0.33,
@@ -198,6 +189,10 @@ class SAGD(OptimizationAlgorithm):
                 the current iteration index is recorded. If None, runs for max_iterations or
                 until patience is exceeded. Defaults to None.
             learning_rate (float): Learning rate for Adam optimizer. Defaults to 0.1.
+            max_iterations (int): Maximum number of optimization iterations.
+                Only applies when wall_times is None. Defaults to 50,000.
+            patience (int): Stop if no improvement (>1e-4) after this many iterations.
+                Only applies when wall_times is None. Defaults to 1,000.
             T0 (float): Initial temperature for simulated annealing. Higher values
                 lead to higher probability of gradient ascent. Recommended: 15-19 for
                 fixed LR, 0.0001 for simple SA without LR consideration. Defaults to 15.0.
@@ -379,7 +374,7 @@ class SAGD(OptimizationAlgorithm):
         else:
             # Iteration/patience constrained
             no_improve_count = 0
-            for i in range(self.max_iterations):
+            for i in range(max_iterations):
                 params, optimizer_state, loss, rng_key, ascent_count, descent_count = (
                     do_optimization_step(
                         params,
@@ -412,7 +407,7 @@ class SAGD(OptimizationAlgorithm):
                 losses.append(loss)
                 prev_loss = loss
 
-                if no_improve_count > self.patience:
+                if no_improve_count > patience:
                     break
 
         # Final statistics

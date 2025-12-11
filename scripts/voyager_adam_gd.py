@@ -4,6 +4,6 @@ from dfbench import VoyagerProblem, AdamGD
 
 vp = VoyagerProblem()
 
-optimizer = AdamGD(vp, max_iterations=200)
+optimizer = AdamGD(vp)
 
-optimizer.optimize()
+optimizer.optimize(max_iterations=200)

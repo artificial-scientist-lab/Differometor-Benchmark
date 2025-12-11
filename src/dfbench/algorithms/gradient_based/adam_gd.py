@@ -24,8 +24,6 @@ class AdamGD(OptimizationAlgorithm):
         algorithm_str (str): Identifier string for this algorithm ("adam").
         algorithm_type (AlgorithmType): Type classification (GRADIENT_BASED).
         _problem (ContinuousProblem): The optimization problem instance.
-        max_iterations (int): Maximum number of optimization iterations.
-        patience (int): Early stopping patience (iterations without improvement).
         _grad_fn (Callable): JIT-compiled gradient function for the objective.
 
     Note:
@@ -35,33 +33,24 @@ class AdamGD(OptimizationAlgorithm):
 
     Example:
         >>> problem = VoyagerProblem()
-        >>> optimizer = AdamGD(problem, max_iterations=10000, patience=500)
+        >>> optimizer = AdamGD(problem)
         >>> best_params, history, losses, wall_indices = optimizer.optimize(
         ...     learning_rate=0.1,
-        ...     wall_times=[30, 60, 120],
+        ...     max_iterations=10000,
+        ...     patience=500,
         ... )
     """
 
     algorithm_str: str = "adam"
     algorithm_type: AlgorithmType = AlgorithmType.GRADIENT_BASED
 
-    def __init__(
-        self,
-        problem: ContinuousProblem,
-        max_iterations: int = 50000,
-        patience: int = 1000,
-    ) -> None:
+    def __init__(self, problem: ContinuousProblem) -> None:
         """Initialize Adam Gradient Descent optimizer.
 
         Args:
             problem (ContinuousProblem): The continuous optimization problem to solve.
-            max_iterations (int): Maximum number of optimization iterations. Defaults to 50,000.
-            patience (int): Stop if no improvement (>1e-4) after this many iterations.
-                Only applies when wall_times is not set. Defaults to 1,000.
         """
         self._problem = problem
-        self.max_iterations = max_iterations
-        self.patience = patience
 
         self._grad_fn = jax.jit(
             jax.value_and_grad(self._problem.sigmoid_objective_function)
@@ -76,6 +65,8 @@ class AdamGD(OptimizationAlgorithm):
         random_seed: int | None = None,
         wall_times: list[int | float] | None = None,
         learning_rate: float = 0.1,
+        max_iterations: int = 50000,
+        patience: int = 1000,
         **adam_kwargs,
     ) -> tuple[
         Float[Array, "{self._problem.n_params}"],
@@ -98,6 +89,10 @@ class AdamGD(OptimizationAlgorithm):
                 the current iteration index is recorded. If None, runs for max_iterations or
                 until patience is exceeded. Defaults to None.
             learning_rate (float): Learning rate for Adam optimizer. Defaults to 0.1.
+            max_iterations (int): Maximum number of optimization iterations.
+                Only applies when wall_times is None. Defaults to 50,000.
+            patience (int): Stop if no improvement (>1e-4) after this many iterations.
+                Only applies when wall_times is None. Defaults to 1,000.
             **adam_kwargs: Additional keyword arguments passed to optax.adam().
                 Common options: b1 (float, default 0.9), b2 (float, default 0.999),
                 eps (float, default 1e-8), eps_root (float, default 0.0),
@@ -182,7 +177,7 @@ class AdamGD(OptimizationAlgorithm):
         else:
             # Iteration/patience constrained
             no_improve_count = 0
-            for i in range(self.max_iterations):
+            for i in range(max_iterations):
                 loss, grads = self._grad_fn(params)
 
                 if i % 500 == 0:
@@ -203,7 +198,7 @@ class AdamGD(OptimizationAlgorithm):
                 params = optax.apply_updates(params, updates)
                 losses.append(float(loss))
 
-                if no_improve_count > self.patience:
+                if no_improve_count > patience:
                     break
 
         losses = jnp.array(losses)
