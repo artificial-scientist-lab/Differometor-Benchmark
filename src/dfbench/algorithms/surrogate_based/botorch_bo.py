@@ -13,6 +13,7 @@ from collections import deque
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
+from differometor.utils import sigmoid_bounding
 from dfbench.core.protocols import (
     ContinuousProblem,
     OptimizationAlgorithm,
@@ -353,6 +354,14 @@ class BotorchBO(OptimizationAlgorithm):
         best_params_history_array = (
             jnp.array(best_params_history) if return_best_params_history else None
         )
+
+        # Transform unbounded parameters back to bounded space if using sigmoid objective
+        if not use_problem_bounds:
+            best_params = sigmoid_bounding(best_params, self._problem.bounds)
+            if return_best_params_history:
+                best_params_history_array = jnp.array(
+                    [sigmoid_bounding(p, self._problem.bounds) for p in best_params_history]
+                )
 
         if save_to_file:
             self._problem.output_to_files(

@@ -35,9 +35,8 @@ class EvoxPSO(OptimizationAlgorithm):
         _pso_problem (EvoxProblem): EvoX problem wrapper for the objective function.
 
     Note:
-        This algorithm uses `problem.objective_function` with explicit bounds
-        when `use_problem_bounds=True` (default). This allows the swarm to
-        search directly in the bounded parameter space without sigmoid transformation.
+        This algorithm uses `problem.objective_function` with the problem's bounds.
+        The swarm searches directly in the bounded parameter space.
 
     Example:
         >>> problem = VoyagerProblem()
@@ -130,7 +129,6 @@ class EvoxPSO(OptimizationAlgorithm):
     def optimize(
         self,
         save_to_file: bool = True,
-        use_problem_bounds: bool = True,
         init_params_pop: Float[Array, "{pop_size} {self._problem.n_params}"]
         | None = None,
         return_best_params_history: bool = False,
@@ -138,12 +136,10 @@ class EvoxPSO(OptimizationAlgorithm):
         wall_times: list[int | float] | None = None,
         pop_size: int = 100,
         n_generations: int | None = None,
-        lb: Float[Array, "{self._problem.n_params}"] | None = None,
-        ub: Float[Array, "{self._problem.n_params}"] | None = None,
         **pso_kwargs,
     ) -> tuple[
         Float[Array, "{self._problem.n_params}"],
-        Float[Array, "n_gens {self._problem.n_params}"],
+        Float[Array, "n_gens {self._problem.n_params}"] | Float[Array, "0"],
         Float[Array, "n_gens"],
         list[int] | None,
         Float[Array, "n_gens {pop_size}"],
@@ -152,10 +148,6 @@ class EvoxPSO(OptimizationAlgorithm):
 
         Args:
             save_to_file (bool): Whether to save optimization results to file. Defaults to True.
-            use_problem_bounds (bool): If True, use bounds from `problem.bounds` instead of
-                lb/ub parameters. This allows PSO to search directly in the parameter space
-                without sigmoid bounding. Requires the problem to have a `bounds` attribute
-                (shape [2, n_params] with [lower_bounds, upper_bounds]). Defaults to True.
             init_params_pop (Float[Array, "pop_size n_params"] | None): Initial population of
                 parameters. If None, randomly initialized within bounds. Defaults to None.
             return_best_params_history (bool): Whether to track best parameters at each
@@ -171,10 +163,6 @@ class EvoxPSO(OptimizationAlgorithm):
             n_generations (int | None): Number of generations to run. Required if wall_times
                 is None. Can be combined with wall_times as an additional stopping criterion.
                 Defaults to None.
-            lb (Float[Array, "n_params"] | None): Lower bounds for each parameter. If None,
-                uses -10 for all parameters. Ignored if use_problem_bounds=True. Defaults to None.
-            ub (Float[Array, "n_params"] | None): Upper bounds for each parameter. If None,
-                uses 10 for all parameters. Ignored if use_problem_bounds=True. Defaults to None.
             **pso_kwargs: Variant-specific keyword arguments passed to the EvoX algorithm constructor.
                 Parameter options by variant:
                 - PSO: w (float, inertia weight, default 0.6), phi_p (float,
@@ -218,28 +206,15 @@ class EvoxPSO(OptimizationAlgorithm):
         # Initiate monitor for loss tracking etc.
         monitor = EvalMonitor()
 
-        # Determine bounds: use problem bounds if requested, otherwise use lb/ub parameters
-        if use_problem_bounds:
-            if not hasattr(self._problem, "bounds"):
-                raise ValueError(
-                    "use_problem_bounds=True requires the problem to have a 'bounds' attribute. "
-                    f"Problem {type(self._problem).__name__} does not have this attribute."
-                )
-            problem_bounds = self._problem.bounds
-            # problem.bounds is expected to be shape [2, n_params] with [lower, upper]
-            lb = j2t(problem_bounds[0])
-            ub = j2t(problem_bounds[1])
-
-        else:
-            # Convert bounds to torch tensors if needed
-            if lb is None:
-                lb = -10 * torch.ones(self._problem.n_params)
-            elif isinstance(lb, jax.Array):
-                lb = j2t(lb)
-            if ub is None:
-                ub = 10 * torch.ones(self._problem.n_params)
-            elif isinstance(ub, jax.Array):
-                ub = j2t(ub)
+        # Get bounds from problem
+        if not hasattr(self._problem, "bounds"):
+            raise ValueError(
+                f"Problem {type(self._problem).__name__} must have a 'bounds' attribute."
+            )
+        problem_bounds = self._problem.bounds
+        # problem.bounds is expected to be shape [2, n_params] with [lower, upper]
+        lb = j2t(problem_bounds[0])
+        ub = j2t(problem_bounds[1])
 
         # Map variant names to algorithm classes
         variant_map = {

@@ -163,8 +163,9 @@ class VoyagerProblem:
         self,
         optimized_parameters: Float[Array, "{self.n_params}"],
     ) -> Float[Array, "n_frequencies"]:
+        # Use no bounding here since the parameters are expected to already be inside the bounds
         update_setup(
-            optimized_parameters, self._optimization_pairs, self._bounds, self._setup
+            optimized_parameters, self._optimization_pairs, self._bounds, self._setup, bounding_function=lambda x, b: x
         )
 
         carrier, signal, noise, detector_ports, *_ = df.run(

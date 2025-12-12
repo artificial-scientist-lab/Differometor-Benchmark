@@ -7,6 +7,7 @@ from collections import deque
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
+from differometor.utils import sigmoid_bounding
 from dfbench.core.protocols import (
     ContinuousProblem,
     OptimizationAlgorithm,
@@ -206,12 +207,20 @@ class AdamGD(OptimizationAlgorithm):
             jnp.array(best_params_history) if return_best_params_history else None
         )
 
+        # Transform unbounded parameters back to bounded space
+        best_params_bounded = sigmoid_bounding(best_params, self._problem.bounds)
+        best_params_history_bounded = (
+            jnp.array([sigmoid_bounding(p, self._problem.bounds) for p in best_params_history])
+            if return_best_params_history
+            else None
+        )
+
         if save_to_file:
             self._problem.output_to_files(
-                best_params=best_params,
+                best_params=best_params_bounded,
                 losses=losses,
                 algorithm_str=self.algorithm_str,
                 hyper_param_str=f"lr{learning_rate}",
             )  # TODO maybe conditionally add more hyperparameters to string
 
-        return best_params, best_params_history, losses, wall_time_indices
+        return best_params_bounded, best_params_history_bounded, losses, wall_time_indices
