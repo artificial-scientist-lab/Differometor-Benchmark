@@ -397,6 +397,7 @@ class Benchmark:
         n_runs: int = 100,
         wall_time_steps: list[float] = [300],  # 5 minutes in seconds
         random_baseline_loss: float = 463.5,
+        random_seed: int | None = None,
     ):
         """Initialize the benchmark suite.
 
@@ -406,7 +407,10 @@ class Benchmark:
             configs: List of algorithm configurations to benchmark
             n_runs: Number of independent runs per algorithm configuration
             wall_time_steps: Time checkpoints (in seconds) at which to evaluate metrics
-            random_baseline_loss: Expected loss of a random guess (default: 463.7 for Voyager).
+            random_baseline_loss: Expected loss of a random guess (default: 463.5 for Voyager).
+            random_seed: Master random seed for reproducibility. If provided, generates
+                n_runs deterministic seeds from it and passes them to each run. If None,
+                algorithms use their default random behavior. Defaults to None.
         """
         self._problem = problem
         self._success_loss = success_loss
@@ -414,6 +418,7 @@ class Benchmark:
         self._n_runs = n_runs
         self._wall_time_steps = sorted(wall_time_steps)
         self._random_baseline_loss = random_baseline_loss
+        self._random_seed = random_seed
         # Warmup jit compilation
         _ = problem.objective_function(jnp.zeros(problem.n_params))
 
@@ -439,8 +444,19 @@ class Benchmark:
         all_losses = []
         all_wall_time_indices = []
 
+        # Generate per-run seeds from master seed if provided
+        run_seeds = None
+        if self._random_seed is not None:
+            rng = np.random.RandomState(self._random_seed)
+            run_seeds = [int(rng.randint(0, 2**31)) for _ in range(self._n_runs)]
+
         for i_run in range(self._n_runs):
             print(f"Run {i_run + 1}/{self._n_runs}...", end=" ", flush=True)
+
+            # Prepare kwargs with random seed if available
+            run_kwargs = config.hyperparameters.copy()
+            if run_seeds is not None:
+                run_kwargs["random_seed"] = run_seeds[i_run]
 
             # Run algorithm with wall_times
             best_params, best_params_history, losses, wall_time_indices, *_ = (
@@ -448,7 +464,7 @@ class Benchmark:
                     save_to_file=False,
                     return_best_params_history=True,
                     wall_times=self._wall_time_steps,
-                    **config.hyperparameters,
+                    **run_kwargs,
                 )
             )
 
