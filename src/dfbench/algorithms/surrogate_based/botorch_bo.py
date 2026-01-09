@@ -87,6 +87,8 @@ class BotorchBO(OptimizationAlgorithm):
 
         def evaluate(x: torch.Tensor) -> torch.Tensor:
             y = float(objective_fn(t2j(x)))
+            # Return the value as-is; NaN/Inf values will be filtered out
+            # to avoid distorting the GP surrogate landscape
             return torch.tensor([y], device=self.device, dtype=self.dtype)
 
         # Warmup JIT compilation
@@ -221,8 +223,17 @@ class BotorchBO(OptimizationAlgorithm):
                 device=self.device,
                 dtype=self.dtype,
             )
-            train_X = normalize(train_X_orig)
-            train_Y = evaluate(train_X_orig[0]).unsqueeze(0)
+            init_Y = evaluate(train_X_orig[0])
+            # Only use init_params if evaluation is valid (not NaN/Inf)
+            if torch.isfinite(init_Y).all():
+                train_X = normalize(train_X_orig)
+                train_Y = init_Y.unsqueeze(0)
+            else:
+                print(f"Warning: init_params evaluation returned NaN/Inf, skipping")
+                train_X = torch.empty(
+                    0, self._problem.n_params, device=self.device, dtype=self.dtype
+                )
+                train_Y = torch.empty(0, 1, device=self.device, dtype=self.dtype)
         else:
             train_X = torch.empty(
                 0, self._problem.n_params, device=self.device, dtype=self.dtype
@@ -236,20 +247,32 @@ class BotorchBO(OptimizationAlgorithm):
                 n_random, self._problem.n_params, device=self.device, dtype=self.dtype
             )
             random_Y = torch.stack([evaluate(unnormalize(x)) for x in random_X])
-            train_X = (
-                torch.cat([train_X, random_X], dim=0) if len(train_X) > 0 else random_X
-            )
-            train_Y = (
-                torch.cat([train_Y, random_Y], dim=0) if len(train_Y) > 0 else random_Y
-            )
+            # Filter out NaN/Inf values to avoid distorting the GP surrogate
+            valid_mask = torch.isfinite(random_Y.squeeze(-1))
+            random_X = random_X[valid_mask]
+            random_Y = random_Y[valid_mask]
+            if len(random_X) > 0:
+                train_X = (
+                    torch.cat([train_X, random_X], dim=0) if len(train_X) > 0 else random_X
+                )
+                train_Y = (
+                    torch.cat([train_Y, random_Y], dim=0) if len(train_Y) > 0 else random_Y
+                )
 
-        # Record initial losses and update best
+        # Record initial losses and update best (all values in train_Y are valid at this point)
         for idx, y in enumerate(train_Y):
             loss = float(y.item())
             losses.append(loss)
             if loss < best_loss - 1e-4:
                 best_loss = loss
                 best_params = t2j(unnormalize(train_X[idx]))
+
+        # Ensure we have at least some valid initial points
+        if len(train_X) == 0:
+            raise ValueError(
+                "All initial evaluations returned NaN/Inf. Cannot fit GP model. "
+                "Check the objective function or try different initial parameters."
+            )
 
             if return_best_params_history:
                 best_params_history.append(best_params)
@@ -289,10 +312,15 @@ class BotorchBO(OptimizationAlgorithm):
             # Evaluate candidate in original space
             candidate_orig = unnormalize(candidate[0])
             new_Y = evaluate(candidate_orig)
-            train_X = torch.cat([train_X, candidate], dim=0)
-            train_Y = torch.cat([train_Y, new_Y.unsqueeze(0)], dim=0)
-
             loss = float(new_Y.item())
+
+            # Only add valid evaluations to training data to preserve GP surrogate quality
+            if torch.isfinite(new_Y).all():
+                train_X = torch.cat([train_X, candidate], dim=0)
+                train_Y = torch.cat([train_Y, new_Y.unsqueeze(0)], dim=0)
+            else:
+                print(f"Iteration {iteration}: Skipping NaN/Inf evaluation")
+
             return train_X, train_Y, loss, candidate_orig
 
         # Main optimization loop
@@ -315,7 +343,8 @@ class BotorchBO(OptimizationAlgorithm):
                 if i % 10 == 0:
                     print(f"Iteration {i}: Loss = {loss}")
 
-                if loss < best_loss - 1e-4:
+                # Only update best if loss is valid (not NaN/Inf)
+                if np.isfinite(loss) and loss < best_loss - 1e-4:
                     best_loss = loss
                     best_params = t2j(candidate)
                     print(f"Iteration {i}: New best loss = {loss}")
@@ -340,7 +369,8 @@ class BotorchBO(OptimizationAlgorithm):
                 if i % 10 == 0:
                     print(f"Iteration {i}: Loss = {loss}")
 
-                if loss < best_loss - 1e-4:
+                # Only update best if loss is valid (not NaN/Inf)
+                if np.isfinite(loss) and loss < best_loss - 1e-4:
                     best_loss = loss
                     best_params = t2j(candidate)
                     print(f"Iteration {i}: New best loss = {loss}")
