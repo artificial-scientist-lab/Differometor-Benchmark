@@ -11,10 +11,10 @@ from dfbench import (
 def main():
     """Run Voyager optimization using EvoX PSO algorithm."""
     params = {
-        "batch_size": 5,
+        "batch_size": 50,
         "pop_size": 50,
         # "n_generations": 10,
-        "wall_times": [60, 120, 300],
+        "wall_times": [60],
     }
     parser = create_parser(params, description="Voyager PSO Optimization")
     args = vars(parser.parse_args())
