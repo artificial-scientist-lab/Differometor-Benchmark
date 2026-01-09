@@ -57,7 +57,7 @@ class SAGD(OptimizationAlgorithm):
         ... )
     """
 
-    algorithm_str: str = "sagd"
+    algorithm_str: str = "sa_gd"
     algorithm_type: AlgorithmType = AlgorithmType.GRADIENT_BASED
 
     def __init__(self, problem: ContinuousProblem) -> None:
@@ -430,11 +430,13 @@ class SAGD(OptimizationAlgorithm):
 
         # Transform unbounded parameters back to bounded space
         best_params_bounded = sigmoid_bounding(best_params, self._problem.bounds)
-        best_params_history_bounded = (
-            jnp.array([sigmoid_bounding(p, self._problem.bounds) for p in best_params_history])
-            if return_best_params_history
-            else None
-        )
+        if return_best_params_history:
+            sigmoid_bounding_v = jax.vmap(
+                lambda p: sigmoid_bounding(p, self._problem.bounds)
+            )
+            best_params_history_bounded = sigmoid_bounding_v(best_params_history)
+        else:
+            best_params_history_bounded = None
 
         if save_to_file:
             self._problem.output_to_files(
