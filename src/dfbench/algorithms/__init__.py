@@ -7,6 +7,7 @@ from dfbench.algorithms.gradient_based.adam_gd import AdamGD
 from dfbench.algorithms.gradient_based.na_adam_gd import NAAdamGD
 from dfbench.algorithms.gradient_based.sa_gd import SAGD
 from dfbench.algorithms.surrogate_based.botorch_bo import BotorchBO
+from dfbench.algorithms.surrogate_based.botorch_turbo import BotorchTuRBO
 
 __all__ = [
     "EvoxES",
@@ -16,4 +17,5 @@ __all__ = [
     "NAAdamGD",
     "SAGD",
     "BotorchBO",
+    "BotorchTuRBO",
 ]

@@ -25,6 +25,7 @@ from dfbench.algorithms.gradient_based.adam_gd import AdamGD
 from dfbench.algorithms.gradient_based.na_adam_gd import NAAdamGD
 from dfbench.algorithms.gradient_based.sa_gd import SAGD
 from dfbench.algorithms.surrogate_based.botorch_bo import BotorchBO
+from dfbench.algorithms.surrogate_based.botorch_turbo import BotorchTuRBO
 
 # Import problems
 from dfbench.problems.voyager.voyager_problem import VoyagerProblem
@@ -52,6 +53,7 @@ __all__ = [
     "NAAdamGD",
     "SAGD",
     "BotorchBO",
+    "BotorchTuRBO",
     # Problems
     "OpticalSetupProblem",
     "VoyagerProblem",
