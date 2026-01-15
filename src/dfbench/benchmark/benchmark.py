@@ -42,53 +42,19 @@ class AggregateMetric:
     std: Float[Array, "n_time_steps"]
 
 
-# =============================================================================
-#                             Helper functions
-# =============================================================================
-# Architecture:
-#   _run_*   : Per-run computations (operate on single 1D loss/param array)
-#   _agg_*   : Aggregation across runs (combine per-run values into metrics)
-#   _multi_* : Multi-run computations (inherently need all runs, e.g., diversity)
-#
-# The evaluation loop:
-#   1. For each time step, get per-run indices from wall_time_indices
-#   2. Compute per-run values using _run_* functions in list comprehensions
-#   3. Aggregate into benchmark metrics using _agg_* functions
-#   4. For special metrics (diversity, top-k), use _multi_* functions
-#
-# DESIGN NOTE: Alternative Vectorized Masking Approach
-# ----------------------------------------------------
-# We considered padding all runs to max_iterations and using boolean masks:
-#   mask = iter_range[None, :] < wall_time_indices[:, t, None]
-#   masked_losses = jnp.where(mask, all_losses, jnp.inf)
-#
-# Performance Analysis:
-# - Both approaches are essentially equivalent for our use case
-# - The Python loop is over runs (~100), not iterations (~100k)
-# - Heavy compute (reductions) is already vectorized JAX in both approaches
-#
-# We chose list iteration because:
-# - Simpler to reason about, fewer edge cases with neutral values
-# - No memory overhead from padding (important if iteration counts vary widely)
-# - Code clarity: explicit per-run logic is easier to debug
-#
-# The matrix approach would be preferred if:
-# - Evaluation needs to be JIT-compiled (e.g., inside an optimization loop)
-# - Running on GPU where kernel launch overhead dominates
-# =============================================================================
+# ---------------- Helper functions for benchmark evaluation ------------------
+# _run_*   : Per-run metrics (single array)
+# _agg_*   : Aggregate metrics across runs
+# _multi_* : Multi-run metrics (diversity, top-k)
 
 
-# =============================================================================
-# PER-RUN FUNCTIONS (_run_*)
-# =============================================================================
-# These compute values for a single run's data (1D array of losses/params).
-# Used in list comprehensions to process each run independently.
-# =============================================================================
-
+# --------------------------- Per-run functions ------------------------------
+# These compute values for a single run's data (1D array of losses/params)
+# Used in list comprehensions to process each run independently
 
 def _run_min_loss(losses: Float[Array, "iterations"]) -> float:
     """Minimum loss achieved in a single run."""
-    return float(jnp.min(losses))
+    return float(jnp.nanmin(losses))
 
 
 def _run_has_success(losses: Float[Array, "iterations"], threshold: float) -> bool:
@@ -147,13 +113,9 @@ def _run_auc(
     return algorithm_auc
 
 
-# =============================================================================
-# AGGREGATION FUNCTIONS (_agg_*)
-# =============================================================================
+# --------------------------- Aggregation functions ------------------------------
 # These combine per-run results into benchmark metrics (the actual numbers
-# that characterize algorithm performance across many runs).
-# =============================================================================
-
+# that characterize algorithm performance across many runs)
 
 def _agg_mean_std(values: list[float]) -> tuple[float, float]:
     """Compute mean and std from a list of per-run values.
@@ -185,27 +147,45 @@ def _agg_mean_std_filtered(
     return fallback, 0.0
 
 
-# =============================================================================
-# MULTI-RUN FUNCTIONS
-# =============================================================================
+# ------------------------------- Multi-run functions -----------------------------
 # These inherently need data from all runs (e.g., diversity, top-k selection).
 # They operate on collections of solutions, not individual runs.
-# =============================================================================
-
 
 def _multi_solution_diversity_overall(
     params: Float[Array, "n_solutions n_params"],
+    bounds: Float[Array, "2 n_params"] | None = None,
 ) -> tuple[float, float]:
-    """Overall diversity as mean pairwise Euclidean distance (mean ± std).
+    """Overall diversity as mean pairwise distance, normalized to [0, 1].
 
-    Returns (0.0, 0.0) if fewer than 2 solutions.
+    Each dimension is normalized to [0, 1] by bounds, then the Euclidean
+    distance is divided by sqrt(n_params) so max distance = 1.
+
+    Args:
+        params: Solution parameters, shape (n_solutions, n_params)
+        bounds: Parameter bounds [lower, upper], shape (2, n_params).
+            If None, no normalization is applied.
+
+    Returns:
+        (mean, std) of normalized pairwise distances in [0, 1], or (0.0, 0.0) if < 2 solutions.
     """
     n_solutions = params.shape[0]
+    n_params = params.shape[1]
     if n_solutions < 2:
         return 0.0, 0.0
 
-    diff = params[:, None, :] - params[None, :, :]
-    distances = jnp.linalg.norm(diff, axis=2)
+    # Normalize parameters by bounds if provided
+    if bounds is not None:
+        bounds = jnp.asarray(bounds)
+        param_ranges = bounds[1] - bounds[0]  # shape: (n_params,)
+        # Avoid division by zero for fixed parameters
+        param_ranges = jnp.where(param_ranges > 0, param_ranges, 1.0)
+        params_normalized = (params - bounds[0]) / param_ranges
+    else:
+        params_normalized = params
+
+    diff = params_normalized[:, None, :] - params_normalized[None, :, :]
+    # Euclidean distance, then divide by sqrt(n_params) so max = 1
+    distances = jnp.linalg.norm(diff, axis=2) / jnp.sqrt(n_params)
 
     mask = ~jnp.eye(n_solutions, dtype=bool)
     pairwise_distances = distances[mask]
@@ -215,17 +195,39 @@ def _multi_solution_diversity_overall(
 
 def _multi_solution_diversity_nn(
     params: Float[Array, "n_solutions n_params"],
+    bounds: Float[Array, "2 n_params"] | None = None,
 ) -> tuple[float, float]:
-    """Nearest-neighbor diversity (mean ± std of distances to nearest neighbor).
+    """Nearest-neighbor diversity, normalized to [0, 1].
 
-    Returns (0.0, 0.0) if fewer than 2 solutions.
+    Each dimension is normalized to [0, 1] by bounds, then the Euclidean
+    distance is divided by sqrt(n_params) so max distance = 1.
+
+    Args:
+        params: Solution parameters, shape (n_solutions, n_params)
+        bounds: Parameter bounds [lower, upper], shape (2, n_params).
+            If None, no normalization is applied.
+
+    Returns:
+        (mean, std) of normalized NN distances in [0, 1], or (0.0, 0.0) if < 2 solutions.
     """
     n_solutions = params.shape[0]
+    n_params = params.shape[1]
     if n_solutions < 2:
         return 0.0, 0.0
 
-    diff = params[:, None, :] - params[None, :, :]
-    distances = jnp.linalg.norm(diff, axis=2)
+    # Normalize parameters by bounds if provided
+    if bounds is not None:
+        bounds = jnp.asarray(bounds)
+        param_ranges = bounds[1] - bounds[0]  # shape: (n_params,)
+        # Avoid division by zero for fixed parameters
+        param_ranges = jnp.where(param_ranges > 0, param_ranges, 1.0)
+        params_normalized = (params - bounds[0]) / param_ranges
+    else:
+        params_normalized = params
+
+    diff = params_normalized[:, None, :] - params_normalized[None, :, :]
+    # Euclidean distance, then divide by sqrt(n_params) so max = 1
+    distances = jnp.linalg.norm(diff, axis=2) / jnp.sqrt(n_params)
 
     distances_no_diag = jnp.where(jnp.eye(n_solutions, dtype=bool), jnp.inf, distances)
     nearest_neighbor_distances = jnp.min(distances_no_diag, axis=1)
@@ -261,6 +263,54 @@ def _multi_auc_top_k(
     return _agg_mean_std(top_aucs)
 
 
+def compute_performance_profile(
+    run_min_losses: list[float],
+    loss_thresholds: Float[Array, "n_thresholds"] | None = None,
+) -> tuple[Float[Array, "n_thresholds"], Float[Array, "n_thresholds"], float]:
+    """Compute performance profile (empirical CDF of final losses).
+
+    This is similar to an ROC curve for optimization: for each loss threshold,
+    compute the fraction of runs that achieved a loss below that threshold.
+    The result shows the full distribution of algorithm performance and allows
+    target-agnostic comparison.
+
+    Args:
+        run_min_losses: Minimum loss achieved by each run
+        loss_thresholds: Array of loss thresholds to evaluate at.
+            If None, defaults to linspace from -1 to 5 with 601 points.
+
+    Returns:
+        tuple of (thresholds, success_rates, normalized_auc):
+            - thresholds: Loss threshold values
+            - success_rates: Fraction of runs achieving loss < threshold (0 to 1)
+            - normalized_auc: Area under the curve, normalized by threshold range
+                (allows comparison across different threshold ranges)
+    """
+    if loss_thresholds is None:
+        # Default range from -1 to 5 with 601 points (spacing of 0.01)
+        loss_thresholds = jnp.linspace(-1.0, 5.0, 601)
+
+    losses_array = jnp.array(run_min_losses)
+    n_runs = len(run_min_losses)
+
+    # For each threshold, compute fraction of runs below it
+    # Broadcasting: losses_array[:, None] < loss_thresholds[None, :]
+    # Result shape: (n_runs, n_thresholds)
+    below_threshold = losses_array[:, None] < loss_thresholds[None, :]
+    success_rates = jnp.mean(below_threshold, axis=0)  # Average over runs
+
+    # Compute normalized AUC using trapezoidal rule
+    # Normalized by threshold range so it's in [0, 1]
+    threshold_range = float(loss_thresholds[-1] - loss_thresholds[0])
+    if threshold_range > 0:
+        raw_auc = float(jnp.trapezoid(success_rates, loss_thresholds))
+        normalized_auc = raw_auc / threshold_range
+    else:
+        normalized_auc = 0.0
+
+    return loss_thresholds, success_rates, normalized_auc
+
+
 @dataclass
 class BenchmarkResult:
     """Results from a benchmark run using one algorithm across multiple time steps.
@@ -273,6 +323,11 @@ class BenchmarkResult:
     """
 
     algorithm_name: str
+
+    # Performance profile (ROC-like curve)
+    # Shows fraction of runs achieving loss < threshold for each threshold value
+    # Shape: (n_time_steps,) where each element is the normalized AUC [0, 1]
+    performance_profile_auc: SingleMetric
 
     # Single-value metrics (distribution properties)
     fraction_of_success: SingleMetric
@@ -540,6 +595,7 @@ class Benchmark:
         time_per_call_list = []
         auc_top_1_list = []
         auc_top_10_list = []
+        performance_profile_auc_list = []
         diversity_overall_list = []
         diversity_nn_list = []
 
@@ -635,6 +691,10 @@ class Benchmark:
                 _multi_auc_top_k(run_min_losses, run_aucs, k_fraction=0.1)
             )
 
+            # === Performance Profile (ROC-like curve) ===
+            _, _, perf_profile_auc = compute_performance_profile(run_min_losses)
+            performance_profile_auc_list.append(perf_profile_auc)
+
             # === Diversity (needs successful params) ===
             successful_params = jnp.array(
                 [
@@ -645,11 +705,13 @@ class Benchmark:
             )
 
             if successful_params.shape[0] >= 2:
+                # Get problem bounds for normalization
+                bounds = self._problem.bounds if hasattr(self._problem, 'bounds') else None
                 diversity_overall_list.append(
-                    _multi_solution_diversity_overall(successful_params)
+                    _multi_solution_diversity_overall(successful_params, bounds)
                 )
                 diversity_nn_list.append(
-                    _multi_solution_diversity_nn(successful_params)
+                    _multi_solution_diversity_nn(successful_params, bounds)
                 )
             else:
                 diversity_overall_list.append((0.0, 0.0))
@@ -689,6 +751,7 @@ class Benchmark:
                 mean=jnp.array([m for m, _ in auc_top_10_list]),
                 std=jnp.array([s for _, s in auc_top_10_list]),
             ),
+            performance_profile_auc=SingleMetric(value=jnp.array(performance_profile_auc_list)),
         )
 
     def run_benchmark(

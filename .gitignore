@@ -16,3 +16,6 @@ benchmark_results/*
 algorithm_output/*
 run_data
 batch-script.sh
+tmp*
+*scratch*
+notes.md
