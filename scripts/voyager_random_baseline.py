@@ -1,7 +1,7 @@
 from dfbench.algorithms import RandomSearch
-from dfbench.problems.voyager_problem import VoyagerProblem
+from dfbench.problems import ConstrainedVoyagerProblem
 
-problem = VoyagerProblem(use_sigmoid_bounding=False)
+problem = ConstrainedVoyagerProblem()
 algorithm = RandomSearch(problem, batch_size=125)
 
 # Estimate baseline statistics over multiple runs
