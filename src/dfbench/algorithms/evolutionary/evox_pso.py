@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import time
 from collections import deque
+from typing import Literal, get_args
 from evox.algorithms import PSO, CLPSO, CSO, DMSPSOEL, FSPSO, SLPSOGS, SLPSOUS
 from evox.core import Problem as EvoxProblem
 from evox.workflows import EvalMonitor, StdWorkflow
@@ -17,6 +18,9 @@ from dfbench import (
     j2t_numpy as j2t,
     t2j_numpy as t2j,
 )
+
+
+PSOVariant = Literal["PSO", "CLPSO", "CSO", "DMSPSOEL", "FSPSO", "SLPSOGS", "SLPSOUS"]
 
 
 class EvoxPSO(OptimizationAlgorithm):
@@ -50,7 +54,10 @@ class EvoxPSO(OptimizationAlgorithm):
     algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
 
     def __init__(
-        self, problem: ContinuousProblem, batch_size: int = 5, variant: str = "PSO"
+        self,
+        problem: ContinuousProblem,
+        batch_size: int = 5,
+        variant: PSOVariant = "PSO",
     ) -> None:
         """Initialize EvoX Particle Swarm Optimization.
 
@@ -58,7 +65,7 @@ class EvoxPSO(OptimizationAlgorithm):
             problem (ContinuousProblem): The continuous optimization problem to solve.
             batch_size (int): Number of particles to evaluate simultaneously in each batch.
                 Reduce this value if encountering out-of-memory errors. Defaults to 5.
-            variant (str): PSO variant to use. Options:
+            variant (PSOVariant): PSO variant to use. Options:
                 - 'PSO': Standard Particle Swarm Optimization (default)
                 - 'CLPSO': Comprehensive Learning PSO
                 - 'CSO': Competitive Swarm Optimizer
@@ -70,18 +77,10 @@ class EvoxPSO(OptimizationAlgorithm):
         """
         self._problem = problem
         self._batch_size = batch_size
-        self._variant = variant.upper()  # Normalize to uppercase
+        self._variant: PSOVariant = variant.upper()  # type: ignore[assignment]
 
-        # Validate variant
-        valid_variants = [
-            "PSO",
-            "CLPSO",
-            "CSO",
-            "DMSPSOEL",
-            "FSPSO",
-            "SLPSOGS",
-            "SLPSOUS",
-        ]
+        # Validate variant at runtime (Literal provides static checking)
+        valid_variants = get_args(PSOVariant)
         if self._variant not in valid_variants:
             raise ValueError(
                 f"Unknown PSO variant: '{variant}'. "

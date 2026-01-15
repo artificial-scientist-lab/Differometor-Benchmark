@@ -1,3 +1,6 @@
+'''
+Simulated annealing gradient descent based on https://arxiv.org/abs/2107.07558
+'''
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -41,20 +44,6 @@ class SAGD(OptimizationAlgorithm):
         algorithm_type (AlgorithmType): Type classification (GRADIENT_BASED).
         _problem (ContinuousProblem): The optimization problem instance.
         _grad_fn (Callable): JIT-compiled gradient function for the objective.
-
-    Note:
-        Like AdamGD, this algorithm uses `problem.sigmoid_objective_function`
-        for unbounded optimization with internal sigmoid bounding.
-
-    Example:
-        >>> problem = VoyagerProblem()
-        >>> optimizer = SAGD(problem)
-        >>> best_params, history, losses, wall_indices = optimizer.optimize(
-        ...     learning_rate=0.1,
-        ...     T0=1.0,
-        ...     max_iterations=10000,
-        ...     wall_times=[30, 60, 120],
-        ... )
     """
 
     algorithm_str: str = "sa_gd"
@@ -446,4 +435,9 @@ class SAGD(OptimizationAlgorithm):
                 hyper_param_str=f"lr{learning_rate}_T{T0}_sigma{sigma}",
             )
 
-        return best_params_bounded, best_params_history_bounded, losses, wall_time_indices
+        return (
+            best_params_bounded,
+            best_params_history_bounded,
+            losses,
+            wall_time_indices,
+        )

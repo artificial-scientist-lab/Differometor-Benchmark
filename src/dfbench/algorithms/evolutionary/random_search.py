@@ -89,6 +89,7 @@ class RandomSearch(OptimizationAlgorithm):
         Float[Array, "{self._problem.n_params}"],
         Float[Array, "n_batches {self._problem.n_params}"] | None,
         Float[Array, "n_samples"],
+        list[int] | None,
     ]:
         """Run Random Search optimization.
 

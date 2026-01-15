@@ -1,19 +1,21 @@
-"""Bayesian Optimization using BoTorch (PyTorch-based, GPU-accelerated)."""
+"""State-of-the-art Bayesian Optimization using BoTorch with batch acquisition."""
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import time
 import torch
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_mll
-from botorch.acquisition import LogExpectedImprovement
+from botorch.acquisition import qLogExpectedImprovement as qLogEI
 from botorch.optim import optimize_acqf
+from botorch.generation import gen_candidates_scipy
+from botorch.utils.transforms import unnormalize, normalize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from collections import deque
 from jaxtyping import Array, Float, jaxtyped
 from beartype import beartype as typechecker
 
-from differometor.utils import sigmoid_bounding
 from dfbench.core.protocols import (
     ContinuousProblem,
     OptimizationAlgorithm,
@@ -23,11 +25,11 @@ from dfbench.core.utils import t2j_numpy as t2j
 
 
 class BotorchBO(OptimizationAlgorithm):
-    """Bayesian Optimization using BoTorch (PyTorch-based, GPU-accelerated).
+    """State-of-the-art Bayesian Optimization using BoTorch with batch acquisition.
 
     Implements Bayesian Optimization using a Gaussian Process surrogate model
-    and Expected Improvement acquisition function. Uses BoTorch for GPU-accelerated
-    GP fitting and acquisition optimization.
+    and batch Expected Improvement acquisition function (qLogEI). Uses BoTorch for 
+    GPU-accelerated GP fitting and acquisition optimization with Sobol initialization.
 
     Attributes:
         algorithm_str (str): Identifier string for this algorithm ("botorch_bo").
@@ -40,7 +42,6 @@ class BotorchBO(OptimizationAlgorithm):
     Note:
         This algorithm searches in the bounded parameter space using `problem.objective_function`.
         When `use_problem_bounds=True` (default), it uses the problem's native bounds.
-        Otherwise, it uses the provided `lb`/`ub` parameters (defaulting to [-10, 10]).
 
     Example:
         >>> problem = VoyagerProblem()
@@ -48,6 +49,7 @@ class BotorchBO(OptimizationAlgorithm):
         >>> best_params, history, losses, wall_indices = optimizer.optimize(
         ...     wall_times=[30, 60, 120],
         ...     n_initial=10,
+        ...     batch_size=5,
         ... )
     """
 
@@ -68,33 +70,93 @@ class BotorchBO(OptimizationAlgorithm):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = torch.float64
 
-    def _create_evaluate_fn(self, use_problem_bounds: bool):
-        """Create the evaluation function based on bounds mode.
+    def _evaluate_y(
+        self,
+        X: Float[torch.Tensor, "... d"],
+        bounds: Float[torch.Tensor, "2 d"],
+        max_retries: int = 3,
+        perturbation_scale: float = 1e-6,
+    ) -> tuple[Float[torch.Tensor, "..."], Float[torch.Tensor, "..."]]:
+        """Evaluate objective function at given input(s).
+
+        If NaN/Inf is encountered, attempts to perturb the point and retry.
+        Returns both values and a validity mask so invalid points can be
+        filtered from GP training data.
 
         Args:
-            use_problem_bounds: If True, uses objective_function (bounded space).
-                If False, uses sigmoid_objective_function (unbounded space).
+            X: Input(s) in normalized [0,1] space.
+            bounds: Original bounds for unnormalization.
+            max_retries: Number of retries with perturbation for NaN values.
+            perturbation_scale: Scale of random perturbation for retries.
 
         Returns:
-            Callable that evaluates a torch tensor and returns loss as torch tensor.
+            Tuple of (negated objective values, validity mask).
+            Invalid entries have NaN values and False in mask.
         """
-        if use_problem_bounds:
-            # Use objective_function which expects params in bounded space
-            objective_fn = self._problem.objective_function
+        unnormalized_X = unnormalize(X, bounds)
+        X_jax = t2j(unnormalized_X)
+
+        # Handle batch dimension
+        if X_jax.ndim == 1:
+            Y_jax = self._problem.objective_function(X_jax)
+            Y_torch = torch.tensor([Y_jax.item()], device=X.device, dtype=X.dtype)
         else:
-            # Use sigmoid_objective_function for unbounded search
-            objective_fn = self._problem.sigmoid_objective_function
+            batched_obj = jax.vmap(self._problem.objective_function)
+            Y_jax = batched_obj(X_jax)
+            Y_torch = torch.from_numpy(np.array(Y_jax)).to(device=X.device, dtype=X.dtype)
 
-        def evaluate(x: torch.Tensor) -> torch.Tensor:
-            y = float(objective_fn(t2j(x)))
-            # Return the value as-is; NaN/Inf values will be filtered out
-            # to avoid distorting the GP surrogate landscape
-            return torch.tensor([y], device=self.device, dtype=self.dtype)
+        # Track validity
+        invalid_mask = torch.isnan(Y_torch) | torch.isinf(Y_torch)
 
-        # Warmup JIT compilation
-        _ = objective_fn(jnp.zeros(self._problem.n_params))
+        # Retry invalid points with small perturbations
+        if torch.any(invalid_mask) and max_retries > 0:
+            invalid_indices = torch.where(invalid_mask)[0]
+            print(f"Warning: {len(invalid_indices)} NaN/Inf values detected, retrying with perturbation...")
 
-        return evaluate
+            for idx in invalid_indices:
+                for retry in range(max_retries):
+                    # Perturb the point slightly (in normalized space)
+                    X_perturbed = X[idx].clone()
+                    perturbation = torch.randn_like(X_perturbed) * perturbation_scale * (retry + 1)
+                    X_perturbed = torch.clamp(X_perturbed + perturbation, 0.0, 1.0)
+
+                    # Re-evaluate
+                    unnorm_perturbed = unnormalize(X_perturbed, bounds)
+                    X_jax_perturbed = t2j(unnorm_perturbed)
+                    Y_retry = self._problem.objective_function(X_jax_perturbed)
+                    Y_retry_torch = torch.tensor(Y_retry.item(), device=X.device, dtype=X.dtype)
+
+                    if torch.isfinite(Y_retry_torch):
+                        Y_torch[idx] = Y_retry_torch
+                        invalid_mask[idx] = False
+                        break
+
+            # Report remaining invalid points
+            remaining_invalid = torch.sum(invalid_mask).item()
+            if remaining_invalid > 0:
+                print(f"Warning: {remaining_invalid} points still invalid after retries, will be excluded from GP")
+
+        valid_mask = ~invalid_mask
+        return -Y_torch, valid_mask  # Negate for maximization
+
+    def _fit_model(
+        self,
+        train_X: torch.Tensor,
+        train_Y: torch.Tensor,
+    ) -> SingleTaskGP:
+        """Fit GP model to current data.
+
+        Args:
+            train_X: Training inputs of shape (n, d).
+            train_Y: Training targets of shape (n, 1).
+
+        Returns:
+            Trained Gaussian Process model.
+        """
+        model = SingleTaskGP(train_X, train_Y)
+        mll = ExactMarginalLogLikelihood(model.likelihood, model)
+        fit_gpytorch_mll(mll)
+        return model
 
     @jaxtyped(typechecker=typechecker)
     def optimize(
@@ -107,7 +169,8 @@ class BotorchBO(OptimizationAlgorithm):
         wall_times: list[int | float] | None = None,
         lb: Float[Array, "{self._problem.n_params}"] | None = None,
         ub: Float[Array, "{self._problem.n_params}"] | None = None,
-        n_initial: int = 5,
+        n_initial: int = 10,
+        batch_size: int = 1,
         **bo_kwargs,
     ) -> tuple[
         Float[Array, "{self._problem.n_params}"],
@@ -115,18 +178,17 @@ class BotorchBO(OptimizationAlgorithm):
         Float[Array, "n_iters"],
         list[int] | None,
     ]:
-        """Run Bayesian Optimization.
+        """Run Bayesian Optimization with batch acquisition.
 
         Args:
             save_to_file (bool): Whether to save optimization results to file. Defaults to True.
             use_problem_bounds (bool): If True, use bounds from `problem.bounds` and
-                `problem.objective_function`. If False, use `lb`/`ub` parameters with
-                `problem.sigmoid_objective_function`. Defaults to True.
+                `problem.objective_function`. Defaults to True.
             init_params (Float[Array, "n_params"] | None): Initial parameters to include
-                in the training set. If None, only random samples are used. Defaults to None.
+                in the training set. If None, only Sobol samples are used. Defaults to None.
             return_best_params_history (bool): Whether to track best parameters at each
                 iteration. Defaults to False.
-            random_seed (int | None): Random seed for reproducibility. Controls initial
+            random_seed (int | None): Random seed for reproducibility. Controls Sobol
                 sample generation and acquisition optimization. Defaults to None.
             wall_times (list[int | float] | None): List of wall-time checkpoints (in seconds).
                 The algorithm runs until the maximum checkpoint. At each checkpoint,
@@ -136,9 +198,11 @@ class BotorchBO(OptimizationAlgorithm):
                 Ignored if use_problem_bounds=True. Defaults to -10 for all parameters.
             ub (Float[Array, "n_params"] | None): Upper bounds for each parameter.
                 Ignored if use_problem_bounds=True. Defaults to 10 for all parameters.
-            n_initial (int): Number of initial random samples before fitting GP.
-                Defaults to 5.
-            **bo_kwargs: Additional keyword arguments (reserved for future use).
+            n_initial (int): Number of initial Sobol samples before fitting GP.
+                Defaults to 10.
+            batch_size (int): Number of points to acquire per iteration. Defaults to 1.
+            **bo_kwargs: Additional keyword arguments for acquisition optimization
+                (raw_samples, num_restarts, etc.).
 
         Returns:
             tuple: A 4-tuple containing:
@@ -152,62 +216,42 @@ class BotorchBO(OptimizationAlgorithm):
         if random_seed is not None:
             torch.manual_seed(random_seed)
             np.random.seed(random_seed)
-
-        # Determine bounds based on use_problem_bounds flag
+        
         if use_problem_bounds:
             if not hasattr(self._problem, "bounds"):
                 raise ValueError(
-                    "use_problem_bounds=True requires the problem to have a 'bounds' attribute. "
-                    f"Problem {type(self._problem).__name__} does not have this attribute."
+                    "use_problem_bounds=True requires the problem to have a 'bounds' attribute."
                 )
             problem_bounds = self._problem.bounds
             if isinstance(problem_bounds, np.ndarray):
                 lb_np, ub_np = problem_bounds[0], problem_bounds[1]
             else:
                 lb_np, ub_np = np.array(problem_bounds[0]), np.array(problem_bounds[1])
-            print(
-                f"Using problem bounds: lb shape={lb_np.shape}, ub shape={ub_np.shape}"
-            )
         else:
-            if lb is None:
-                lb_np = np.full(self._problem.n_params, -10.0)
-            else:
-                lb_np = np.array(lb)
-            if ub is None:
-                ub_np = np.full(self._problem.n_params, 10.0)
-            else:
-                ub_np = np.array(ub)
+            lb_np = np.full(self._problem.n_params, -10.0) if lb is None else np.array(lb)
+            ub_np = np.full(self._problem.n_params, 10.0) if ub is None else np.array(ub)
 
-        # Create evaluation function based on bounds mode
-        evaluate = self._create_evaluate_fn(use_problem_bounds)
-
-        # Convert bounds to torch tensors
-        bounds = torch.tensor(
+        # Convert to torch tensors
+        problem_bounds_torch = torch.tensor(
             np.array([lb_np, ub_np]), device=self.device, dtype=self.dtype
         )
-        bounds_range = bounds[1] - bounds[0]
 
-        # Normalization helpers: map between original space and unit cube [0, 1]^d
-        def normalize(x: torch.Tensor) -> torch.Tensor:
-            return (x - bounds[0]) / bounds_range
+        # Unit cube bounds for GP [0, 1]^d
+        unit_bounds = torch.stack([
+            torch.zeros(self._problem.n_params, dtype=self.dtype, device=self.device),
+            torch.ones(self._problem.n_params, dtype=self.dtype, device=self.device),
+        ], dim=0)
 
-        def unnormalize(x: torch.Tensor) -> torch.Tensor:
-            return x * bounds_range + bounds[0]
+        # Warmup JIT compilation
+        _ = self._problem.objective_function(jnp.zeros(self._problem.n_params))
 
-        # Unit cube bounds for GP
-        unit_bounds = torch.tensor(
-            [[0.0] * self._problem.n_params, [1.0] * self._problem.n_params],
-            device=self.device,
-            dtype=self.dtype,
-        )
-
-        # Initialize tracking variables
+        # Initialize tracking
         best_params = jnp.zeros(self._problem.n_params)
         best_params_history: list = []
         best_loss = float("inf")
         losses: list = []
 
-        # Initialize wall_time tracking
+        # Wall-time tracking
         wall_time_indices: list[int] | None = None
         wall_times_remaining: deque[int | float] | None = None
         max_wall_time: float | None = None
@@ -216,112 +260,113 @@ class BotorchBO(OptimizationAlgorithm):
             wall_times_remaining = deque(sorted(wall_times))
             max_wall_time = wall_times_remaining[-1]
 
-        # Generate initial samples (stored in normalized [0,1] space)
+        # Generate initial Sobol samples
+        sobol = torch.quasirandom.SobolEngine(
+            dimension=self._problem.n_params, scramble=True, seed=random_seed
+        )
+        train_X = sobol.draw(n=n_initial).to(dtype=self.dtype, device=self.device)
+        
+        # Include init_params if provided
         if init_params is not None:
-            train_X_orig = torch.tensor(
+            init_X_unnorm = torch.tensor(
                 np.array(init_params).reshape(1, -1),
                 device=self.device,
                 dtype=self.dtype,
             )
-            init_Y = evaluate(train_X_orig[0])
-            # Only use init_params if evaluation is valid (not NaN/Inf)
-            if torch.isfinite(init_Y).all():
-                train_X = normalize(train_X_orig)
-                train_Y = init_Y.unsqueeze(0)
-            else:
-                print(f"Warning: init_params evaluation returned NaN/Inf, skipping")
-                train_X = torch.empty(
-                    0, self._problem.n_params, device=self.device, dtype=self.dtype
-                )
-                train_Y = torch.empty(0, 1, device=self.device, dtype=self.dtype)
-        else:
-            train_X = torch.empty(
-                0, self._problem.n_params, device=self.device, dtype=self.dtype
-            )
-            train_Y = torch.empty(0, 1, device=self.device, dtype=self.dtype)
+            init_X_norm = normalize(init_X_unnorm, problem_bounds_torch)
+            train_X = torch.cat([init_X_norm, train_X], dim=0)
 
-        # Add random initial points (in normalized space)
-        n_random = max(0, n_initial - len(train_X))
-        if n_random > 0:
-            random_X = torch.rand(
-                n_random, self._problem.n_params, device=self.device, dtype=self.dtype
-            )
-            random_Y = torch.stack([evaluate(unnormalize(x)) for x in random_X])
-            # Filter out NaN/Inf values to avoid distorting the GP surrogate
-            valid_mask = torch.isfinite(random_Y.squeeze(-1))
-            random_X = random_X[valid_mask]
-            random_Y = random_Y[valid_mask]
-            if len(random_X) > 0:
-                train_X = (
-                    torch.cat([train_X, random_X], dim=0) if len(train_X) > 0 else random_X
-                )
-                train_Y = (
-                    torch.cat([train_Y, random_Y], dim=0) if len(train_Y) > 0 else random_Y
-                )
+        # Evaluate initial samples (returns Y values and validity mask)
+        train_Y_raw, valid_mask = self._evaluate_y(train_X, problem_bounds_torch)
+        train_Y_raw = train_Y_raw.unsqueeze(-1)
 
-        # Record initial losses and update best (all values in train_Y are valid at this point)
-        for idx, y in enumerate(train_Y):
-            loss = float(y.item())
-            losses.append(loss)
-            if loss < best_loss - 1e-4:
-                best_loss = loss
-                best_params = t2j(unnormalize(train_X[idx]))
-
-        # Ensure we have at least some valid initial points
-        if len(train_X) == 0:
-            raise ValueError(
-                "All initial evaluations returned NaN/Inf. Cannot fit GP model. "
-                "Check the objective function or try different initial parameters."
-            )
-
+        # Record all losses (including invalid as NaN for tracking)
+        for idx, y in enumerate(train_Y_raw):
+            if valid_mask[idx]:
+                loss = -float(y.item())  # Convert back to minimization
+                if loss < best_loss - 1e-4:
+                    best_loss = loss
+                    best_params = t2j(unnormalize(train_X[idx], problem_bounds_torch))
+            
+            # Store best_loss so far (not current loss)
+            losses.append(best_loss if best_loss != float("inf") else float("nan"))
+                
             if return_best_params_history:
                 best_params_history.append(best_params)
+
+        # Filter to only valid points for GP training
+        train_X = train_X[valid_mask]
+        train_Y = train_Y_raw[valid_mask]
+
+        if len(train_Y) == 0:
+            raise ValueError("All initial evaluations returned NaN/Inf. Check problem bounds and objective function.")
+
+        # Acquisition optimization options
+        acqf_options = {
+            "raw_samples": bo_kwargs.get("raw_samples", 512),
+            "num_restarts": bo_kwargs.get("num_restarts", 4),
+            "retry_on_optimization_warning": False,
+            "options": {
+                "nonnegative": False,
+                "sample_around_best": True,
+                "sample_around_best_sigma": 0.1,
+                "maxiter": 300,
+                "batch_limit": 64,
+            },
+        }
 
         def run_iteration(
             iteration: int,
             train_X: torch.Tensor,
             train_Y: torch.Tensor,
-            current_best_loss: float,
-        ) -> tuple[torch.Tensor, torch.Tensor, float, torch.Tensor]:
-            """Run a single BO iteration.
+        ) -> tuple[torch.Tensor, torch.Tensor, list[float], list[bool]]:
+            """Run a single BO iteration with batch acquisition.
 
             Args:
-                iteration: Current iteration number (for logging).
+                iteration: Current iteration number.
                 train_X: Training inputs in normalized [0,1] space.
-                train_Y: Training outputs (losses).
-                current_best_loss: Current best loss for EI computation.
+                train_Y: Training outputs (negated losses for maximization).
 
             Returns:
-                Updated train_X, train_Y, new loss, and candidate in original space.
+                Updated train_X, train_Y, list of losses for this batch, and validity flags.
             """
-            # Fit GP model (minimize loss, so negate Y for EI which maximizes)
-            gp = SingleTaskGP(train_X, -train_Y)
-            mll = ExactMarginalLogLikelihood(gp.likelihood, gp)
-            fit_gpytorch_mll(mll)
+            # Fit GP model
+            model = self._fit_model(train_X, train_Y)
+            model.eval()
 
-            # Optimize acquisition function in unit cube
-            acq = LogExpectedImprovement(gp, best_f=-current_best_loss)
-            candidate, _ = optimize_acqf(
-                acq,
+            # Optimize acquisition function
+            acqf = qLogEI(model, train_Y.max())
+            candidates, _ = optimize_acqf(
+                acqf,
                 bounds=unit_bounds,
-                q=1,
-                num_restarts=5,
-                raw_samples=20,
+                q=batch_size,
+                gen_candidates=gen_candidates_scipy,
+                **acqf_options,
             )
 
-            # Evaluate candidate in original space
-            candidate_orig = unnormalize(candidate[0])
-            new_Y = evaluate(candidate_orig)
-            loss = float(new_Y.item())
+            # Evaluate candidates (returns Y values and validity mask)
+            new_Y_raw, valid_mask_batch = self._evaluate_y(candidates, problem_bounds_torch)
+            new_Y_raw = new_Y_raw.unsqueeze(-1)
+            
+            # Build batch_losses list (NaN for invalid)
+            batch_losses = []
+            batch_valid = []
+            for j, y in enumerate(new_Y_raw):
+                if valid_mask_batch[j]:
+                    batch_losses.append(-float(y.item()))
+                    batch_valid.append(True)
+                else:
+                    batch_losses.append(float("nan"))
+                    batch_valid.append(False)
 
-            # Only add valid evaluations to training data to preserve GP surrogate quality
-            if torch.isfinite(new_Y).all():
-                train_X = torch.cat([train_X, candidate], dim=0)
-                train_Y = torch.cat([train_Y, new_Y.unsqueeze(0)], dim=0)
-            else:
-                print(f"Iteration {iteration}: Skipping NaN/Inf evaluation")
+            # Update training data with only valid points
+            valid_candidates = candidates[valid_mask_batch]
+            valid_Y = new_Y_raw[valid_mask_batch]
+            if len(valid_Y) > 0:
+                train_X = torch.cat([train_X, valid_candidates], dim=0)
+                train_Y = torch.cat([train_Y, valid_Y], dim=0)
 
-            return train_X, train_Y, loss, candidate_orig
+            return train_X, train_Y, batch_losses, batch_valid
 
         # Main optimization loop
         if wall_times is not None:
@@ -336,62 +381,69 @@ class BotorchBO(OptimizationAlgorithm):
                     wall_time_indices.append(i)
                     wall_times_remaining.popleft()
 
-                train_X, train_Y, loss, candidate = run_iteration(
-                    i, train_X, train_Y, best_loss
-                )
+                train_X, train_Y, batch_losses, batch_valid = run_iteration(i, train_X, train_Y)
 
-                if i % 10 == 0:
-                    print(f"Iteration {i}: Loss = {loss}")
+                # Process batch results
+                for j, loss in enumerate(batch_losses):
+                    if batch_valid[j]:
+                        if i % 10 == 0 and j == 0:
+                            print(f"Iteration {i}: Loss = {loss}")
 
-                # Only update best if loss is valid (not NaN/Inf)
-                if np.isfinite(loss) and loss < best_loss - 1e-4:
-                    best_loss = loss
-                    best_params = t2j(candidate)
-                    print(f"Iteration {i}: New best loss = {loss}")
+                        if loss < best_loss - 1e-4:
+                            best_loss = loss
+                            # Count valid entries up to this point to get correct index
+                            valid_count = sum(batch_valid[:j+1])
+                            candidate_idx = len(train_X) - sum(batch_valid) + valid_count - 1
+                            best_params = t2j(unnormalize(train_X[candidate_idx], problem_bounds_torch))
+                            print(f"Iteration {i}: New best loss = {loss}")
 
-                if return_best_params_history:
-                    best_params_history.append(best_params)
+                    if return_best_params_history:
+                        best_params_history.append(best_params)
 
-                losses.append(loss)
-                i += 1
+                    # Store best_loss so far (not current loss)
+                    losses.append(best_loss)
+                    i += 1
 
-            # Fill remaining wall_times that weren't reached
+            # Fill remaining wall_times
             while wall_times_remaining:
                 wall_time_indices.append(i - 1 if i > 0 else 0)
                 wall_times_remaining.popleft()
 
         else:
-            for i in range(len(losses), self.max_iterations + n_initial):
-                train_X, train_Y, loss, candidate = run_iteration(
-                    i, train_X, train_Y, best_loss
-                )
+            i = len(losses)
+            total_iterations = self.max_iterations + n_initial
 
-                if i % 10 == 0:
-                    print(f"Iteration {i}: Loss = {loss}")
+            while i < total_iterations:
+                train_X, train_Y, batch_losses, batch_valid = run_iteration(i, train_X, train_Y)
 
-                # Only update best if loss is valid (not NaN/Inf)
-                if np.isfinite(loss) and loss < best_loss - 1e-4:
-                    best_loss = loss
-                    best_params = t2j(candidate)
-                    print(f"Iteration {i}: New best loss = {loss}")
+                # Process batch results
+                for j, loss in enumerate(batch_losses):
+                    if batch_valid[j]:
+                        if i % 10 == 0 and j == 0:
+                            print(f"Iteration {i}: Loss = {loss}")
 
-                if return_best_params_history:
-                    best_params_history.append(best_params)
+                        if loss < best_loss - 1e-4:
+                            best_loss = loss
+                            # Count valid entries up to this point to get correct index
+                            valid_count = sum(batch_valid[:j+1])
+                            candidate_idx = len(train_X) - sum(batch_valid) + valid_count - 1
+                            best_params = t2j(unnormalize(train_X[candidate_idx], problem_bounds_torch))
+                            print(f"Iteration {i}: New best loss = {loss}")
 
-                losses.append(loss)
+                    if return_best_params_history:
+                        best_params_history.append(best_params)
+
+                    # Store best_loss so far (not current loss)
+                    losses.append(best_loss)
+                    i += 1
+                    
+                    if i >= total_iterations:
+                        break
 
         losses_array = jnp.array(losses)
         best_params_history_array = (
             jnp.array(best_params_history) if return_best_params_history else None
         )
-
-        # Transform unbounded parameters back to bounded space if using sigmoid objective
-        if not use_problem_bounds:
-            best_params = sigmoid_bounding(best_params, self._problem.bounds)
-            if return_best_params_history:
-                best_params_history_array = jnp.array(
-                    [sigmoid_bounding(p, self._problem.bounds) for p in best_params_history]
-                )
 
         if save_to_file:
             self._problem.output_to_files(
@@ -399,7 +451,7 @@ class BotorchBO(OptimizationAlgorithm):
                 losses=losses_array,
                 population_losses=None,
                 algorithm_str=self.algorithm_str,
-                hyper_param_str=f"n_initial{n_initial}",
+                hyper_param_str=f"n_initial{n_initial}_batch{batch_size}",
                 hyper_param_str_in_filename=True,
             )
 

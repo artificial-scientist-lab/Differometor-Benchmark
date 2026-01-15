@@ -225,4 +225,9 @@ class AdamGD(OptimizationAlgorithm):
                 hyper_param_str=f"lr{learning_rate}",
             )  # TODO maybe conditionally add more hyperparameters to string
 
-        return best_params_bounded, best_params_history_bounded, losses, wall_time_indices
+        return (
+            best_params_bounded,
+            best_params_history_bounded,
+            losses,
+            wall_time_indices,
+        )

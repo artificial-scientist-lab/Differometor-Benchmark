@@ -16,7 +16,7 @@ from dfbench.core.protocols import (
 )
 
 
-NoiseSchedule = Literal["linear", "exp"]
+NoiseSchedule = Literal["linear", "exponential"]
 NoiseInjection = Literal["update", "params"]
 
 
@@ -35,7 +35,7 @@ def _anneal_sigma(
         sigma_end: Final noise standard deviation (at progress=1).
         schedule: Annealing curve type.
             - "linear": sigma = sigma_start + (sigma_end - sigma_start) * progress
-            - "exp": sigma = sigma_start * (sigma_end / sigma_start)^progress
+            - "exponential": sigma = sigma_start * (sigma_end / sigma_start)^progress
               (geometric interpolation, smoother decay)
 
     Returns:
@@ -73,7 +73,9 @@ def _clip_step_by_global_norm(step: jnp.ndarray, max_norm: float) -> jnp.ndarray
     return step * scale
 
 
-def _cap_step_relative(step: jnp.ndarray, reference: jnp.ndarray, ratio: float) -> jnp.ndarray:
+def _cap_step_relative(
+    step: jnp.ndarray, reference: jnp.ndarray, ratio: float
+) -> jnp.ndarray:
     """Cap a vector's norm relative to a reference vector's norm.
 
     Ensures: ||output|| <= ratio * ||reference||.
@@ -115,7 +117,7 @@ class NAAdamGD(OptimizationAlgorithm):
         sigma_t decays from noise_std_start to noise_std_end over
         noise_anneal_iters iterations. Two schedules available:
         - "linear": constant decay rate
-        - "exp": geometric decay (fast early drop, then tail off)
+        - "exponential": geometric decay (fast early drop, then tail off)
 
     Noise injection modes:
         - "update": noise added to the Adam update before applying
@@ -171,7 +173,7 @@ class NAAdamGD(OptimizationAlgorithm):
         patience: int = 1000,
         noise_std_start: float = 0.3,
         noise_std_end: float = 0.0,
-        noise_schedule: NoiseSchedule = "exp",
+        noise_schedule: NoiseSchedule = "exponential",
         noise_injection: NoiseInjection = "update",
         noise_clip_norm: float | None = None,
         noise_anneal_iters: int = 5000,
@@ -208,7 +210,7 @@ class NAAdamGD(OptimizationAlgorithm):
             noise_std_start: Initial noise standard deviation. Defaults to 0.3.
             noise_std_end: Final noise standard deviation. Defaults to 0.0.
             noise_schedule: How noise decays over time.
-                - "exp" (default): geometric decay, sigma_t = start * (end/start)^progress
+                - "exponential" (default): geometric decay, sigma_t = start * (end/start)^progress
                 - "linear": sigma_t = start + (end - start) * progress
             noise_injection: Where to add noise.
                 - "update" (default): add to Adam update before applying
@@ -305,13 +307,17 @@ class NAAdamGD(OptimizationAlgorithm):
                 if return_best_params_history:
                     best_params_history.append(best_params)
 
-                updates, optimizer_state = optimizer.update(grads, optimizer_state, params)
+                updates, optimizer_state = optimizer.update(
+                    grads, optimizer_state, params
+                )
 
                 if sigma_t > 0:
                     rng_key, subkey = jax.random.split(rng_key)
                     noise_step = jax.random.normal(subkey, shape=params.shape) * sigma_t
                     if noise_clip_norm is not None:
-                        noise_step = _clip_step_by_global_norm(noise_step, noise_clip_norm)
+                        noise_step = _clip_step_by_global_norm(
+                            noise_step, noise_clip_norm
+                        )
 
                     if (
                         noise_cap_relative_to_update is not None
@@ -363,13 +369,17 @@ class NAAdamGD(OptimizationAlgorithm):
                 if return_best_params_history:
                     best_params_history.append(best_params)
 
-                updates, optimizer_state = optimizer.update(grads, optimizer_state, params)
+                updates, optimizer_state = optimizer.update(
+                    grads, optimizer_state, params
+                )
 
                 if sigma_t > 0:
                     rng_key, subkey = jax.random.split(rng_key)
                     noise_step = jax.random.normal(subkey, shape=params.shape) * sigma_t
                     if noise_clip_norm is not None:
-                        noise_step = _clip_step_by_global_norm(noise_step, noise_clip_norm)
+                        noise_step = _clip_step_by_global_norm(
+                            noise_step, noise_clip_norm
+                        )
 
                     if (
                         noise_cap_relative_to_update is not None
@@ -422,4 +432,9 @@ class NAAdamGD(OptimizationAlgorithm):
                 ),
             )  # TODO maybe conditionally add more hyperparameters to string
 
-        return best_params_bounded, best_params_history_bounded, losses, wall_time_indices
+        return (
+            best_params_bounded,
+            best_params_history_bounded,
+            losses,
+            wall_time_indices,
+        )
