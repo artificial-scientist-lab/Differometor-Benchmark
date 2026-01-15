@@ -6,14 +6,14 @@ from jaxtyping import Array
 
 def t2j(a: Array) -> jax.Array:
     """WARNING: This could be extremely slow somehow. Use t2j_numpy instead for now.
-    Convert torch array to jax array. 
+    Convert torch array to jax array.
     """
     return jax.dlpack.from_dlpack(a)
 
 
 def j2t(a: Array) -> torch.Tensor:
     """WARNING: This could be extremely slow somehow. Use j2t_numpy instead for now.
-    Convert torch array to jax array. 
+    Convert torch array to jax array.
     """
     return torch.utils.dlpack.from_dlpack(a)
 
