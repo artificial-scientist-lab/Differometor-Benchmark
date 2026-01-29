@@ -11,11 +11,10 @@ jobfiles_*
 uninstall.txt
 .python-version
 examples/voyager
-benchmark_run_data/*
-benchmark_results/*
-algorithm_output/*
+data/*
 run_data
 batch-script.sh
 tmp*
 *scratch*
 notes.md
+temp/
