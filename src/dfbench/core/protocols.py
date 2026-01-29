@@ -21,6 +21,7 @@ class AlgorithmType(Enum):
     EVOLUTIONARY = "evolutionary"
     SURROGATE_BASED = "surrogate_based"
     DIFFUSION_BASED = "diffusion_based"
+    GENERATIVE = "generative"
 
 
 class ContinuousProblem(ABC):
@@ -94,27 +95,6 @@ class ContinuousProblem(ABC):
         """Number of parameters to optimize."""
         return len(self.optimization_pairs)
 
-    def output_to_files(
-        self,
-        best_params: Float[Array, "{self.n_params}"] = None,
-        losses: Float[Array, "iterations"] = None,
-        population_losses: Float[Array, "iterations pop"] = None,
-        algorithm_str: str = "",
-        hyper_param_str: str = "",
-        hyper_param_str_in_filename: bool = True,
-    ) -> None:
-        """Save optimization results to files.
-
-        Args:
-            best_params: Best parameters found during optimization.
-            losses: Loss values at each iteration.
-            population_losses: Per-member losses for population-based algorithms.
-            algorithm_str: Algorithm identifier for filename.
-            hyper_param_str: Hyperparameter string for filename.
-            hyper_param_str_in_filename: Whether to include hyperparams in filename.
-        """
-        pass
-
 
 class OptimizationAlgorithm(ABC):
     """Abstract base class for optimization algorithms.
@@ -131,13 +111,13 @@ class OptimizationAlgorithm(ABC):
     Note:
         All algorithms must implement:
         - `__init__(problem, ...)`: Initialize with a problem instance
-        - `optimize(...)`: Run optimization and return results
+        - `optimize(...)`: Run optimization and return an Objective instance
 
-        The `optimize` method should return at minimum:
-        - best_params: Best parameters found
-        - best_params_history: History of best params (or None)
-        - losses: Loss at each iteration
-        - wall_time_indices: Indices at wall time checkpoints (or None)
+        The returned Objective contains all run data:
+        - best_params, best_params_bounded: Best parameters found
+        - loss_history, params_history: Full optimization history
+        - time_steps: Timestamps at each evaluation
+        - Budget tracking: eval_count, time_elapsed, etc.
     """
 
     algorithm_str: str
@@ -155,17 +135,17 @@ class OptimizationAlgorithm(ABC):
         pass
 
     @abstractmethod
-    def optimize(self, save_to_file: bool = True, *args, **kwargs):
+    def optimize(self, *args, **kwargs):
         """Run the optimization algorithm.
 
         Args:
-            save_to_file: Whether to save results to disk.
             *args: Algorithm-specific positional arguments.
-            **kwargs: Algorithm-specific keyword arguments (e.g., wall_times,
-                random_seed, return_best_params_history).
+            **kwargs: Algorithm-specific keyword arguments (e.g., max_time,
+                random_seed, learning_rate).
 
         Returns:
-            tuple: At minimum (best_params, best_params_history, losses, wall_time_indices).
-                Some algorithms may return additional values.
+            Objective: Instance containing all optimization run data including
+                best_params, loss_history, params_history, time_steps, and
+                budget tracking state.
         """
         pass

@@ -121,7 +121,7 @@ class OpticalSetupProblem(ContinuousProblem):
 
         # Create output directory
         output_path = os.path.join(
-            f"./algorithm_output/{self._name}/{algorithm_str.strip('_')}",
+            f"./data/problem_output/{self._name}/{algorithm_str.strip('_')}",
             hyper_param_str.strip("_"),  # directory should not have leading underscore
         )
         os.makedirs(output_path, exist_ok=True)
