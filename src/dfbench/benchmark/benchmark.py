@@ -53,9 +53,7 @@ from dfbench.benchmark.metrics import (
 )
 
 
-# ============================================================================
-# Data classes
-# ============================================================================
+# --------- Data classes ---------
 
 
 @dataclass
@@ -178,9 +176,7 @@ class BenchmarkResult:
     auc_top_10: AggregateMetric
 
 
-# ============================================================================
-# Algorithm Configuration
-# ============================================================================
+# --------- Algorithm Configuration ---------
 
 
 class AlgorithmConfig:
@@ -210,9 +206,7 @@ class AlgorithmConfig:
         return f"AlgorithmConfig({self.name}, {self.hyperparameters})"
 
 
-# ============================================================================
-# Main Benchmark Class
-# ============================================================================
+# --------- Main Benchmark Class ---------
 
 
 class Benchmark:
@@ -281,9 +275,7 @@ class Benchmark:
         """Time points at which metrics are computed."""
         return self._time_samples
 
-    # ========================================================================
-    # Main entry point
-    # ========================================================================
+    # --------- Main entry point ---------
 
     def run(
         self,
@@ -326,9 +318,7 @@ class Benchmark:
 
         return results
 
-    # ========================================================================
-    # Data collection
-    # ========================================================================
+    # --------- Data collection ---------
 
     def _collect_all_run_data(
         self,
@@ -417,9 +407,7 @@ class Benchmark:
             hyperparameters=config.hyperparameters,
         )
 
-    # ========================================================================
-    # Metric evaluation
-    # ========================================================================
+    # --------- Metric evaluation ---------
 
     def _evaluate_algorithm(self, algo_data: AlgorithmRunData) -> BenchmarkResult:
         """Evaluate metrics for one algorithm across all time samples.
@@ -570,9 +558,7 @@ class Benchmark:
             performance_profile_auc=SingleMetric(value=jnp.array(performance_profile_auc_list)),
         )
 
-    # ========================================================================
-    # Save/Load
-    # ========================================================================
+    # --------- Save/Load ---------
 
     def _prepare_save_dir(self, base_dir: str | Path) -> Path:
         """Create timestamped save directory."""
@@ -771,9 +757,7 @@ class Benchmark:
 
         return time_steps
 
-    # ========================================================================
-    # Output
-    # ========================================================================
+    # --------- Output ---------
 
     def _print_header(self, load_from: str | Path | None) -> None:
         """Print benchmark header."""

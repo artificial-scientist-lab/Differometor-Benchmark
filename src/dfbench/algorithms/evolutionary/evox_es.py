@@ -25,8 +25,8 @@ from dfbench import (
     ContinuousProblem,
     OptimizationAlgorithm,
     AlgorithmType,
-    j2t_numpy as j2t,
-    t2j_numpy as t2j,
+    j2t,
+    t2j,
 )
 from dfbench.core.objective import Objective
 

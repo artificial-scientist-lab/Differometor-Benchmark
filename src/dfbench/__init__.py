@@ -31,7 +31,7 @@ from dfbench.core.protocols import (
 
 # Import core utilities
 from dfbench.core.config import create_parser
-from dfbench.core.utils import t2j_numpy, j2t_numpy
+from dfbench.core.utils import t2j, j2t
 
 # Import Objective for external use
 from dfbench.core.objective import Objective
@@ -48,4 +48,6 @@ __all__ = [
     "create_parser",
     "t2j_numpy",
     "j2t_numpy",
+    "t2j",
+    "j2t",
 ]

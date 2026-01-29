@@ -12,9 +12,7 @@ import jax.numpy as jnp
 from jaxtyping import Array, Float
 
 
-# ============================================================================
-# Per-run functions
-# ============================================================================
+# --------- Per-run functions ---------
 # These compute values for a single run's data (1D array of losses/params)
 # Used in list comprehensions to process each run independently
 
@@ -110,9 +108,7 @@ def run_auc(
     return algorithm_auc
 
 
-# ============================================================================
-# Aggregation functions
-# ============================================================================
+# --------- Aggregation functions ---------
 # These combine per-run results into benchmark metrics
 
 
@@ -152,9 +148,7 @@ def agg_mean_std_filtered(
     return fallback, 0.0
 
 
-# ============================================================================
-# Multi-run functions
-# ============================================================================
+# --------- Multi-run functions ---------
 # These inherently need data from all runs (e.g., diversity, top-k selection)
 
 
@@ -307,9 +301,7 @@ def compute_performance_profile(
     return loss_thresholds, success_rates, normalized_auc
 
 
-# ============================================================================
-# Time-based slicing utilities
-# ============================================================================
+# --------- Time-based slicing utilities ---------
 
 
 def get_index_at_time(time_steps: list[float] | Float[Array, "n"], t: float) -> int:

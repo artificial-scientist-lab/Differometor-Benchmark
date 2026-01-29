@@ -26,7 +26,7 @@ from botorch.generation import gen_candidates_scipy
 from botorch.utils.transforms import unnormalize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
-from dfbench.core.utils import t2j_numpy as t2j, j2t_numpy as j2t
+from dfbench.core.utils import t2j, j2t
 from dfbench.core.protocols import (
     ContinuousProblem,
     OptimizationAlgorithm,
