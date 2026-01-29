@@ -1,0 +1,1106 @@
+import time
+import os
+import json
+from datetime import datetime
+from pathlib import Path
+import numpy as np
+import jax
+import jax.numpy as jnp
+import matplotlib.pyplot as plt
+from jaxtyping import Float, Array
+
+from differometor.utils import sigmoid_bounding
+from dfbench.core.protocols import ContinuousProblem
+
+
+class Objective:
+    def __init__(
+        self,
+        problem: ContinuousProblem,
+        unbounded: bool = False,
+        max_evals: int | None = None,
+        max_time: float | None = None,
+        save_time_steps: bool = True,
+        save_params_history: bool = True,
+        save_grad_history: bool = False,
+        save_batched_losses_history: bool = False,
+        save_batched_grads_history: bool = False,
+        save_batched_history: bool = False,
+        save_eval_type_history: bool = False,
+        print_every: int = 100,
+        verbose: int = 0,
+        algorithm_str: str | None = None,
+        save_to_file_every: int | None = None,
+    ):
+        """Initialize the Objective wrapper for optimization problems.
+
+        Args:
+            problem: The continuous optimization problem to wrap.
+            unbounded: If True, use sigmoid-transformed objective. Defaults to False.
+            max_evals: Maximum number of evaluations allowed. None for unlimited.
+            max_time: Maximum wall-clock time in seconds. None for unlimited.
+            save_time_steps: Whether to track timestamps for each evaluation.
+            save_params_history: Whether to save parameter history.
+            save_grad_history: Whether to save gradient history.
+            save_batched_losses_history: Whether to save full batched losses.
+            save_batched_grads_history: Whether to save full batched gradients.
+            save_batched_history: Whether to save full batched params, grads and losses.
+            save_eval_type_history: Whether to save evaluation types in a separate history.
+            print_every: Print progress every N evaluations. Defaults to 100.
+            verbose: Verbosity level (0=silent, 1=warnings, 2=info). Defaults to 0.
+            save_to_file_every: Save checkpoint every N evaluations. None to disable.
+        """
+
+        self._problem = problem
+        self._unbounded = unbounded
+        self._max_time = max_time
+        self._max_evals = max_evals
+        self._print_every = print_every
+        self._verbose = verbose
+        self._save_time_steps = save_time_steps
+        self._save_params_history = save_params_history
+        self._save_grad_history = save_grad_history
+        self._save_batched_params_history = save_batched_history
+        self._save_batched_losses_history = (
+            save_batched_losses_history or save_batched_history
+        )
+        self._save_batched_grads_history = (
+            save_batched_grads_history or save_batched_history
+        )
+        self._save_eval_type_history = save_eval_type_history
+        self._algorithm_str = algorithm_str
+        self._save_to_file_every = save_to_file_every
+
+        if not self._unbounded:
+            self._bounds = problem.bounds
+            self._func = problem.objective_function
+            self._grad_func = jax.grad(problem.objective_function)
+            self._value_and_grad_func = jax.value_and_grad(problem.objective_function)
+            self._vmap_func = jax.vmap(problem.objective_function)
+            self._vmap_grad_func = jax.vmap(jax.grad(problem.objective_function))
+            self._vmap_value_and_grad_func = jax.vmap(
+                jax.value_and_grad(problem.objective_function)
+            )
+        else:
+            self._bounds = jnp.array(
+                [[-jnp.inf] * problem.n_params, [jnp.inf] * problem.n_params]
+            )
+            # Assume unbounded optimization is always done with sigmoid bounding
+            self._func = problem.sigmoid_objective_function
+            self._vmap_func = jax.vmap(problem.sigmoid_objective_function)
+            self._value_and_grad_func = jax.value_and_grad(
+                problem.sigmoid_objective_function
+            )
+            self._vmap_value_and_grad_func = jax.vmap(
+                jax.value_and_grad(problem.sigmoid_objective_function)
+            )
+            self._grad_func = jax.grad(problem.sigmoid_objective_function)
+            self._vmap_grad_func = jax.vmap(
+                jax.grad(problem.sigmoid_objective_function)
+            )
+
+        self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self._time_left = self._max_time
+        self._start_time = None
+        self._time_exceeded = False
+
+        self._eval_count = 0
+        self._evals_left = self._max_evals
+        self._evals_exceeded = False
+
+        self._best_loss = jnp.inf
+        self._improvement_count = 0
+        self._evals_since_improvement = 0
+        self._best_params = None
+        self._loss_history = []
+        self._grad_history = []
+        self._params_history = []
+        self._eval_type_history = []
+        self._time_steps = []
+
+    def __call__(self, params: Float[Array, "n_params"]) -> Float:
+        """Evaluate the objective function at given parameters.
+
+        Args:
+            params: Parameter vector to evaluate.
+
+        Returns:
+            Loss value at the given parameters.
+        """
+        return self.value(params)
+
+    @property
+    def bounds(self) -> Float[Array, "2 n_params"] | None:
+        """Lower and upper bounds for parameters as shape (2, n_params) array."""
+        return self._bounds
+
+    @property
+    def n_params(self) -> int:
+        """Number of parameters in the optimization problem."""
+        if self._bounds is not None:
+            return self.problem.n_params
+        else:
+            raise ValueError("Cannot determine n_params for unbounded objective.")
+
+    @property
+    def problem(self) -> ContinuousProblem:
+        """The underlying optimization problem."""
+        return self._problem
+
+    # ---------
+
+    @property
+    def eval_count(self) -> int:
+        """Total number of objective evaluations performed."""
+        return self._eval_count
+
+    @property
+    def evals_left(self) -> int | None:
+        """Number of evaluations remaining before budget is exceeded. None if no limit."""
+        return self._evals_left
+
+    @property
+    def evals_progress_fraction(self) -> float:
+        """Fraction of evaluation budget used (0.0 to 1.0). Returns 0.0 if no limit."""
+        if self._max_evals is not None:
+            return min(1.0, self.eval_count / self._max_evals)
+        return 0.0
+
+    @property
+    def evals_exceeded(self) -> bool:
+        """Whether the evaluation budget has been exceeded."""
+        return self._evals_exceeded
+
+    @property
+    def time_left(self) -> float | None:
+        """Time remaining in seconds before budget is exceeded. None if no limit."""
+        if self._start_time is None:
+            return self._max_time
+        self._time_left = (
+            max(0, self._max_time - (time.time() - self._start_time))
+            if self._max_time is not None
+            else None
+        )
+        return self._time_left
+
+    @property
+    def time_elapsed(self) -> float:
+        """Total time elapsed since start_logging() was called."""
+        if self._start_time is None:
+            return 0.0
+        return time.time() - self._start_time
+
+    @property
+    def time_exceeded(self) -> bool:
+        """Whether the time budget has been exceeded."""
+        if self._max_time is not None:
+            self._time_exceeded = self.time_elapsed >= self._max_time
+        return self._time_exceeded
+
+    @property
+    def time_progress_fraction(self) -> float:
+        """Fraction of time budget used (0.0 to 1.0). Returns 0.0 if no limit."""
+        if self._max_time is not None:
+            return min(1.0, self.time_elapsed / self._max_time)
+        return 0.0
+
+    @property
+    def budget_exceeded(self) -> bool:
+        """Whether any budget (time or evaluations) has been exceeded."""
+        return self.time_exceeded or self.evals_exceeded
+
+    @property
+    def best_params(self) -> Float[Array, "n_params"] | None:
+        """Parameters corresponding to best loss found so far (raw, possibly unbounded)."""
+        return self._best_params
+
+    @property
+    def best_params_bounded(self) -> Float[Array, "n_params"] | None:
+        """Best parameters transformed to bounded space. Use for final output."""
+        if self._best_params is None:
+            return None
+        if self._unbounded:
+            return sigmoid_bounding(self._best_params, self._problem.bounds)
+        return self._best_params
+
+    @property
+    def best_loss(self) -> Float | None:
+        """Best (minimum) loss found so far. None if no evaluations yet."""
+        return self._best_loss if self._best_loss != jnp.inf else None
+
+    @property
+    def current_loss(self) -> Float[Array, "batch"] | Float | None:
+        """Most recent loss value from last evaluation."""
+        if len(self._loss_history) == 0:
+            return None
+        return self._loss_history[-1]
+
+    @property
+    def current_params(
+        self,
+    ) -> Float[Array, "batch n_params"] | Float[Array, "n_params"] | None:
+        """Most recent parameters from last evaluation."""
+        if len(self._params_history) > 0:
+            return self._params_history[-1]
+        else:
+            return None
+
+    @property
+    def loss_history(self) -> list[Float | Float[Array, "batch"]]:
+        """Copy of all loss values computed (prevents external modification)."""
+        return self._loss_history.copy()
+
+    @property
+    def grad_history(self) -> list[Float | Float[Array, "batch"]]:
+        """Copy of all gradient values computed (prevents external modification)."""
+        return self._grad_history.copy()
+
+    @property
+    def params_history(
+        self,
+    ) -> list[Float[Array, "n_params"] | Float[Array, "batch n_params"]]:
+        """Copy of all parameter values evaluated (raw, possibly unbounded)."""
+        return self._params_history.copy()
+
+    @property
+    def params_history_bounded(
+        self,
+    ) -> list[Float[Array, "n_params"] | Float[Array, "batch n_params"] | None]:
+        """Params history transformed to bounded space. Use for final output/plotting."""
+        if not self._unbounded:
+            return self._params_history.copy()
+        result = []
+        for p in self._params_history:
+            if p is None:
+                result.append(None)
+            elif p.ndim == 1:
+                result.append(sigmoid_bounding(p, self._problem.bounds))
+            else:
+                sigmoid_bounding_v = jax.vmap(
+                    lambda x: sigmoid_bounding(x, self._problem.bounds)
+                )
+                result.append(sigmoid_bounding_v(p))
+        return result
+
+    @property
+    def time_steps(self) -> list[float]:
+        """Copy of elapsed time at each evaluation in seconds."""
+        return self._time_steps.copy()
+
+    @property
+    def improvement_count(self) -> int:
+        """Number of times a new best loss was found."""
+        return int(self._improvement_count)
+
+    @property
+    def evals_since_improvement(self) -> int:
+        """Evaluations since last improvement to best loss."""
+        return int(self._evals_since_improvement)
+
+    # --------- Reduced (non-batched) history properties ---------
+
+    @property
+    def loss_history_reduced(self) -> list[float]:
+        """Loss history with batches reduced to min.
+
+        Always returns a list of scalar floats, regardless of whether
+        batched losses were saved. For batched entries, returns nanmin.
+        """
+        result = []
+        for entry in self._loss_history:
+            arr = jnp.asarray(entry)
+            if arr.ndim == 0:
+                result.append(float(arr))
+            else:
+                result.append(float(jnp.nanmin(arr)))
+        return result
+
+    @property
+    def params_history_reduced(
+        self,
+    ) -> list[Float[Array, "n_params"] | None]:
+        """Params history with batches reduced to single representative.
+
+        Always returns a list of 1D param arrays (or None), regardless of
+        whether batched params were saved. For batched entries, selects:
+        1. Params with minimum loss (if loss available for that step)
+        2. Params with smallest gradient norm (if grad available)
+        3. First entry in batch (fallback)
+        """
+        result = []
+        for i, params in enumerate(self._params_history):
+            if params is None:
+                result.append(None)
+                continue
+
+            params_arr = jnp.asarray(params)
+            if params_arr.ndim == 1:
+                # Already scalar params
+                result.append(params_arr)
+            else:
+                # Batched params - need to select one
+                # Try to use loss to select best
+                if i < len(self._loss_history):
+                    loss = jnp.asarray(self._loss_history[i])
+                    if loss.ndim > 0 and not jnp.all(jnp.isnan(loss)):
+                        idx = int(jnp.nanargmin(loss))
+                        result.append(params_arr[idx])
+                        continue
+
+                # Try to use grad norm to select (smaller = closer to optimum)
+                if i < len(self._grad_history) and self._grad_history[i] is not None:
+                    grad = jnp.asarray(self._grad_history[i])
+                    if grad.ndim > 1:
+                        grad_norms = jnp.linalg.norm(grad, axis=-1)
+                        idx = int(jnp.nanargmin(grad_norms))
+                        result.append(params_arr[idx])
+                        continue
+
+                # Fallback: first entry
+                result.append(params_arr[0])
+        return result
+
+    @property
+    def params_history_reduced_bounded(
+        self,
+    ) -> list[Float[Array, "n_params"] | None]:
+        """Reduced params history transformed to bounded space.
+
+        Combines params_history_reduced with bounding transformation.
+        Use this for final output, plotting, or benchmark analysis.
+        """
+        reduced = self.params_history_reduced
+        if not self._unbounded:
+            return reduced
+        result = []
+        for p in reduced:
+            if p is None:
+                result.append(None)
+            else:
+                result.append(sigmoid_bounding(p, self._problem.bounds))
+        return result
+
+    @property
+    def grad_history_reduced(
+        self,
+    ) -> list[Float[Array, "n_params"] | None]:
+        """Grad history with batches reduced to single representative.
+
+        Always returns a list of 1D grad arrays (or None). For batched entries,
+        selects using the same logic as params_history_reduced.
+        """
+        result = []
+        for i, grad in enumerate(self._grad_history):
+            if grad is None:
+                result.append(None)
+                continue
+
+            grad_arr = jnp.asarray(grad)
+            if grad_arr.ndim == 1:
+                result.append(grad_arr)
+            else:
+                # Batched grads - select one
+                # Try to use loss to select
+                if i < len(self._loss_history):
+                    loss = jnp.asarray(self._loss_history[i])
+                    if loss.ndim > 0 and not jnp.all(jnp.isnan(loss)):
+                        idx = int(jnp.nanargmin(loss))
+                        result.append(grad_arr[idx])
+                        continue
+
+                # Use smallest grad norm
+                grad_norms = jnp.linalg.norm(grad_arr, axis=-1)
+                idx = int(jnp.nanargmin(grad_norms))
+                result.append(grad_arr[idx])
+        return result
+
+    # ---------
+
+    def _get_run_data_path(
+        self,
+        algorithm_name: str = "unknown",
+        custom_path: str | None = None,
+    ) -> Path:
+        """Generate run data file path following naming conventions.
+
+        Args:
+            algorithm_name: Name of the optimization algorithm.
+            custom_path: Custom path to override default. If None, uses standard structure.
+
+        Returns:
+            Path object for the run data file.
+        """
+        if custom_path is not None:
+            return Path(custom_path)
+
+        # Build directory name with budget info
+        dir_parts = []
+        if self._max_time is not None:
+            dir_parts.append(f"time{int(self._max_time)}s")
+        if self._max_evals is not None:
+            dir_parts.append(f"evals{self._max_evals}")
+        dir_name = "_".join(dir_parts) if dir_parts else "unlimited"
+
+        # Build filename: problemname_algorithmname_timestamp.npz
+        timestamp = self._timestamp
+        problem_name = (
+            self._problem.name if hasattr(self._problem, "name") else "problem"
+        )
+        safe_algo_name = algorithm_name.replace("/", "_").replace(" ", "_")
+        filename = f"{problem_name}_{safe_algo_name}_{timestamp}.npz"
+
+        # Full path: ./data/{dir_name}/{filename}
+        run_data_dir = Path("./data/objective_run_data") / dir_name
+        run_data_dir.mkdir(parents=True, exist_ok=True)
+
+        return run_data_dir / filename
+
+    def __repr__(self) -> str:
+        """String representation for debugging."""
+        summary = self.get_summary()
+        best_loss = summary["best_loss"]
+        best_loss_str = f"{best_loss:.6f}" if best_loss is not None else "N/A"
+        return (
+            f"Objective(evals={summary['eval_count']}, "
+            f"best_loss={best_loss_str}, "
+            f"time={summary['time_elapsed']:.2f}s)"
+        )
+
+    # ---------
+
+    @staticmethod
+    def _ndim(x) -> int:
+        """Helper to get ndim attribute, returning 0 if not present."""
+        return getattr(x, "ndim", 0)
+
+    def _log_time(self) -> None:
+        """Internal: Log current timestamp and check time budget."""
+        
+        if self._start_time is None:
+            return
+        
+        time_elapsed = (
+            time.time() - self._start_time if self._start_time is not None else 0.0
+        )
+
+        # Update time_exceeded flag if time budget is set
+        if self._max_time is not None:
+            self._time_exceeded = time_elapsed >= self._max_time
+
+        # Record timestamp if saving time steps and budget not exceeded
+        if (
+            self._save_time_steps
+            and not self._time_exceeded
+            and not self._evals_exceeded
+        ):
+            self._time_steps.append(time_elapsed)
+
+        return
+
+    def _log_evals(
+        self,
+        params: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
+        loss: Float | Float[Array, "batch"] | None = None,
+        grad: Float | Float[Array, "batch"] | None = None,
+    ) -> None:
+        """Internal: Log evaluation results, update histories, and track best loss.
+
+        This function is defensive: `params`, `loss`, or `grad` may be None.
+        Histories are kept index-aligned by inserting NaN placeholders when a
+        particular quantity is not provided. An `_eval_types` entry is appended
+        describing the kind of evaluation ('value', 'grad', 'value_and_grad').
+        """
+        # Stop if logging didn't start yet
+        if self._start_time is None:
+            return
+
+        # Stop logging if budget exceeded
+        if self._time_exceeded or self._evals_exceeded:
+            return
+
+        # Determine how many items this call represents
+        if params is not None and self._ndim(params) == 2:
+            n_items = int(params.shape[0])
+        elif loss is not None and self._ndim(loss) > 0:
+            n_items = int(loss.shape[0])
+        elif grad is not None and self._ndim(grad) > 1:
+            n_items = int(grad.shape[0])
+        else:
+            n_items = 1
+
+        # Check evaluation budget with knowledge of batch size
+        if self._max_evals is not None:
+            evals_left_before = max(0, self._max_evals - self._eval_count)
+
+            # nothing left before this call: mark exceeded and bail
+            if evals_left_before <= 0:
+                self._evals_exceeded = True
+                self._evals_left = 0
+                # Remove the time step that was just added by _log_time() to keep alignment
+                if self._save_time_steps and self._time_steps:
+                    self._time_steps.pop()
+                return
+
+            # batch larger than remaining budget: account evals but do not log
+            if evals_left_before < n_items:
+                # still account for the evaluations (the caller received results),
+                # but do not record histories for fairness.
+                self._eval_count += n_items
+                self._evals_left = max(0, self._max_evals - self._eval_count)
+                self._evals_exceeded = True
+                # Remove the time step that was just added by _log_time() to keep alignment
+                if self._save_time_steps and self._time_steps:
+                    self._time_steps.pop()
+                return
+
+        prev_eval_count = self._eval_count
+        self._eval_count += n_items
+        # update remaining evals immediately
+        if self._max_evals is not None:
+            self._evals_left = max(0, self._max_evals - self._eval_count)
+            self._evals_exceeded = self._evals_left <= 0
+        # Decide eval type
+        # Format as bitmask: 0b{vmap}{grad}{loss}
+        eval_type = int(n_items > 1) << 2 | int(grad is not None) << 1 | int(loss is not None)
+        if eval_type == 0:
+            eval_type = -1  # unknown eval
+        if self._save_eval_type_history:
+            self._eval_type_history.append(eval_type)
+
+        # Helper to create NaN placeholders
+        def _nan_entry():
+            return jnp.full((n_items,), jnp.nan) if n_items > 1 else jnp.nan
+
+        # log losses
+        if loss is not None:
+            if self._ndim(loss) == 0 or self._save_batched_losses_history:
+                self._loss_history.append(loss)
+            else:  # batched case but not saving batched history -> store min
+                self._loss_history.append(jnp.nanmin(loss))
+        else:
+            # insert NaN(s) to keep alignment
+            self._loss_history.append(
+                jnp.array([jnp.nan] * n_items) if (n_items > 1 and self._save_batched_losses_history) else _nan_entry()
+            )
+
+        # log grads (only when saving grads)
+        if self._save_grad_history:
+            if grad is not None:
+                if self._ndim(grad) == 1 or self._save_batched_grads_history:
+                    self._grad_history.append(grad)
+                else:
+                    # batched grads without saving batch: pick representative grad
+                    # (same index logic as params_history for consistency)
+                    if loss is not None and self._ndim(loss) > 0:
+                        idx = int(jnp.nanargmin(loss))
+                    else:
+                        grad_norms = jnp.linalg.norm(grad, axis=-1)
+                        idx = int(jnp.nanargmin(grad_norms))
+                    self._grad_history.append(grad[idx])
+            else:
+                self._grad_history.append(None)
+
+        # params history (store raw params; use *_bounded properties for bounded access)
+        if self._save_params_history:
+            if params is not None:
+                if self._ndim(params) == 1 or self._save_batched_params_history:
+                    self._params_history.append(params)
+                else:  # batched case but not saving batched history
+                    # choose representative param by argmin of loss/grad if available
+                    if loss is not None:
+                        idx = int(jnp.nanargmin(loss)) if self._ndim(loss) > 0 else 0
+                        self._params_history.append(params[idx])
+                    elif grad is not None:
+                        # Use norm of each grad to select (smaller norm = closer to optimum)
+                        if self._ndim(grad) > 1:
+                            grad_norms = jnp.linalg.norm(grad, axis=-1)
+                            idx = int(jnp.nanargmin(grad_norms))
+                        else:
+                            idx = 0
+                        self._params_history.append(params[idx])
+                    else:
+                        self._params_history.append(None)
+            else:
+                # No params provided; append None to keep alignment
+                self._params_history.append(None)
+
+        # Update best loss and params (only when loss available)
+        improved = False
+        if loss is not None:
+            if self._ndim(loss) == 0:
+                if not jnp.isnan(loss) and loss < self._best_loss:
+                    self._best_loss = loss
+                    self._best_params = params
+                    improved = True
+            else:  # batched saved case
+                if not jnp.all(jnp.isnan(loss)):
+                    min_idx = int(jnp.nanargmin(loss))
+                    min_loss = loss[min_idx]
+                    if min_loss < self._best_loss:
+                        self._best_loss = min_loss
+                        # only set best_params if params provided
+                        if params is not None:
+                            self._best_params = params[min_idx]
+                        improved = True
+
+        # Update incremental improvement / stagnation counters
+        if improved:
+            self._improvement_count += 1
+            self._evals_since_improvement = 0
+        else:
+            # any evaluation that did not improve increments stagnation
+            self._evals_since_improvement += n_items
+
+        # Print progress if configured
+        if (
+            self._print_every is not None
+            and self._print_every > 0
+            and self._verbose >= 1
+            and (prev_eval_count // self._print_every) != (self._eval_count // self._print_every)
+        ):
+            s = self.get_summary()
+            try:
+                print(
+                    f"---------------\nevals={s['eval_count']}\nbest={s['best_loss']}\n"+
+                    f"time={s['time_elapsed']:.2f}s\nimprovements={s['improvement_count']}\n"+
+                    f"since_impr={s['evals_since_improvement']}"
+                )
+            except Exception:
+                # printing should not break optimization
+                pass
+
+        return
+
+    def _log_to_file(self) -> None:
+        """Internal: Save current run data to file if configured."""
+        # Execute this as late as possilbe in the logging sequence
+        if self._start_time is None:
+            return
+
+        if self._save_to_file_every is None:
+            return
+
+        if self._eval_count % self._save_to_file_every != 0:
+            return
+
+        # Time the save and exclude that duration from elapsed time
+        # TODO consider checking if multithreaded
+        t0 = time.time() if self._start_time is not None else None
+        try:
+            self.save_run_data(algorithm_name=self._algorithm_str or "unknown")
+        except Exception:
+            # propagate after optionally logging, dont adjust start_time on failure
+            raise
+        else:
+            if t0 is not None:
+                dt = time.time() - t0
+                # advance start_time so elapsed = (now - start_time) excludes dt
+                self._start_time += dt
+        return
+
+    def start_logging(self) -> None:
+        """Start the optimization timer. Call this before beginning optimization."""
+        self._start_time = time.time()
+
+    def value(self, params: Float[Array, "n_params"]) -> Float:
+        """Evaluate objective function at given parameters.
+
+        Args:
+            params: Parameter vector of shape (n_params,).
+
+        Returns:
+            Scalar loss value.
+        """
+        loss = self._func(params)
+
+        self._log_time()
+        self._log_evals(params, loss, None)
+
+        self._log_to_file()
+        return loss
+
+    def grad(self, params: Float[Array, "n_params"]) -> Float[Array, "n_params"]:
+        """Compute gradient of objective function at given parameters.
+
+        Args:
+            params: Parameter vector of shape (n_params,).
+
+        Returns:
+            Gradient vector of shape (n_params,).
+        """
+        grad = self._grad_func(params)
+
+        self._log_time()
+        self._log_evals(params, None, grad)
+
+        self._log_to_file()
+        return grad
+
+    def value_and_grad(
+        self, params: Float[Array, "n_params"]
+    ) -> tuple[Float, Float[Array, "n_params"]]:
+        """Compute both value and gradient (more efficient than separate calls).
+
+        Args:
+            params: Parameter vector of shape (n_params,).
+
+        Returns:
+            Tuple of (loss, gradient).
+        """
+        value, grad = self._value_and_grad_func(params)
+
+        self._log_time()
+        self._log_evals(params, value, grad)
+
+        self._log_to_file()
+        return value, grad
+
+    def vmap_value(
+        self, params: Float[Array, "batch n_params"]
+    ) -> Float[Array, "batch"]:
+        """Evaluate objective function on a batch of parameters.
+
+        Args:
+            params: Parameter batch of shape (batch, n_params).
+
+        Returns:
+            Loss array of shape (batch,).
+        """
+        losses = self._vmap_func(params)
+
+        self._log_time()
+        self._log_evals(params, losses, None)
+
+        self._log_to_file()
+        return losses
+
+    def vmap_grad(
+        self, params: Float[Array, "batch n_params"]
+    ) -> Float[Array, "batch n_params"]:
+        """Compute gradients for a batch of parameters.
+
+        Args:
+            params: Parameter batch of shape (batch, n_params).
+
+        Returns:
+            Gradient array of shape (batch, n_params).
+        """
+        grads = self._vmap_grad_func(params)
+
+        self._log_time()
+        self._log_evals(params, None, grads)
+
+        self._log_to_file()
+        return grads
+
+    def vmap_value_and_grad(
+        self, params: Float[Array, "batch n_params"]
+    ) -> tuple[Float[Array, "batch"], Float[Array, "batch n_params"]]:
+        """Compute both values and gradients for a batch of parameters.
+
+        Args:
+            params: Parameter batch of shape (batch, n_params).
+
+        Returns:
+            Tuple of (losses, gradients) with shapes (batch,) and (batch, n_params).
+        """
+        values, grads = self._vmap_value_and_grad_func(params)
+
+        self._log_time()
+        self._log_evals(params, values, grads)
+
+        self._log_to_file()
+        return values, grads
+
+    def batched_value(
+        self, params: Float[Array, "batch n_params"]
+    ) -> Float[Array, "batch"]:
+        """Alias for vmap_value. Evaluate objective on a batch of parameters."""
+        return self.vmap_value(params)
+
+    def batched_grad(
+        self, params: Float[Array, "batch n_params"]
+    ) -> Float[Array, "batch n_params"]:
+        """Alias for vmap_grad. Compute gradients for a batch of parameters."""
+        return self.vmap_grad(params)
+
+    def batched_value_and_grad(
+        self, params: Float[Array, "batch n_params"]
+    ) -> tuple[Float[Array, "batch"], Float[Array, "batch n_params"]]:
+        """Alias for vmap_value_and_grad. Compute values and gradients for a batch."""
+        return self.vmap_value_and_grad(params)
+
+    # Redirect everythging else to jax. ...probably a bad idea
+    # def __getattr__(self, name: str) -> Callable:
+    #     if hasattr(jax, name):
+    #         return getattr(jax, name)
+    #     raise AttributeError(f"'Objective' object has no attribute '{name}'")
+
+    # ---------
+
+    def save_run_data(
+        self,
+        algorithm_name: str = "unknown",
+        filepath: str | None = None,
+    ) -> Path:
+        """Save current optimization state to compressed NPZ file.
+
+        Uses numpy's compressed format. File naming follows the convention:
+        problemname_algorithmname_timestamp.npz in a directory
+        named with budget constraints (e.g., data/objective_run_data/time100s_evals1000/).
+
+        Args:
+            filepath: Custom file path. If None, uses standard naming convention.
+
+        Returns:
+            Path to the saved run data file.
+
+        Example:
+            >>> obj.save_run_data(algorithm_name="adam_gd")
+            Path('data/objective_run_data/time100s_evals1000/voyager_adam_gd_2026-01-26_15-30-45.npz')
+        """
+        save_path = self._get_run_data_path(algorithm_name, filepath)
+
+        # Convert histories to numpy arrays for efficient storage
+        # Write to a temporary file in the same directory and atomically replace
+        # to avoid partial files if the process is interrupted.
+        # Use .tmp before .npz so numpy doesn't double-add the extension.
+        temp_path = save_path.with_suffix(".tmp.npz")
+        np.savez_compressed(
+            temp_path,
+            loss_history=np.array(self._loss_history, dtype=object),
+            grad_history=np.array(self._grad_history, dtype=object),
+            params_history=np.array(self._params_history, dtype=object),
+            eval_type_history=np.array(self._eval_type_history, dtype=object),
+            time_steps=np.array(self._time_steps),
+            eval_count=self._eval_count,
+            best_loss=np.array(self._best_loss),
+            best_params=np.array(self._best_params)
+            if self._best_params is not None
+            else np.array([]),
+            improvement_count=np.array(int(self._improvement_count)),
+            evals_since_improvement=np.array(int(self._evals_since_improvement)),
+        )
+        # Atomic replace
+        try:
+            os.replace(str(temp_path), str(save_path))
+        except Exception:
+            # If atomic replace fails, attempt a non-atomic move as fallback
+            if save_path.exists():
+                os.remove(save_path)
+            os.rename(str(temp_path), str(save_path))
+        # TODO maybe clean up a failed tmp file?
+        if self._verbose >= 1:
+            print(f"Run data saved to {save_path}")
+
+        return save_path
+
+    def load_run_data(self, filepath: str | Path) -> None:
+        """Load optimization state from a run data file.
+
+        Restores all tracking state including loss history, parameters, and timing.
+        The start_time is adjusted so that time_elapsed continues from where it left off.
+
+        Args:
+            filepath: Path to the run data NPZ file to load.
+
+        Raises:
+            FileNotFoundError: If run data file doesn't exist.
+
+        Example:
+            >>> obj.load_run_data("data/objective_run_data/time100s_evals1000/voyager_adam_gd_2026-01-26.npz")
+            >>> print(f"Resuming from {obj.eval_count} evaluations")
+        """
+        filepath = Path(filepath)
+        if not filepath.exists():
+            raise FileNotFoundError(f"Run data file not found: {filepath}")
+
+        data = np.load(filepath, allow_pickle=True)
+
+        # Restore state
+        self._loss_history = data["loss_history"].tolist()
+        self._grad_history = data["grad_history"].tolist()
+        self._params_history = data["params_history"].tolist()
+        self._time_steps = data["time_steps"].tolist()
+        self._eval_count = int(data["eval_count"])
+        self._best_loss = jnp.array(data["best_loss"])
+
+        best_params_array = data["best_params"]
+        self._best_params = (
+            jnp.array(best_params_array) if best_params_array.size > 0 else None
+        )
+        self._improvement_count = int(data["improvement_count"])
+        self._evals_since_improvement = int(data["evals_since_improvement"])
+        self._eval_type_history = data["eval_type_history"].tolist()
+
+        # Restore timing: set start_time so elapsed time continues correctly
+        if len(self._time_steps) > 0:
+            self._start_time = time.time() - self._time_steps[-1]
+        else:
+            self._start_time = time.time()
+
+        # Update budget tracking
+        if self._max_evals is not None:
+            self._evals_left = max(0, self._max_evals - self._eval_count)
+            self._evals_exceeded = self._evals_left <= 0
+
+        if self._verbose >= 1:
+            print(f"Checkpoint loaded from {filepath}")
+            if len(self._time_steps) > 0:
+                print(
+                    f"Resuming from: {self._eval_count} evals, {self._time_steps[-1]:.2f}s elapsed"
+                )
+            else:
+                print(f"Resuming from: {self._eval_count} evals, 0.00s elapsed")
+
+    def get_summary(self) -> dict:
+        """Get a summary dictionary of the optimization run."""
+        current_loss = self.current_loss
+        if current_loss is not None:
+            # Handle both scalar and batch losses
+            ndim = self._ndim(current_loss)
+            if ndim == 0:
+                current_loss_value = float(current_loss)
+            elif ndim == 1:
+                # For batches, use min
+                current_loss_value = float(jnp.nanmin(current_loss))
+            else:
+                current_loss_value = None
+        else:
+            current_loss_value = None
+            
+        return {
+            "eval_count": self._eval_count,
+            "time_elapsed": self.time_elapsed,
+            "best_loss": float(self._best_loss) if self._best_loss != jnp.inf else None,
+            "current_loss": current_loss_value,
+            "improvement_count": self.improvement_count,
+            "evals_since_improvement": self.evals_since_improvement,
+            "budget_exceeded": self.budget_exceeded,
+            "time_exceeded": self._time_exceeded,
+            "evals_exceeded": self._evals_exceeded,
+        }
+
+    def reset(self) -> None:
+        """Reset all tracking state for a new optimization run.
+
+        Clears all histories, resets counters, and prepares for a fresh start.
+        Does not modify the problem or budget limits.
+        """
+        self._start_time = None
+        self._time_exceeded = False
+        self._eval_count = 0
+        self._evals_left = self._max_evals
+        self._evals_exceeded = False
+
+        self._loss_history = []
+        self._grad_history = []
+        self._params_history = []
+        self._time_steps = []
+
+        self._best_loss = jnp.inf
+        self._best_params = None
+        self._improvement_count = 0
+        self._evals_since_improvement = 0
+        self._eval_type_history = []
+
+    def output_to_files(
+        self,
+        hyper_param_str: str = "",
+        hyper_param_str_in_filename: bool = True,
+    ) -> Path:
+        """Output optimization results to files (plots and JSON).
+
+        Creates JSON files with parameters and losses, and PNG plots of
+        the optimization progress. For optical problems with sensitivity
+        calculation, also plots the sensitivity curve.
+
+        Files are saved to: ./data/problem_output/{problem_name}/{algorithm_str}/{hyper_param_str}/
+
+        Args:
+            hyper_param_str: Hyperparameter string for file naming (e.g., "lr0.1_patience500").
+            hyper_param_str_in_filename: Whether to include hyperparams in filename.
+
+        Returns:
+            Path to the output directory.
+        """
+        best_params = self.best_params_bounded
+        losses = jnp.array(self.loss_history)
+
+        # Get names
+        problem_name = (
+            self._problem.name if hasattr(self._problem, "name") else "problem"
+        )
+        algorithm_str = self._algorithm_str or "unknown"
+
+        # Print best params and loss
+        print(f"Parameters of the best solution: {best_params}")
+        print(f"Best loss: {self.best_loss}")
+
+        # Prepare strings and timestamp
+        algorithm_str_fmt = f"_{algorithm_str.strip('_')}" if algorithm_str else ""
+        hyper_param_str_fmt = (
+            f"_{hyper_param_str.strip('_')}" if hyper_param_str else ""
+        )
+        timestamp = self._timestamp
+
+        # Create output directory
+        output_path = Path(
+            f"./data/problem_output/{problem_name}/{algorithm_str.strip('_')}"
+        ) / hyper_param_str.strip("_")
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        print(f"Output directory: {output_path}")
+
+        # Determine file name prefix and suffix
+        file_prefix = f"{problem_name}{algorithm_str_fmt}_{timestamp}"
+        file_suffix = hyper_param_str_fmt if hyper_param_str_in_filename else ""
+
+        # Output best parameters to JSON
+        with open(output_path / f"{file_prefix}_parameters{file_suffix}.json", "w") as f:
+            json.dump(best_params.tolist(), f, indent=4)
+
+        # Output historical losses to JSON
+        with open(output_path / f"{file_prefix}_losses{file_suffix}.json", "w") as f:
+            json.dump(losses.tolist(), f, indent=4)
+
+        # Plot losses
+        plt.figure()
+        plt.plot(losses)
+        plt.xlabel("Iteration")
+        plt.ylabel("Loss")
+        plt.axhline(0, color="red", linestyle="--")
+        plt.grid()
+        plt.tight_layout()
+        plt.savefig(output_path / f"{file_prefix}_losses{file_suffix}.png")
+        plt.close()
+
+        # If problem has sensitivity calculation (optical problems), plot it
+        if hasattr(self._problem, "calculate_sensitivity") and hasattr(
+            self._problem, "_frequencies"
+        ):
+            sensitivities = self._problem.calculate_sensitivity(best_params)
+
+            plt.figure()
+            plt.plot(
+                self._problem._frequencies, sensitivities, label="Optimized Sensitivity"
+            )
+
+            if hasattr(self._problem, "_target_sensitivities"):
+                plt.plot(
+                    self._problem._frequencies,
+                    self._problem._target_sensitivities,
+                    label="Target Sensitivity",
+                )
+
+            plt.xscale("log")
+            plt.yscale("log")
+            plt.xlabel("Frequency (Hz)")
+            plt.ylabel("Sensitivity [/sqrt(Hz)]")
+            plt.legend()
+            plt.grid()
+            plt.tight_layout()
+            plt.savefig(output_path / f"{file_prefix}_sensitivity{file_suffix}.png")
+            plt.close()
+
+        return output_path

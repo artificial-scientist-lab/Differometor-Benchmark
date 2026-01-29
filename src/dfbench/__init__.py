@@ -1,6 +1,22 @@
 """Differometor Benchmark package.
 
 Provides optimization algorithms, problem definitions, and benchmarking tools.
+
+Usage:
+    ### Core classes
+    `from dfbench import Objective`
+
+    ### Protocols
+    `from dfbench import ContinuousProblem, OptimizationAlgorithm, AlgorithmType`
+
+    ### Algorithms (hierarchical)
+    `from dfbench.algorithms import AdamGD, EvoxES, BotorchBO`
+
+    ### Problems (hierarchical)
+    `from dfbench.problems import VoyagerProblem, RandomUIFOProblem`
+
+    ### Benchmarking (hierarchical)
+    `from dfbench.benchmark import Benchmark, AlgorithmConfig`
 """
 
 # Initialize environment variables first
@@ -13,60 +29,23 @@ from dfbench.core.protocols import (
     AlgorithmType,
 )
 
-# Import utilities
+# Import core utilities
 from dfbench.core.config import create_parser
-from dfbench.core.utils import t2j, j2t, t2j_numpy, j2t_numpy
+from dfbench.core.utils import t2j_numpy, j2t_numpy
 
-# Import algorithms
-from dfbench.algorithms.evolutionary.evox_es import EvoxES
-from dfbench.algorithms.evolutionary.evox_pso import EvoxPSO
-from dfbench.algorithms.evolutionary.random_search import RandomSearch
-from dfbench.algorithms.gradient_based.adam_gd import AdamGD
-from dfbench.algorithms.gradient_based.na_adam_gd import NAAdamGD
-from dfbench.algorithms.gradient_based.sa_gd import SAGD
-from dfbench.algorithms.surrogate_based.botorch_bo import BotorchBO
-from dfbench.algorithms.surrogate_based.botorch_turbo import BotorchTuRBO
-
-# Import problems
-from dfbench.problems.voyager.voyager_problem import VoyagerProblem
-from dfbench.problems.voyager.constrained_voyager_problem import ConstrainedVoyagerProblem
-from dfbench.problems.uifo.random_uifo_problem import RandomUIFOProblem
-from dfbench.problems.base_problem import OpticalSetupProblem
-
-# Backwards compatibility alias
-UIFOProblem = RandomUIFOProblem
-
-# Import benchmarking
-from dfbench.benchmark.benchmark import Benchmark, AlgorithmConfig
+# Import Objective for external use
+from dfbench.core.objective import Objective
 
 
 __all__ = [
+    # Core
+    "Objective",
     # Protocols
     "ContinuousProblem",
     "OptimizationAlgorithm",
     "AlgorithmType",
-    # Algorithms
-    "EvoxES",
-    "EvoxPSO",
-    "RandomSearch",
-    "AdamGD",
-    "NAAdamGD",
-    "SAGD",
-    "BotorchBO",
-    "BotorchTuRBO",
-    # Problems
-    "OpticalSetupProblem",
-    "VoyagerProblem",
-    "ConstrainedVoyagerProblem",
-    "RandomUIFOProblem",
-    "UIFOProblem",
     # Utilities
     "create_parser",
-    "t2j",
-    "j2t",
     "t2j_numpy",
     "j2t_numpy",
-    # Benchmarking
-    "Benchmark",
-    "AlgorithmConfig",
 ]
