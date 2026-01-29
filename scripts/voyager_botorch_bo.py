@@ -1,15 +1,19 @@
-from dfbench import ConstrainedVoyagerProblem, BotorchBO
-import jax.numpy as jnp
-# Whole workflow of opimization with adam
+"""Test script for BotorchBO optimizer."""
 
+from dfbench.problems import ConstrainedVoyagerProblem
+from dfbench.algorithms import BotorchBO
+
+# Optimization workflow with Bayesian Optimization
 vp = ConstrainedVoyagerProblem()
 
 optimizer = BotorchBO(vp)
 
-_, _, losses, wti = optimizer.optimize(
-    save_to_file=True,
-    wall_times=[10,20,30,60,120],
+# Run optimization - returns Objective instance
+obj = optimizer.optimize(
+    max_iterations=200,
+    verbose=1,
+    save_run_to_file=True,
 )
 
-print("Best loss:", jnp.min(losses))
-print("Wall time indices:", wti)
+print(f"\nBest loss: {obj.best_loss:.6f}")
+print(f"Total evaluations: {obj.eval_count}")

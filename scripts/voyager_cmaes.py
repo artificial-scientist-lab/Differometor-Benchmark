@@ -1,17 +1,16 @@
-"""Test script for EvoxPSO optimizer."""
+"""Test script for EvoxES optimizer."""
 
 from dfbench.problems import VoyagerProblem
-from dfbench.algorithms import EvoxPSO
+from dfbench.algorithms import EvoxES
 
-# Optimization workflow with PSO
 vp = VoyagerProblem()
 
-optimizer = EvoxPSO(problem=vp, batch_size=50)
+optimizer = EvoxES(problem=vp, batch_size=50, variant="CMAES")
 
 # Run optimization - returns Objective instance
 obj = optimizer.optimize(
     max_iterations=2000,
-    pop_size=50,
+    pop_size=100,
     verbose=1,
     save_run_to_file=True,
     print_every=100,

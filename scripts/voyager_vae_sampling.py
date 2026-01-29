@@ -1,17 +1,17 @@
-"""Test script for EvoxES (SNES variant) optimizer."""
+"""Test script for VAESampling optimizer."""
 
 from dfbench.problems import ConstrainedVoyagerProblem
-from dfbench.algorithms import EvoxES
+from dfbench.algorithms import VAESampling
 
-# Optimization workflow with SNES
+# Optimization workflow with VAE Sampling
 vp = ConstrainedVoyagerProblem()
 
-optimizer = EvoxES(problem=vp, batch_size=125, variant="SNES")
+optimizer = VAESampling(vp, batch_size=64, hidden_dim=256, num_blocks=4, use_objective_guidance=True)
 
 # Run optimization - returns Objective instance
 obj = optimizer.optimize(
     max_iterations=2000,
-    pop_size=500,
+    sampling_time_percentage=0.5,
     verbose=1,
     save_run_to_file=True,
     print_every=100,

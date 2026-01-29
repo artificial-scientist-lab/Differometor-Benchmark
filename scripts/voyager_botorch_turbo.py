@@ -1,21 +1,19 @@
-"""Example script to run TuRBO optimization on the Voyager problem."""
+"""Test script for BotorchTuRBO optimizer."""
 
-from dfbench import ConstrainedVoyagerProblem, BotorchTuRBO, VoyagerProblem
-import jax.numpy as jnp
+from dfbench.problems import VoyagerProblem
+from dfbench.algorithms import BotorchTuRBO
 
-# Initialize the Voyager problem
+# Optimization workflow with TuRBO
 vp = VoyagerProblem()
 
-# Create TuRBO optimizer
-optimizer = BotorchTuRBO(vp, max_iterations=100)
+optimizer = BotorchTuRBO(vp)
 
-# Run optimization with Thompson Sampling acquisition
-_, _, losses, wti = optimizer.optimize(
-    save_to_file=True,
-    wall_times=[10, 20, 30, 60, 120],
-    batch_size=4,
-    acqf="ts",
+# Run optimization - returns Objective instance
+obj = optimizer.optimize(
+    max_iterations=200,
+    verbose=1,
+    save_run_to_file=True,
 )
 
-print("Best loss:", jnp.min(losses))
-print("Wall time indices:", wti)
+print(f"\nBest loss: {obj.best_loss:.6f}")
+print(f"Total evaluations: {obj.eval_count}")
