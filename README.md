@@ -447,7 +447,7 @@ For the two constrained problems, the loss is the order of magnitude of the diff
 
 - Everything is JAX-based, use `jax.jit` and `jax.vmap` for performance
 - JIT warmup happens in the algorithm before `obj.start_logging()`
-- For torch<->jax conversion, use `t2j_numpy` and `j2t_numpy` from `dfbench.core.utils`
+- For torch<->jax conversion, use `t2j` and `j2t` from `dfbench.core.utils`
 - Default saving config: batched losses ON, batched params OFF (memory efficiency)
 
 Let me know if something doesn't work or needs clarification!
