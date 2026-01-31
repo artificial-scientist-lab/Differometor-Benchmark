@@ -18,3 +18,8 @@ tmp*
 *scratch*
 notes.md
 temp/
+wandb/
+results/
+notebooks/
+*.slurm
+*.sbatch

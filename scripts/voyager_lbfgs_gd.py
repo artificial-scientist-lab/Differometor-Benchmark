@@ -1,4 +1,4 @@
-"""Test script for AdamGD optimizer."""
+"""Test script for LBFGS optimizer."""
 
 import argparse
 import logging
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import wandb
 
-from dfbench.algorithms import AdamGD
+from dfbench.algorithms import LBFGS
 from dfbench.problems import (
     ConstrainedVoyagerProblem,
     RandomUIFOProblem,
@@ -15,7 +15,7 @@ from dfbench.problems import (
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run AdamGD optimizer.")
+    parser = argparse.ArgumentParser(description="Run LBFGS optimizer.")
     parser.add_argument(
         "--max-time",
         type=int,
@@ -24,9 +24,6 @@ def main():
     )
     parser.add_argument(
         "--random-seed", type=int, default=42, help="Random seed for reproducibility"
-    )
-    parser.add_argument(
-        "--learning-rate", type=float, default=0.1, help="Learning rate for Adam"
     )
     parser.add_argument(
         "--patience", type=int, default=2000, help="Early stopping patience"
@@ -39,7 +36,7 @@ def main():
         type=str,
         default=None,
         choices=["arcsinh"],
-        help="Monotonic transform applied to loss for optimization (metrics stay in original space)",
+        help="Monotonic transform applied to loss for LBFGS optimization (metrics stay in original space)",
     )
     parser.add_argument(
         "--log-wandb", action="store_true", help="Log results to Weights & Biases"
@@ -47,12 +44,12 @@ def main():
     args = parser.parse_args()
 
     transform_str = f"_transform_{args.loss_transform}" if args.loss_transform else ""
-    exp_name = f"adam_{args.problem}_seed_{args.random_seed}_lr_{args.learning_rate}_patience_{args.patience}_max_time_{args.max_time}{transform_str}"
+    exp_name = f"lbfgs_{args.problem}_seed_{args.random_seed}_patience_{args.patience}_max_time_{args.max_time}{transform_str}"
 
     wandb_run = None
     if args.log_wandb:
         wandb_run = wandb.init(project="differometor", name=exp_name, config=vars(args))
-    results_root = Path(f"results/adam/{args.problem}")
+    results_root = Path(f"results/lbfgs/{args.problem}")
     results_root.mkdir(parents=True, exist_ok=True)
     save_path = results_root / exp_name
     if save_path.exists():
@@ -80,13 +77,12 @@ def main():
     else:
         raise ValueError(f"Unknown problem type: {args.problem}")
 
-    optimizer = AdamGD(problem, verbose=1)
+    optimizer = LBFGS(problem, verbose=1)
 
     # Run optimization
     obj = optimizer.optimize(
         random_seed=args.random_seed,
         max_time=args.max_time,
-        learning_rate=args.learning_rate,
         patience=args.patience,
         plot_loss=True,
         save_run_to_file=True,

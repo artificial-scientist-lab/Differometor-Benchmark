@@ -17,6 +17,7 @@ dependencies = [
     "jaxtyping>=0.3.3",
     "torchaudio>=2.9.1",
     "torchvision>=0.24.1",
+    "wandb>=0.24.1",
 ]
 
 [tool.hatch.build.targets.wheel]

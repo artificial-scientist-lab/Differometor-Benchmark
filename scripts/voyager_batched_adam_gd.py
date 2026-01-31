@@ -1,4 +1,4 @@
-"""Test script for AdamGD optimizer."""
+"""Script for Batched Adam optimizer (multiple parallel trajectories)."""
 
 import argparse
 import logging
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import wandb
 
-from dfbench.algorithms import AdamGD
+from dfbench.algorithms import BatchedAdamGD
 from dfbench.problems import (
     ConstrainedVoyagerProblem,
     RandomUIFOProblem,
@@ -15,7 +15,7 @@ from dfbench.problems import (
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run AdamGD optimizer.")
+    parser = argparse.ArgumentParser(description="Run Batched Adam optimizer.")
     parser.add_argument(
         "--max-time",
         type=int,
@@ -26,10 +26,16 @@ def main():
         "--random-seed", type=int, default=42, help="Random seed for reproducibility"
     )
     parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=64,
+        help="Number of parallel trajectories",
+    )
+    parser.add_argument(
         "--learning-rate", type=float, default=0.1, help="Learning rate for Adam"
     )
     parser.add_argument(
-        "--patience", type=int, default=2000, help="Early stopping patience"
+        "--patience", type=int, default=2000, help="Early stopping patience (in evals)"
     )
     parser.add_argument(
         "--problem", type=str, default="voyager", help="Type of problem to solve"
@@ -47,12 +53,16 @@ def main():
     args = parser.parse_args()
 
     transform_str = f"_transform_{args.loss_transform}" if args.loss_transform else ""
-    exp_name = f"adam_{args.problem}_seed_{args.random_seed}_lr_{args.learning_rate}_patience_{args.patience}_max_time_{args.max_time}{transform_str}"
+    exp_name = (
+        f"batched_adam_{args.problem}_seed_{args.random_seed}"
+        f"_bs_{args.batch_size}_lr_{args.learning_rate}"
+        f"_patience_{args.patience}_max_time_{args.max_time}{transform_str}"
+    )
 
     wandb_run = None
     if args.log_wandb:
         wandb_run = wandb.init(project="differometor", name=exp_name, config=vars(args))
-    results_root = Path(f"results/adam/{args.problem}")
+    results_root = Path(f"results/batched_adam/{args.problem}")
     results_root.mkdir(parents=True, exist_ok=True)
     save_path = results_root / exp_name
     if save_path.exists():
@@ -80,11 +90,12 @@ def main():
     else:
         raise ValueError(f"Unknown problem type: {args.problem}")
 
-    optimizer = AdamGD(problem, verbose=1)
+    optimizer = BatchedAdamGD(problem, verbose=1)
 
     # Run optimization
     obj = optimizer.optimize(
         random_seed=args.random_seed,
+        batch_size=args.batch_size,
         max_time=args.max_time,
         learning_rate=args.learning_rate,
         patience=args.patience,

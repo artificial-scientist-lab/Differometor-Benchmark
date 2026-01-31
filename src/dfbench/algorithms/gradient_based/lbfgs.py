@@ -20,17 +20,17 @@ from dfbench.core.protocols import (
 from dfbench.core.utils import inverse_sigmoid_bounding
 
 
-class AdamGD(OptimizationAlgorithm):
-    """Adam Gradient Descent optimization algorithm.
+class LBFGS(OptimizationAlgorithm):
+    """L-BFGS optimization algorithm.
 
-    Implements gradient-based optimization using the Adam optimizer from Optax.
-    Includes gradient clipping and early stopping based on patience.
+    Implements gradient-based optimization using the L-BFGS optimizer from Optax.
+    Includes early stopping based on patience.
 
     All history tracking, printing, and checkpointing is handled by the
     `Objective` wrapper. The algorithm loop is minimal.
 
     Attributes:
-        algorithm_str (str): Identifier string for this algorithm ("adam_gd").
+        algorithm_str (str): Identifier string for this algorithm ("lbfgs").
         algorithm_type (AlgorithmType): Type classification (GRADIENT_BASED).
         _problem (ContinuousProblem): The optimization problem instance.
 
@@ -41,7 +41,7 @@ class AdamGD(OptimizationAlgorithm):
 
     Example:
         >>> problem = VoyagerProblem()
-        >>> optimizer = AdamGD(problem)
+        >>> optimizer = LBFGS(problem)
         >>> objective = optimizer.optimize(
         ...     learning_rate=0.1,
         ...     max_iterations=10000,
@@ -49,7 +49,7 @@ class AdamGD(OptimizationAlgorithm):
         ... )
     """
 
-    algorithm_str: str = "adam_gd"
+    algorithm_str: str = "lbfgs"
     algorithm_type: AlgorithmType = AlgorithmType.GRADIENT_BASED
 
     def __init__(
@@ -58,8 +58,7 @@ class AdamGD(OptimizationAlgorithm):
         verbose: int = 0,
         save_params_history: bool = True,
     ) -> None:
-        """Initialize Adam Gradient Descent optimizer.
-
+        """Initialize L-BFGS optimizer.
         Args:
             problem (ContinuousProblem): The continuous optimization problem to solve.
             verbose (int): Verbosity level (0=silent, 1+=prints). Defaults to 0.
@@ -74,24 +73,21 @@ class AdamGD(OptimizationAlgorithm):
         random_seed: int,
         init_params: Float[Array, "{self._problem.n_params}"] | None = None,
         max_time: float | None = None,
-        learning_rate: float = 0.1,
         max_iterations: int | None = None,
-        patience: int = 30,
+        patience: int = 1000,
         print_every: int = 100,
         plot_loss: bool = False,
         save_run_to_file: bool = False,
         save_path: Path | None = None,
         wandb_run: Run | None = None,
         loss_transform: str | None = None,
-        **adam_kwargs,
+        **lbfgs_kwargs,
     ) -> Objective:
-        """Run Adam using `Objective` for logging.
-
+        """Run L-BFGS using `Objective` for logging.
         Args:
             random_seed: Seed for init param generation.
             init_params: Initial parameters. If None, random in [-10, 10].
             max_time: Time budget in seconds. None for unlimited.
-            learning_rate: Adam learning rate.
             max_iterations: Max iterations. None for time-limited only.
             patience: Stop after this many iterations without improvement.
             print_every: Print summary every N evaluations.
@@ -101,9 +97,10 @@ class AdamGD(OptimizationAlgorithm):
                 and best params. The caller is responsible for naming.
             wandb_run: Optional Weights & Biases run for logging.
             loss_transform: Monotonic transform applied to the objective for
-                optimization. "arcsinh" compresses the dynamic range. Metrics
-                are always reported in the original (untransformed) space.
-            **adam_kwargs: Passed to optax.adam().
+                optimization. "arcsinh" compresses the dynamic range, improving
+                LBFGS curvature estimates on high-range landscapes. Metrics are
+                always reported in the original (untransformed) space.
+            **lbfgs_kwargs: Passed to optax.lbfgs().
 
         Returns:
             The Objective instance with all logged data.
@@ -120,17 +117,6 @@ class AdamGD(OptimizationAlgorithm):
             wandb_run.define_metric("time_elapsed")
             wandb_run.define_metric("best_loss_vs_time", step_metric="time_elapsed")
 
-        obj = Objective(
-            self._problem,
-            unbounded=True,
-            max_time=max_time,
-            max_evals=max_iterations,
-            save_params_history=self._save_params_history,
-            print_every=print_every,
-            verbose=self._verbose,
-            algorithm_str=self.algorithm_str,
-        )
-
         constrained_params = (
             jr.uniform(
                 jr.PRNGKey(random_seed),
@@ -146,44 +132,62 @@ class AdamGD(OptimizationAlgorithm):
         )
         best_unconstrained_params = unconstrained_params
 
-        optimizer = optax.chain(
-            optax.clip_by_global_norm(1.0), optax.adam(learning_rate, **adam_kwargs)
+        obj = Objective(
+            self._problem,
+            unbounded=True,
+            max_time=max_time,
+            max_evals=max_iterations,
+            save_params_history=self._save_params_history,
+            print_every=print_every,
+            verbose=self._verbose,
+            algorithm_str=self.algorithm_str,
         )
+
+        optimizer = optax.lbfgs(**lbfgs_kwargs)
         optimizer_state = optimizer.init(unconstrained_params)
 
-        # Set up transformed objective when requested
-        if loss_transform == "arcsinh":
-            raw_value_fn = self._problem.sigmoid_objective_function
+        raw_value_fn = self._problem.sigmoid_objective_function
 
+        if loss_transform == "arcsinh":
             def opt_value_fn(params):
                 return jnp.arcsinh(raw_value_fn(params))
+        else:
+            opt_value_fn = raw_value_fn
 
-            opt_value_and_grad_fn = jax.jit(jax.value_and_grad(opt_value_fn))
+        opt_value_and_grad_fn = jax.value_and_grad(opt_value_fn)
+
+        @jax.jit
+        def _step(params, opt_state):
+            opt_loss, grads = opt_value_and_grad_fn(params)
+            updates, new_opt_state = optimizer.update(
+                grads,
+                opt_state,
+                params,
+                value=opt_loss,
+                grad=grads,
+                value_fn=opt_value_fn,
+            )
+            new_params = optax.apply_updates(params, updates)
+            # Recover original loss for logging (sinh inverts arcsinh exactly)
+            raw_loss = jnp.sinh(opt_loss) if loss_transform == "arcsinh" else opt_loss
+            return jnp.asarray(new_params), new_opt_state, raw_loss, grads
 
         if self._verbose >= 1:
-            print(f"Warming up JIT compilation...")
-        if loss_transform is not None:
-            opt_loss, _ = opt_value_and_grad_fn(unconstrained_params)
-            initial_loss = jnp.sinh(opt_loss)
-        else:
-            initial_loss, _ = obj.value_and_grad(unconstrained_params)  # Warm-up JIT
+            print("Warming up JIT compilation...")
+        _ = _step(unconstrained_params, optimizer_state)  # Warm-up JIT
 
         obj.start_logging()
 
         i = 1
-        best_loss = initial_loss
+        best_loss = jnp.inf
         while not obj.budget_exceeded:
             iter_start_time = time.time()
-
-            if loss_transform is not None:
-                # Transformed path: get transformed grads, log raw loss
-                opt_loss, grads = opt_value_and_grad_fn(unconstrained_params)
-                loss = jnp.sinh(opt_loss)
-                obj._log_time()
-                obj._log_evals(unconstrained_params, loss, grads)
-                obj._log_to_file()
-            else:
-                loss, grads = obj.value_and_grad(unconstrained_params)
+            unconstrained_params, optimizer_state, loss, grads = _step(
+                unconstrained_params, optimizer_state
+            )
+            obj._log_time()
+            obj._log_evals(unconstrained_params, loss, grads)
+            obj._log_to_file()
 
             if loss < best_loss:
                 best_loss = loss
@@ -196,10 +200,6 @@ class AdamGD(OptimizationAlgorithm):
                 )
                 break
 
-            updates, optimizer_state = optimizer.update(
-                grads, optimizer_state, unconstrained_params
-            )
-            unconstrained_params = optax.apply_updates(unconstrained_params, updates)
             iter_time = time.time() - iter_start_time
             logging.info(
                 f"Completed iteration: {i} in {iter_time:.4f} seconds, best loss: {best_loss:.6f}"
