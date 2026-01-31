@@ -46,8 +46,6 @@ __all__ = [
     "AlgorithmType",
     # Utilities
     "create_parser",
-    "t2j_numpy",
-    "j2t_numpy",
     "t2j",
     "j2t",
 ]

@@ -36,7 +36,7 @@ from dfbench.core.protocols import (
     OptimizationAlgorithm,
     AlgorithmType,
 )
-from dfbench.core.utils import t2j_numpy as t2j
+from dfbench.core.utils import t2j
 from dfbench.core.objective import Objective
 
 
