@@ -761,12 +761,14 @@ class Objective:
         self,
         algorithm_name: str = "unknown",
         custom_path: str | None = None,
+        hyper_param_str: str | None = None,
     ) -> Path:
         """Generate run data file path following naming conventions.
 
         Args:
             algorithm_name: Name of the optimization algorithm.
             custom_path: Custom path to override default. If None, uses standard structure.
+            hyper_param_str: Optional hyperparameter string for subdirectory organization.
 
         Returns:
             Path object for the run data file.
@@ -790,8 +792,10 @@ class Objective:
         safe_algo_name = algorithm_name.replace("/", "_").replace(" ", "_")
         filename = f"{problem_name}_{safe_algo_name}_{timestamp}.npz"
 
-        # Full path: ./data/{dir_name}/{filename}
+        # Full path: ./data/objective_run_data/{dir_name}/{hyper_param_str}/{filename}
         run_data_dir = Path("./data/objective_run_data") / dir_name
+        if hyper_param_str:
+            run_data_dir = run_data_dir / hyper_param_str.strip("_")
         run_data_dir.mkdir(parents=True, exist_ok=True)
 
         return run_data_dir / filename
@@ -1210,15 +1214,20 @@ class Objective:
         self,
         algorithm_name: str = "unknown",
         filepath: str | None = None,
+        hyper_param_str: str | None = None,
     ) -> Path:
         """Save current optimization state to compressed NPZ file.
 
         Uses numpy's compressed format. File naming follows the convention:
         problemname_algorithmname_timestamp.npz in a directory
         named with budget constraints (e.g., data/objective_run_data/time100s_evals1000/).
+        If hyper_param_str is provided, adds an additional subdirectory level for organization.
 
         Args:
+            algorithm_name: Name of the algorithm for file naming.
             filepath: Custom file path. If None, uses standard naming convention.
+            hyper_param_str: Optional hyperparameter string for subdirectory organization
+                (e.g., "lr0.1_patience500").
 
         Returns:
             Path to the saved run data file.
@@ -1226,8 +1235,10 @@ class Objective:
         Example:
             >>> obj.save_run_data(algorithm_name="adam_gd")
             Path('data/objective_run_data/time100s_evals1000/voyager_adam_gd_2026-01-26_15-30-45.npz')
+            >>> obj.save_run_data(algorithm_name="adam_gd", hyper_param_str="lr0.1")
+            Path('data/objective_run_data/time100s_evals1000/lr0.1/voyager_adam_gd_2026-01-26_15-30-45.npz')
         """
-        save_path = self._get_run_data_path(algorithm_name, filepath)
+        save_path = self._get_run_data_path(algorithm_name, filepath, hyper_param_str)
 
         # Convert histories to numpy arrays for efficient storage
         # Write to a temporary file in the same directory and atomically replace
