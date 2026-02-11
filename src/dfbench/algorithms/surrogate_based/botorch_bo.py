@@ -1,5 +1,7 @@
 """State-of-the-art Bayesian Optimization using BoTorch with batch acquisition."""
 
+import secrets
+
 import jax.numpy as jnp
 import numpy as np
 import torch
@@ -12,11 +14,7 @@ from botorch.utils.transforms import unnormalize, normalize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 from jaxtyping import Array, Float
 
-from dfbench.core.protocols import (
-    ContinuousProblem,
-    OptimizationAlgorithm,
-    AlgorithmType,
-)
+from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 from dfbench.core.utils import t2j
 from dfbench.core.objective import Objective
 
@@ -33,20 +31,19 @@ class BotorchBO(OptimizationAlgorithm):
     Attributes:
         algorithm_str (str): Identifier string for this algorithm ("botorch_bo").
         algorithm_type (AlgorithmType): Type classification (SURROGATE_BASED).
-        _problem (ContinuousProblem): The optimization problem instance.
-        max_iterations (int): Maximum number of BO iterations (excluding initial samples).
         device (torch.device): PyTorch device (cuda if available, else cpu).
         dtype (torch.dtype): PyTorch dtype for tensors (float64 for numerical stability).
 
     Note:
         This algorithm searches in the bounded parameter space using `problem.objective_function`.
-        When `use_problem_bounds=True` (default), it uses the problem's native bounds.
+        Bounds are always taken from `problem.bounds`.
 
     Example:
         >>> problem = VoyagerProblem()
-        >>> optimizer = BotorchBO(problem, max_iterations=100)
+        >>> optimizer = BotorchBO()
         >>> objective = optimizer.optimize(
-        ...     max_time=120,
+        ...     problem_objective=objective,
+        ...     max_iterations=100,
         ...     n_initial=10,
         ...     batch_size=5,
         ... )
@@ -55,37 +52,14 @@ class BotorchBO(OptimizationAlgorithm):
     algorithm_str: str = "botorch_bo"
     algorithm_type: AlgorithmType = AlgorithmType.SURROGATE_BASED
 
-    def __init__(
-        self,
-        problem: ContinuousProblem,
-        max_iterations: int = 100,
-        verbose: int = 0,
-        save_params_history: bool = True,
-        save_batched_losses: bool = True,
-        save_batched_params: bool = False,
-    ) -> None:
+    def __init__(self) -> None:
         """Initialize BoTorch Bayesian Optimization.
-
-        Args:
-            problem (ContinuousProblem): The continuous optimization problem to solve.
-                Must have `objective_function` and `bounds` attributes.
-            max_iterations (int): Maximum number of BO iterations (excluding initial
-                random samples). Defaults to 100.
-            verbose (int): Verbosity level (0=silent, 1+=prints). Defaults to 0.
-            save_params_history: Whether to save parameter history. Defaults to True.
-            save_batched_losses: Whether to save full batched losses (vs reduced).
-                Defaults to True for detailed analysis.
-            save_batched_params: Whether to save full batched params (memory heavy).
-                Defaults to False.
+        
+        No configuration parameters needed - all settings are provided
+        at optimization time via the optimize() method.
         """
-        self._problem = problem
-        self.max_iterations = max_iterations
-        self._verbose = verbose
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = torch.float64
-        self._save_params_history = save_params_history
-        self._save_batched_losses = save_batched_losses
-        self._save_batched_params = save_batched_params
 
     def _evaluate_y(
         self,
@@ -185,64 +159,49 @@ class BotorchBO(OptimizationAlgorithm):
 
     def optimize(
         self,
-        use_problem_bounds: bool = True,
-        init_params: Float[Array, "{self._problem.n_params}"] | None = None,
+        problem_objective: Objective,
+        max_iterations: int | None = None,
+        init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
-        max_time: float | None = None,
-        lb: Float[Array, "{self._problem.n_params}"] | None = None,
-        ub: Float[Array, "{self._problem.n_params}"] | None = None,
         n_initial: int = 10,
         batch_size: int = 1,
-        verbose: int | None = None,
-        print_every: int = 10,
-        plot_loss: bool = False,
-        save_run_to_file: bool = False,
         **bo_kwargs,
     ) -> Objective:
         """Run Bayesian Optimization with batch acquisition.
 
         Args:
-            use_problem_bounds: If True, use bounds from `problem.bounds`.
-                Defaults to True.
+            problem_objective: The Objective instance wrapping the problem.
+            max_iterations: Maximum number of BO iterations (excluding initial samples).
+                Required parameter.
             init_params: Initial parameters to include in the training set.
                 If None, only Sobol samples are used. Defaults to None.
             random_seed: Random seed for reproducibility. Defaults to None.
-            max_time: Time budget in seconds. None for unlimited.
-            lb: Lower bounds for each parameter. Ignored if use_problem_bounds=True.
-            ub: Upper bounds for each parameter. Ignored if use_problem_bounds=True.
             n_initial: Number of initial Sobol samples before fitting GP.
                 Defaults to 10.
             batch_size: Number of points to acquire per iteration. Defaults to 1.
-            verbose: Verbosity level (0=silent, 1+=prints via Objective).
-            print_every: Print summary every N evaluations.
-            plot_loss: If True, call obj.output_to_files for plotting.
-            save_run_to_file: If True, call obj.save_run_data for checkpointing.
             **bo_kwargs: Additional keyword arguments for acquisition optimization.
 
         Returns:
             The Objective instance with all logged data.
         """
-        if random_seed is not None:
-            torch.manual_seed(random_seed)
-            np.random.seed(random_seed)
+        obj = problem_objective
+        problem = obj.problem
 
-        if use_problem_bounds:
-            if not hasattr(self._problem, "bounds"):
-                raise ValueError(
-                    "use_problem_bounds=True requires the problem to have a 'bounds' attribute."
-                )
-            problem_bounds = self._problem.bounds
-            if isinstance(problem_bounds, np.ndarray):
-                lb_np, ub_np = problem_bounds[0], problem_bounds[1]
-            else:
-                lb_np, ub_np = np.array(problem_bounds[0]), np.array(problem_bounds[1])
-        else:
-            lb_np = (
-                np.full(self._problem.n_params, -10.0) if lb is None else np.array(lb)
-            )
-            ub_np = (
-                np.full(self._problem.n_params, 10.0) if ub is None else np.array(ub)
-            )
+        if max_iterations is None:
+            raise ValueError("max_iterations is required")
+
+        self.setup_objective(obj, unbounded=False, random_seed=random_seed)
+
+        if random_seed is None:
+            random_seed = secrets.randbits(32)
+        obj.set_seed(random_seed)
+        np.random.seed(random_seed)
+        torch.manual_seed(random_seed)
+        print(f"Random seed: {random_seed}")
+
+        # Get bounds from problem
+        lb_np = np.asarray(problem.bounds[0])
+        ub_np = np.asarray(problem.bounds[1])
 
         problem_bounds_torch = torch.tensor(
             np.array([lb_np, ub_np]), device=self.device, dtype=self.dtype
@@ -251,40 +210,23 @@ class BotorchBO(OptimizationAlgorithm):
         unit_bounds = torch.stack(
             [
                 torch.zeros(
-                    self._problem.n_params, dtype=self.dtype, device=self.device
+                    problem.n_params, dtype=self.dtype, device=self.device
                 ),
                 torch.ones(
-                    self._problem.n_params, dtype=self.dtype, device=self.device
+                    problem.n_params, dtype=self.dtype, device=self.device
                 ),
             ],
             dim=0,
         )
 
-        # Create Objective wrapper
-        obj = Objective(
-            self._problem,
-            unbounded=False,
-            max_time=max_time,
-            max_evals=(self.max_iterations + n_initial) * batch_size,
-            save_params_history=self._save_params_history,
-            save_batched_losses_history=self._save_batched_losses,
-            save_batched_history=self._save_batched_params,
-            print_every=print_every,
-            verbose=verbose if verbose is not None else self._verbose,
-            algorithm_str=self.algorithm_str,
-        )
-
-        # Warmup JIT (both single and batched evaluations)
-        if self._verbose >= 1:
-            print(f"Warming up JIT compilation...")
-        _ = obj.value(jnp.zeros(self._problem.n_params))
-        _ = obj.vmap_value(jnp.zeros((2, self._problem.n_params)))
+        # Warmup JIT (vmap_value is used for batch evaluation in _evaluate_y)
+        _ = obj.vmap_value(jnp.zeros((1, problem.n_params)))
 
         obj.start_logging()
 
         # Generate initial Sobol samples
         sobol = torch.quasirandom.SobolEngine(
-            dimension=self._problem.n_params, scramble=True, seed=random_seed
+            dimension=problem.n_params, scramble=True, seed=random_seed
         )
         train_X = sobol.draw(n=n_initial).to(dtype=self.dtype, device=self.device)
 
@@ -327,7 +269,7 @@ class BotorchBO(OptimizationAlgorithm):
 
         # Main optimization loop
         iteration = 0
-        while not obj.budget_exceeded and iteration < self.max_iterations:
+        while not obj.budget_exceeded and iteration < max_iterations:
             # Fit GP model
             model = self._fit_model(train_X, train_Y)
             model.eval()
@@ -356,11 +298,5 @@ class BotorchBO(OptimizationAlgorithm):
                 train_Y = torch.cat([train_Y, valid_Y], dim=0)
 
             iteration += 1
-
-        # Outputs
-        if plot_loss:
-            obj.output_to_files()
-        if save_run_to_file:
-            obj.save_run_data()
 
         return obj

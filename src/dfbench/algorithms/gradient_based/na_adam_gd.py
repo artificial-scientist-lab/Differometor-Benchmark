@@ -1,16 +1,13 @@
+import secrets
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-import time
 from typing import Literal
 from jaxtyping import Array, Float
 
-from dfbench.core.protocols import (
-    ContinuousProblem,
-    OptimizationAlgorithm,
-    AlgorithmType,
-)
+from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 from dfbench.core.objective import Objective
 
 
@@ -138,39 +135,22 @@ class NAAdamGD(OptimizationAlgorithm):
     Attributes:
         algorithm_str (str): Identifier string for this algorithm ("na_adam_gd").
         algorithm_type (AlgorithmType): Type classification (GRADIENT_BASED).
-        _problem (ContinuousProblem): The optimization problem instance.
     """
 
     algorithm_str: str = "na_adam_gd"
     algorithm_type: AlgorithmType = AlgorithmType.GRADIENT_BASED
 
-    def __init__(
-        self,
-        problem: ContinuousProblem,
-        verbose: int = 0,
-        save_params_history: bool = True,
-    ) -> None:
-        """Initialize the NA-Adam optimizer.
-
-        Args:
-            problem: A continuous optimization problem that provides:
-                - sigmoid_objective_function: loss function in unbounded space
-                - n_params: number of parameters to optimize
-                - bounds: parameter bounds for final sigmoid transformation
-            verbose (int): Verbosity level (0=silent, 1+=prints). Defaults to 0.
-            save_params_history: Whether to save parameter history. Defaults to True.
-        """
-        self._problem = problem
-        self._verbose = verbose
-        self._save_params_history = save_params_history
+    def __init__(self) -> None:
+        """Initialize the NA-Adam optimizer."""
+        pass
 
     def optimize(
         self,
-        init_params: Float[Array, "{self._problem.n_params}"] | None = None,
+        problem_objective: Objective,
+        max_iterations: int | None = None,
+        init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
-        max_time: float | None = None,
         learning_rate: float = 0.1,
-        max_iterations: int = 50000,
         patience: int = 1000,
         noise_std_start: float = 0.3,
         noise_std_end: float = 0.0,
@@ -180,23 +160,18 @@ class NAAdamGD(OptimizationAlgorithm):
         noise_anneal_iters: int = 5000,
         noise_cap_relative_to_update: float | None = 0.25,
         noise_cap_start_iter: int = 500,
-        verbose: int | None = None,
-        print_every: int = 100,
-        plot_loss: bool = False,
-        save_run_to_file: bool = False,
         **adam_kwargs,
     ) -> Objective:
         """Run the NA-Adam optimization loop using Objective for logging.
 
         Args:
-
-            init_params: Starting point in unbounded space. If None, samples
-                uniformly from [-10, 10] for each parameter. Defaults to None.
-            random_seed: Seed for NumPy (init params) and JAX (noise). If None,
-                uses current time. Defaults to None.
-            max_time: Time budget in seconds. None for unlimited.
+            problem_objective: The Objective instance wrapping the problem.
+            max_iterations: Maximum number of gradient steps. If None, runs until budget exceeded.
+            init_params: Starting point in unbounded space. If None, initialized
+                via obj.random_params_unbounded(). Defaults to None.
+            random_seed: Seed for NumPy and JAX. If None,
+                uses system entropy. Defaults to None.
             learning_rate: Adam learning rate. Defaults to 0.1.
-            max_iterations: Hard cap on iterations. Defaults to 50,000.
             patience: Early stopping trigger. Stops if best loss doesn't improve
                 for this many consecutive iterations. Defaults to 1,000.
             noise_std_start: Initial noise standard deviation. Defaults to 0.3.
@@ -215,52 +190,43 @@ class NAAdamGD(OptimizationAlgorithm):
                 of the Adam update norm. Defaults to 0.25.
             noise_cap_start_iter: Iteration at which relative noise capping
                 activates. Defaults to 500.
-            verbose: Verbosity level (0=silent, 1+=prints via Objective).
-            print_every: Print summary every N evaluations.
-            plot_loss: If True, call obj.output_to_files for plotting.
-            save_run_to_file: If True, call obj.save_run_data for checkpointing.
             **adam_kwargs: Passed to optax.adam().
 
         Returns:
             The Objective instance with all logged data.
         """
-        # Seed both NumPy (init params) and JAX (noise)
-        if random_seed is not None:
-            np.random.seed(random_seed)
-            rng_key = jax.random.PRNGKey(random_seed)
+        obj = problem_objective
+        problem = obj.problem
+
+        self.setup_objective(obj, unbounded=True, random_seed=random_seed)
+
+        if random_seed is None:
+            random_seed = secrets.randbits(32)
+        obj.set_seed(random_seed)
+        np.random.seed(random_seed)
+        rng_key = jax.random.PRNGKey(random_seed)
+        print(f"Random seed: {random_seed}")
+
+        if init_params is None:
+            params = obj.random_params_unbounded()
         else:
-            rng_key = jax.random.PRNGKey(int(time.time() * 1000) % (2**31))
-
-        params = (
-            jnp.array(np.random.uniform(-10, 10, self._problem.n_params))
-            if init_params is None
-            else init_params
-        )
-
-        obj = Objective(
-            self._problem,
-            unbounded=True,
-            max_time=max_time,
-            max_evals=max_iterations,
-            save_params_history=self._save_params_history,
-            print_every=print_every,
-            verbose=verbose if verbose is not None else self._verbose,
-            algorithm_str=self.algorithm_str,
-        )
+            params = init_params
 
         optimizer = optax.chain(
             optax.clip_by_global_norm(1.0), optax.adam(learning_rate, **adam_kwargs)
         )
         optimizer_state = optimizer.init(params)
 
-        if self._verbose >= 1:
-            print(f"Warming up JIT compilation...")
-        _ = obj.value_and_grad(params)  # Warm-up JIT
+        # Warm-up JIT
+        _ = obj.value_and_grad(params)
 
         obj.start_logging()
 
         iteration = 0
         while not obj.budget_exceeded:
+            if max_iterations is not None and iteration >= max_iterations:
+                break
+                
             progress = iteration / max(1, noise_anneal_iters)
             sigma_t = _anneal_sigma(
                 progress=progress,
@@ -300,11 +266,5 @@ class NAAdamGD(OptimizationAlgorithm):
                 params = params + noise_step
 
             iteration += 1
-
-        # Outputs
-        if plot_loss:
-            obj.output_to_files()
-        if save_run_to_file:
-            obj.save_run_data()
 
         return obj

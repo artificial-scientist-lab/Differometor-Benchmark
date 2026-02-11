@@ -23,11 +23,8 @@ Usage:
 import dfbench.core._init_env  # noqa: F401
 
 # Import protocols
-from dfbench.core.protocols import (
-    ContinuousProblem,
-    OptimizationAlgorithm,
-    AlgorithmType,
-)
+from dfbench.core.problem import ContinuousProblem
+from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 
 # Import core utilities
 from dfbench.core.config import create_parser

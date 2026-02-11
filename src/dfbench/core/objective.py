@@ -10,10 +10,167 @@ import matplotlib.pyplot as plt
 from jaxtyping import Float, Array
 
 from differometor.utils import sigmoid_bounding
-from dfbench.core.protocols import ContinuousProblem
+from dfbench.core.problem import ContinuousProblem
 
 
 class Objective:
+    """Instrumented wrapper around a ContinuousProblem for benchmarking optimizers.
+
+    Objective acts as the sole interface between an optimization algorithm
+    and the underlying problem.  It forwards every function evaluation through
+    JAX while transparently recording losses, gradients, parameters, and
+    wall-clock timestamps so that different algorithms can be compared on a
+    fair, reproducible basis.
+
+    Core responsibilities
+    ---------------------
+    1. **Function evaluation** – exposes ``value``, ``grad``, and
+       ``value_and_grad`` for single-point queries as well as ``vmap_value``,
+       ``vmap_grad``, and ``vmap_value_and_grad`` (aliased as ``batched_*``)
+       for batched evaluation.  The instance is also callable:
+       ``obj(params)`` is equivalent to ``obj.value(params)``.
+
+    2. **Budget enforcement** – honours ``max_evals`` and ``max_time``
+       constraints.  Once a budget is exhausted the ``budget_exceeded``
+       flag is raised and further evaluations are no longer logged.
+
+    3. **History tracking** – maintains aligned histories of losses, params,
+       gradients, evaluation types, and elapsed time.  Configurable flags
+       control what is stored (see constructor args).
+
+    4. **Bounded / unbounded mode** – when ``unbounded=True`` the objective
+       is evaluated through a sigmoid transform so that algorithms can
+       optimise in unconstrained $(-\\infty, +\\infty)$ space while the
+       underlying problem remains bounded.
+
+    5. **Reproducible random sampling** – ``set_seed`` initialises a JAX
+       PRNG key that is consumed by ``random_params_bounded`` and
+       ``random_params_unbounded``, guaranteeing identical initial
+       populations across runs.
+
+    6. **Checkpointing & I/O** – ``save_run_data`` / ``load_run_data``
+       persist the full optimisation state to compressed NPZ files;
+       ``output_to_files`` writes human-readable JSON + PNG summaries.
+
+    Typical usage
+    -------------
+    >>> from dfbench.core.problem import ContinuousProblem
+    >>> problem = ContinuousProblem(...)
+    >>> obj = Objective(problem, max_evals=5000, max_time=60.0)
+    >>> obj.set_seed(42)
+    >>> obj.start_logging()
+    >>> while not obj.budget_exceeded:
+    ...     params = obj.random_params_bounded()
+    ...     loss, grad = obj.value_and_grad(params)
+    ...     # ... update params with your algorithm ...
+    >>> print(obj.best_loss, obj.best_params_bounded)
+
+    Public methods
+    --------------
+    **Evaluation**
+
+    - ``value(params)``            – scalar loss.
+    - ``grad(params)``             – gradient vector.
+    - ``value_and_grad(params)``   – both in one forward+backward pass.
+    - ``vmap_value(params)``       – batched losses   (alias ``batched_value``).
+    - ``vmap_grad(params)``        – batched gradients (alias ``batched_grad``).
+    - ``vmap_value_and_grad(params)`` – batched both  (alias ``batched_value_and_grad``).
+
+    **Lifecycle**
+
+    - ``start_logging()``          – starts the wall-clock timer; call before optimising.
+    - ``reset()``                  – clears all histories / counters for a fresh run.
+
+    **Random sampling**
+
+    - ``set_seed(seed)``           – set JAX PRNG seed for reproducibility.
+    - ``random_params_bounded(n)`` – uniform samples inside parameter bounds.
+    - ``random_params_unbounded(n)`` – samples mapped to unbounded space via
+      inverse-sigmoid.
+
+    **I/O**
+
+    - ``save_run_data(...)``       – checkpoint to compressed NPZ.
+    - ``load_run_data(filepath)``  – restore from checkpoint.
+    - ``output_to_files(...)``     – write JSON params/losses + PNG plots.
+    - ``get_summary()``            – dict snapshot of current run statistics.
+
+    Key properties
+    --------------
+    +------------------------------------+---------------------------------------------------+
+    | Property                           | Description                                       |
+    +====================================+===================================================+
+    | ``bounds``                         | ``(2, n_params)`` lower/upper bounds              |
+    |                                    | (or unbounded).                                   |
+    +------------------------------------+---------------------------------------------------+
+    | ``n_params``                       | Number of optimisable parameters.                 |
+    +------------------------------------+---------------------------------------------------+
+    | ``problem``                        | The wrapped ``ContinuousProblem``.                |
+    +------------------------------------+---------------------------------------------------+
+    | ``eval_count``                     | Total evaluations so far.                         |
+    +------------------------------------+---------------------------------------------------+
+    | ``evals_left``                     | Remaining evaluation budget (``None`` if          |
+    |                                    | unlimited).                                       |
+    +------------------------------------+---------------------------------------------------+
+    | ``evals_exceeded``                 | Whether the evaluation budget is exhausted.       |
+    +------------------------------------+---------------------------------------------------+
+    | ``time_left``                      | Remaining seconds (``None`` if unlimited).        |
+    +------------------------------------+---------------------------------------------------+
+    | ``time_elapsed``                   | Seconds since ``start_logging()``.                |
+    +------------------------------------+---------------------------------------------------+
+    | ``time_exceeded``                  | Whether the time budget is exhausted.             |
+    +------------------------------------+---------------------------------------------------+
+    | ``budget_exceeded``                | ``True`` when *any* budget is exhausted.          |
+    +------------------------------------+---------------------------------------------------+
+    | ``best_loss``                      | Lowest loss observed (``None`` before first       |
+    |                                    | eval).                                            |
+    +------------------------------------+---------------------------------------------------+
+    | ``best_params``                    | Raw params at ``best_loss`` (may be               |
+    |                                    | unbounded).                                       |
+    +------------------------------------+---------------------------------------------------+
+    | ``best_params_bounded``            | Best params mapped back to bounded space.         |
+    +------------------------------------+---------------------------------------------------+
+    | ``current_loss``                   | Loss from the most recent evaluation.             |
+    +------------------------------------+---------------------------------------------------+
+    | ``current_params``                 | Params from the most recent evaluation.           |
+    +------------------------------------+---------------------------------------------------+
+    | ``loss_history``                   | List of all recorded losses (copy).               |
+    +------------------------------------+---------------------------------------------------+
+    | ``grad_history``                   | List of all recorded gradients (copy).            |
+    +------------------------------------+---------------------------------------------------+
+    | ``params_history``                 | List of all recorded params (copy, raw).          |
+    +------------------------------------+---------------------------------------------------+
+    | ``params_history_bounded``         | Params history mapped to bounded space.           |
+    +------------------------------------+---------------------------------------------------+
+    | ``time_steps``                     | Elapsed-time stamps aligned with histories.      |
+    +------------------------------------+---------------------------------------------------+
+    | ``improvement_count``              | Times ``best_loss`` was improved.                 |
+    +------------------------------------+---------------------------------------------------+
+    | ``evals_since_improvement``        | Evaluations since last improvement.               |
+    +------------------------------------+---------------------------------------------------+
+    | ``evals_progress_fraction``        | Fraction of eval budget consumed (0–1).           |
+    +------------------------------------+---------------------------------------------------+
+    | ``time_progress_fraction``         | Fraction of time budget consumed (0–1).           |
+    +------------------------------------+---------------------------------------------------+
+    | ``loss_history_reduced``           | Losses with batches reduced to min.               |
+    +------------------------------------+---------------------------------------------------+
+    | ``params_history_reduced``         | Params with batches reduced to single entry.      |
+    +------------------------------------+---------------------------------------------------+
+    | ``params_history_reduced_bounded`` | Reduced params in bounded space.                  |
+    +------------------------------------+---------------------------------------------------+
+    | ``grad_history_reduced``           | Grads with batches reduced to single entry.       |
+    +------------------------------------+---------------------------------------------------+
+
+    Notes
+    -----
+    - All ``*_reduced`` properties collapse batched entries to a single
+      representative value (argmin of loss, then argmin of gradient norm,
+      then first element).
+    - ``jax.grad``, ``jax.value_and_grad``, and ``jax.vmap`` variants 
+      are jit-compiled. So warmup is recommended before timing-sensitive runs.
+    - Checkpoints are saved atomically (write to ``.tmp.npz``, then
+      ``os.replace``) to prevent corruption from interrupted jobs.
+    """
     def __init__(
         self,
         problem: ContinuousProblem,
@@ -27,8 +184,8 @@ class Objective:
         save_batched_grads_history: bool = False,
         save_batched_history: bool = False,
         save_eval_type_history: bool = False,
-        print_every: int = 100,
         verbose: int = 0,
+        print_every: int = 100,
         algorithm_str: str | None = None,
         save_to_file_every: int | None = None,
     ):
@@ -46,13 +203,15 @@ class Objective:
             save_batched_grads_history: Whether to save full batched gradients.
             save_batched_history: Whether to save full batched params, grads and losses.
             save_eval_type_history: Whether to save evaluation types in a separate history.
-            print_every: Print progress every N evaluations. Defaults to 100.
             verbose: Verbosity level (0=silent, 1=warnings, 2=info). Defaults to 0.
+            print_every: Print progress every N evaluations (if verbose >= 1). Defaults to 100.
+            algorithm_str: String identifier for the optimization algorithm.
             save_to_file_every: Save checkpoint every N evaluations. None to disable.
         """
 
+        self.unbounded = unbounded
+        self.algorithm_str = algorithm_str
         self._problem = problem
-        self._unbounded = unbounded
         self._max_time = max_time
         self._max_evals = max_evals
         self._print_every = print_every
@@ -68,10 +227,9 @@ class Objective:
             save_batched_grads_history or save_batched_history
         )
         self._save_eval_type_history = save_eval_type_history
-        self._algorithm_str = algorithm_str
         self._save_to_file_every = save_to_file_every
 
-        if not self._unbounded:
+        if not self.unbounded:
             self._bounds = problem.bounds
             self._func = problem.objective_function
             self._grad_func = jax.grad(problem.objective_function)
@@ -117,6 +275,10 @@ class Objective:
         self._params_history = []
         self._eval_type_history = []
         self._time_steps = []
+        
+        # Random seed for reproducibility (set by algorithm via set_seed method)
+        self._seed = None
+        self._rng_key = None
 
     def __call__(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate the objective function at given parameters.
@@ -128,6 +290,8 @@ class Objective:
             Loss value at the given parameters.
         """
         return self.value(params)
+    
+    # --------- Problem Information Properties ---------
 
     @property
     def bounds(self) -> Float[Array, "2 n_params"] | None:
@@ -147,7 +311,7 @@ class Objective:
         """The underlying optimization problem."""
         return self._problem
 
-    # ---------
+    # --------- Optimization Tracking Functions/Properties ---------
 
     @property
     def eval_count(self) -> int:
@@ -219,7 +383,7 @@ class Objective:
         """Best parameters transformed to bounded space. Use for final output."""
         if self._best_params is None:
             return None
-        if self._unbounded:
+        if self.unbounded:
             return sigmoid_bounding(self._best_params, self._problem.bounds)
         return self._best_params
 
@@ -267,7 +431,7 @@ class Objective:
         self,
     ) -> list[Float[Array, "n_params"] | Float[Array, "batch n_params"] | None]:
         """Params history transformed to bounded space. Use for final output/plotting."""
-        if not self._unbounded:
+        if not self.unbounded:
             return self._params_history.copy()
         result = []
         for p in self._params_history:
@@ -370,7 +534,7 @@ class Objective:
         Use this for final output, plotting, or benchmark analysis.
         """
         reduced = self.params_history_reduced
-        if not self._unbounded:
+        if not self.unbounded:
             return reduced
         result = []
         for p in reduced:
@@ -413,6 +577,183 @@ class Objective:
                 idx = int(jnp.nanargmin(grad_norms))
                 result.append(grad_arr[idx])
         return result
+
+    # --------- Random seed management ---------
+
+    def set_seed(self, seed: int) -> None:
+        """Set random seed for reproducible parameter sampling.
+
+        This method should be called by optimization algorithms to ensure
+        reproducibility across different runs. The seed is used to initialize
+        a JAX random key that is automatically consumed and updated each time
+        random_params_bounded() or random_params_unbounded() is called without
+        an explicit rng_key argument.
+
+        Args:
+            seed: Integer seed for random number generation.
+
+        Example:
+            >>> obj = Objective(problem)
+            >>> obj.set_seed(42)  # Called by algorithm
+            >>> params1 = obj.random_params_bounded(n_samples=100)
+            >>> params2 = obj.random_params_bounded(n_samples=100)  # Different samples
+            >>> obj.set_seed(42)  # Reset
+            >>> params3 = obj.random_params_bounded(n_samples=100)  # Same as params1
+        """
+        self._seed = seed
+        self._rng_key = jax.random.PRNGKey(seed)
+
+    # --------- Random parameter sampling ---------
+
+    def random_params_bounded(
+        self,
+        n_samples: int = 1,
+        rng_key=None,
+    ) -> Float[Array, "n_samples n_params"] | Float[Array, "n_params"]:
+        """Generate random parameters in bounded space.
+
+        Samples uniformly within the parameter bounds.
+
+        Reproducibility:
+            - If rng_key is provided: Uses that specific key (manual control)
+            - If rng_key is None and set_seed() was called: Uses internal key
+              (automatically split/updated for each call)
+            - Otherwise: Falls back to numpy random (non-reproducible)
+
+        Args:
+            n_samples: Number of parameter vectors to generate. Defaults to 1.
+            rng_key: JAX random key for manual control. If None, uses internal
+                key set by set_seed(), or falls back to numpy random.
+
+        Returns:
+            Array of shape (n_samples, n_params) if n_samples > 1, 
+            or (n_params,) if n_samples == 1.
+
+        Example:
+            >>> obj = Objective(problem)
+            >>> obj.set_seed(42)  # Set by algorithm
+            >>> samples = obj.random_params_bounded(n_samples=1000)
+            >>> # Or with manual key:
+            >>> key = jax.random.PRNGKey(123)
+            >>> samples = obj.random_params_bounded(n_samples=1000, rng_key=key)
+        """
+        if self._bounds is None:
+            raise ValueError("Cannot sample bounded params: bounds are None (unbounded objective).")
+        
+        lower, upper = self._bounds[0], self._bounds[1]
+        
+        # Determine which random key to use
+        if rng_key is not None:
+            # Use provided key (manual override)
+            key_to_use = rng_key
+        elif self._rng_key is not None:
+            # Use internal key and split it for next call
+            key_to_use, self._rng_key = jax.random.split(self._rng_key)
+        else:
+            key_to_use = None
+        
+        if key_to_use is not None:
+            # Use JAX random
+            samples = jax.random.uniform(
+                key_to_use,
+                shape=(n_samples, self.n_params),
+                minval=lower,
+                maxval=upper,
+            )
+        else:
+            # Fallback to numpy random (non-reproducible)
+            samples = np.random.uniform(
+                low=lower,
+                high=upper,
+                size=(n_samples, self.n_params),
+            )
+            samples = jnp.asarray(samples)
+        
+        # Return 1D if single sample
+        if n_samples == 1:
+            return samples[0]
+        return samples
+
+    def random_params_unbounded(
+        self,
+        n_samples: int = 1,
+        rng_key=None,
+    ) -> Float[Array, "n_samples n_params"] | Float[Array, "n_params"]:
+        """Generate random parameters in unbounded space.
+
+        Samples uniformly in bounded space, then applies inverse sigmoid 
+        transform to map to unbounded space (-∞, +∞).
+
+        The inverse sigmoid transform ensures that when these unbounded params
+        are passed through sigmoid_bounding, they recover the original bounded
+        samples.
+
+        Reproducibility:
+            - If rng_key is provided: Uses that specific key (manual control)
+            - If rng_key is None and set_seed() was called: Uses internal key
+            - Otherwise: Falls back to numpy random (non-reproducible)
+
+        Args:
+            n_samples: Number of parameter vectors to generate. Defaults to 1.
+            rng_key: JAX random key for manual control. If None, uses internal
+                key set by set_seed(), or falls back to numpy random.
+
+        Returns:
+            Array of shape (n_samples, n_params) if n_samples > 1,
+            or (n_params,) if n_samples == 1.
+
+        Example:
+            >>> obj = Objective(problem, unbounded=True)
+            >>> obj.set_seed(42)  # Set by algorithm for reproducibility
+            >>> samples = obj.random_params_unbounded(n_samples=1000)
+        """
+        # Generate bounded samples (will use internal key if set)
+        bounded_samples = self.random_params_bounded(n_samples, rng_key=rng_key)
+        
+        # Apply inverse sigmoid bounding
+        unbounded = self._inverse_sigmoid_bounding(bounded_samples, self._problem.bounds)
+        
+        return unbounded
+
+    @staticmethod
+    def _inverse_sigmoid_bounding(
+        bounded_params: Float[Array, "... n_params"],
+        bounds: Float[Array, "2 n_params"],
+    ) -> Float[Array, "... n_params"]:
+        """Inverse of sigmoid_bounding: maps bounded params to unbounded space.
+
+        Given bounded parameters in [lower, upper], computes unbounded parameters
+        in (-∞, +∞) such that sigmoid_bounding(unbounded, bounds) = bounded.
+
+        The sigmoid bounding formula is:
+            bounded = lower + (upper - lower) * sigmoid(unbounded)
+        where sigmoid(x) = 1 / (1 + exp(-x))
+
+        The inverse is:
+            unbounded = logit((bounded - lower) / (upper - lower))
+        where logit(p) = log(p / (1 - p))
+
+        Args:
+            bounded_params: Parameters in bounded space.
+            bounds: Array of shape (2, n_params) with [lower_bounds, upper_bounds].
+
+        Returns:
+            Parameters in unbounded space.
+        """
+        lower, upper = bounds[0], bounds[1]
+        
+        # Normalize to [0, 1]
+        normalized = (bounded_params - lower) / (upper - lower)
+        
+        # Clip to prevent numerical issues with logit at boundaries
+        # logit(0) = -inf, logit(1) = +inf
+        eps = 1e-7
+        normalized = jnp.clip(normalized, eps, 1.0 - eps)
+        
+        # Apply logit transform: logit(p) = log(p / (1 - p))
+        unbounded = jnp.log(normalized / (1.0 - normalized))
+        
+        return unbounded
 
     # ---------
 
@@ -466,7 +807,7 @@ class Objective:
             f"time={summary['time_elapsed']:.2f}s)"
         )
 
-    # ---------
+    # --------- internal logging and tracking methods ---------
 
     @staticmethod
     def _ndim(x) -> int:
@@ -687,7 +1028,7 @@ class Objective:
         # TODO consider checking if multithreaded
         t0 = time.time() if self._start_time is not None else None
         try:
-            self.save_run_data(algorithm_name=self._algorithm_str or "unknown")
+            self.save_run_data(algorithm_name=self.algorithm_str or "unknown")
         except Exception:
             # propagate after optionally logging, dont adjust start_time on failure
             raise
@@ -697,6 +1038,8 @@ class Objective:
                 # advance start_time so elapsed = (now - start_time) excludes dt
                 self._start_time += dt
         return
+    
+    # --------- public API for optimization ---------
 
     def start_logging(self) -> None:
         """Start the optimization timer. Call this before beginning optimization."""
@@ -836,7 +1179,7 @@ class Objective:
     #         return getattr(jax, name)
     #     raise AttributeError(f"'Objective' object has no attribute '{name}'")
 
-    # ---------
+    # --------- public API for I/O ---------
 
     def save_run_data(
         self,
@@ -908,7 +1251,7 @@ class Objective:
             FileNotFoundError: If run data file doesn't exist.
 
         Example:
-            >>> obj.load_run_data("data/objective_run_data/time100s_evals1000/voyager_adam_gd_2026-01-26.npz")
+            >>> obj.load_run_data("data/objective_run_data/time100s_evals1000/voyager_adam_gd_2026-01-26_15-30-45.npz")
             >>> print(f"Resuming from {obj.eval_count} evaluations")
         """
         filepath = Path(filepath)
@@ -1018,7 +1361,7 @@ class Objective:
         Files are saved to: ./data/problem_output/{problem_name}/{algorithm_str}/{hyper_param_str}/
 
         Args:
-            hyper_param_str: Hyperparameter string for file naming (e.g., "lr0.1_patience500").
+            hyper_param_str: Hyperparameter string for directory naming (e.g., "lr0.1_patience500").
             hyper_param_str_in_filename: Whether to include hyperparams in filename.
 
         Returns:
@@ -1031,7 +1374,7 @@ class Objective:
         problem_name = (
             self._problem.name if hasattr(self._problem, "name") else "problem"
         )
-        algorithm_str = self._algorithm_str or "unknown"
+        algorithm_str = self.algorithm_str or "unknown"
 
         # Print best params and loss
         print(f"Parameters of the best solution: {best_params}")

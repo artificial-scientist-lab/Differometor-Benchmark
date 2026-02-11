@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from jaxtyping import Array, Float
 
-from dfbench.core.protocols import ContinuousProblem
+from dfbench.core.problem import ContinuousProblem
 
 
 class OpticalSetupProblem(ContinuousProblem):

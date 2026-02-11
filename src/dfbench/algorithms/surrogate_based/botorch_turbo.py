@@ -10,7 +10,9 @@ Reference:
 """
 
 import math
+import secrets
 import warnings
+
 import jax.numpy as jnp
 import numpy as np
 import torch
@@ -31,11 +33,7 @@ import gpytorch
 from jaxtyping import Array, Float
 from typing import Literal
 
-from dfbench.core.protocols import (
-    ContinuousProblem,
-    OptimizationAlgorithm,
-    AlgorithmType,
-)
+from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 from dfbench.core.utils import t2j
 from dfbench.core.objective import Objective
 
@@ -101,55 +99,23 @@ class BotorchTuRBO(OptimizationAlgorithm):
     Attributes:
         algorithm_str (str): Identifier string for this algorithm ("botorch_turbo").
         algorithm_type (AlgorithmType): Type classification (SURROGATE_BASED).
-        _problem (ContinuousProblem): The optimization problem instance.
-        max_iterations (int): Maximum number of BO iterations.
         device (torch.device): PyTorch device (cuda if available, else cpu).
         dtype (torch.dtype): PyTorch dtype for tensors.
-
-    Example:
-        >>> problem = VoyagerProblem()
-        >>> optimizer = BotorchTuRBO(problem, max_iterations=100)
-        >>> objective = optimizer.optimize(
-        ...     max_time=120,
-        ...     n_initial=10,
-        ...     batch_size=4,
-        ...     acqf="ts",
-        ... )
+        max_cholesky_size (float): Maximum Cholesky matrix size for GP fitting.
     """
 
     algorithm_str: str = "botorch_turbo"
     algorithm_type: AlgorithmType = AlgorithmType.SURROGATE_BASED
 
-    def __init__(
-        self,
-        problem: ContinuousProblem,
-        max_iterations: int = 100,
-        verbose: int = 0,
-        save_params_history: bool = True,
-        save_batched_losses: bool = True,
-        save_batched_params: bool = False,
-    ) -> None:
+    def __init__(self) -> None:
         """Initialize BoTorch TuRBO Optimization.
-
-        Args:
-            problem (ContinuousProblem): The continuous optimization problem to solve.
-            max_iterations (int): Maximum number of BO iterations. Defaults to 100.
-            verbose (int): Verbosity level (0=silent, 1+=prints). Defaults to 0.
-            save_params_history: Whether to save parameter history. Defaults to True.
-            save_batched_losses: Whether to save full batched losses (vs reduced).
-                Defaults to True for detailed analysis.
-            save_batched_params: Whether to save full batched params (memory heavy).
-                Defaults to False.
+        
+        No configuration parameters needed - all settings are provided
+        at optimization time via the optimize() method.
         """
-        self._problem = problem
-        self.max_iterations = max_iterations
-        self._verbose = verbose
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = torch.float64
         self.max_cholesky_size = float("inf")
-        self._save_params_history = save_params_history
-        self._save_batched_losses = save_batched_losses
-        self._save_batched_params = save_batched_params
 
     def _evaluate_y(
         self,
@@ -336,66 +302,56 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
     def optimize(
         self,
-        use_problem_bounds: bool = True,
-        init_params: Float[Array, "{self._problem.n_params}"] | None = None,
+        problem_objective: Objective,
+        max_iterations: int | None = None,
+        init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
-        max_time: float | None = None,
-        lb: Float[Array, "{self._problem.n_params}"] | None = None,
-        ub: Float[Array, "{self._problem.n_params}"] | None = None,
         n_initial: int | None = None,
         batch_size: int = 4,
         acqf: Literal["ts", "ei"] = "ts",
         n_restarts: int = 1,
-        verbose: int | None = None,
-        print_every: int = 10,
-        plot_loss: bool = False,
-        save_run_to_file: bool = False,
         **turbo_kwargs,
     ) -> Objective:
         """Run TuRBO optimization with adaptive trust regions.
 
         Args:
-            use_problem_bounds: If True, use bounds from `problem.bounds`.
+            problem_objective: The Objective instance wrapping the problem.
+            max_iterations: Maximum number of BO iterations per TuRBO instance.
+                Required parameter.
             init_params: Initial parameters to include in the training set.
             random_seed: Random seed for reproducibility.
-            max_time: Time budget in seconds. None for unlimited.
-            lb: Lower bounds for each parameter. Ignored if use_problem_bounds=True.
-            ub: Upper bounds for each parameter. Ignored if use_problem_bounds=True.
             n_initial: Number of initial Sobol samples. Defaults to 2 * dim.
             batch_size: Number of points to acquire per iteration. Defaults to 4.
             acqf: Acquisition function type ("ts" or "ei"). Defaults to "ts".
             n_restarts: Number of TuRBO restarts. Defaults to 1.
-            verbose: Verbosity level (0=silent, 1+=prints via Objective).
-            print_every: Print summary every N evaluations.
-            plot_loss: If True, call obj.output_to_files for plotting.
-            save_run_to_file: If True, call obj.save_run_data for checkpointing.
             **turbo_kwargs: Additional keyword arguments.
 
         Returns:
             The Objective instance with all logged data.
         """
-        if random_seed is not None:
-            torch.manual_seed(random_seed)
-            np.random.seed(random_seed)
+        obj = problem_objective
+        problem = obj.problem
 
-        dim = self._problem.n_params
+        if max_iterations is None:
+            raise ValueError("max_iterations is required")
+
+        self.setup_objective(obj, unbounded=False, random_seed=random_seed)
+
+        if random_seed is None:
+            random_seed = secrets.randbits(32)
+        obj.set_seed(random_seed)
+        np.random.seed(random_seed)
+        torch.manual_seed(random_seed)
+        print(f"Random seed: {random_seed}")
+
+        dim = problem.n_params
 
         if n_initial is None:
             n_initial = 2 * dim
 
-        if use_problem_bounds:
-            if not hasattr(self._problem, "bounds"):
-                raise ValueError(
-                    "use_problem_bounds=True requires the problem to have a 'bounds' attribute."
-                )
-            problem_bounds = self._problem.bounds
-            if isinstance(problem_bounds, np.ndarray):
-                lb_np, ub_np = problem_bounds[0], problem_bounds[1]
-            else:
-                lb_np, ub_np = np.array(problem_bounds[0]), np.array(problem_bounds[1])
-        else:
-            lb_np = np.full(dim, -10.0) if lb is None else np.array(lb)
-            ub_np = np.full(dim, 10.0) if ub is None else np.array(ub)
+        # Get bounds from problem
+        lb_np = np.asarray(problem.bounds[0])
+        ub_np = np.asarray(problem.bounds[1])
 
         problem_bounds_torch = torch.tensor(
             np.array([lb_np, ub_np]), device=self.device, dtype=self.dtype
@@ -410,25 +366,8 @@ class BotorchTuRBO(OptimizationAlgorithm):
         length_max = turbo_kwargs.get("length_max", 1.6)
         success_tolerance = turbo_kwargs.get("success_tolerance", 10)
 
-        # Create Objective wrapper
-        obj = Objective(
-            self._problem,
-            unbounded=False,
-            max_time=max_time,
-            max_evals=(self.max_iterations + n_initial) * batch_size * n_restarts,
-            save_params_history=self._save_params_history,
-            save_batched_losses_history=self._save_batched_losses,
-            save_batched_history=self._save_batched_params,
-            print_every=print_every,
-            verbose=verbose if verbose is not None else self._verbose,
-            algorithm_str=self.algorithm_str,
-        )
-
-        # Warmup JIT (both single and batched evaluations)
-        if self._verbose >= 1:
-            print(f"Warming up JIT compilation...")
-        _ = obj.value(jnp.zeros(dim))
-        _ = obj.vmap_value(jnp.zeros((2, dim)))
+        # Warmup JIT (vmap_value is used for batch evaluation in _evaluate_y)
+        _ = obj.vmap_value(jnp.zeros((1, problem.n_params)))
 
         obj.start_logging()
 
@@ -466,7 +405,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
             )
 
             iteration = 0
-            while not obj.budget_exceeded and not state.restart_triggered and iteration < self.max_iterations:
+            while not obj.budget_exceeded and not state.restart_triggered and iteration < max_iterations:
                 # Normalize Y for GP fitting
                 Y_mean = train_Y.mean()
                 Y_std = train_Y.std()
@@ -537,11 +476,5 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
             if not should_restart:
                 break
-
-        # Outputs
-        if plot_loss:
-            obj.output_to_files()
-        if save_run_to_file:
-            obj.save_run_data()
 
         return obj

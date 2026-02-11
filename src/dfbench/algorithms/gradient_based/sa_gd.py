@@ -2,19 +2,16 @@
 Simulated annealing gradient descent based on https://arxiv.org/abs/2107.07558
 """
 
+import math
+import secrets
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-import time
-import math
 from jaxtyping import Array, Float
 
-from dfbench.core.protocols import (
-    ContinuousProblem,
-    OptimizationAlgorithm,
-    AlgorithmType,
-)
+from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 from dfbench.core.objective import Objective
 
 
@@ -44,28 +41,14 @@ class SAGD(OptimizationAlgorithm):
     Attributes:
         algorithm_str (str): Identifier string for this algorithm ("sa_gd").
         algorithm_type (AlgorithmType): Type classification (GRADIENT_BASED).
-        _problem (ContinuousProblem): The optimization problem instance.
     """
 
     algorithm_str: str = "sa_gd"
     algorithm_type: AlgorithmType = AlgorithmType.GRADIENT_BASED
 
-    def __init__(
-        self,
-        problem: ContinuousProblem,
-        verbose: int = 0,
-        save_params_history: bool = True,
-    ) -> None:
-        """Initialize SA-GD optimizer.
-
-        Args:
-            problem (ContinuousProblem): The continuous optimization problem to solve.
-            verbose (int): Verbosity level (0=silent, 1+=prints). Defaults to 0.
-            save_params_history: Whether to save parameter history. Defaults to True.
-        """
-        self._problem = problem
-        self._verbose = verbose
-        self._save_params_history = save_params_history
+    def __init__(self) -> None:
+        """Initialize SA-GD optimizer."""
+        pass
 
     def _compute_transition_probability(
         self,
@@ -143,21 +126,17 @@ class SAGD(OptimizationAlgorithm):
 
     def optimize(
         self,
-        init_params: Float[Array, "{self._problem.n_params}"] | None = None,
+        problem_objective: Objective,
+        max_iterations: int | None = None,
+        init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
-        max_time: float | None = None,
         learning_rate: float = 0.1,
-        max_iterations: int = 50000,
         patience: int = 1000,
         T0: float = 15.0,
         sigma: float = 1.0,
         max_ascent_prob: float = 0.33,
         use_double_annealing: bool = False,
         lr_decay: float = 1.0,
-        verbose: int | None = None,
-        print_every: int = 100,
-        plot_loss: bool = False,
-        save_run_to_file: bool = False,
         **adam_kwargs,
     ) -> Objective:
         """Run SA-GD (Simulated Annealing Gradient Descent) optimization.
@@ -166,13 +145,13 @@ class SAGD(OptimizationAlgorithm):
         It probabilistically performs gradient ascent to escape local minima.
 
         Args:
-            init_params: Initial parameters. If None, randomly initialized in
-                range [-10, 10]. Defaults to None.
-            random_seed: Random seed for reproducibility. Controls initial
-                parameter generation and stochastic ascent decisions. Defaults to None.
-            max_time: Time budget in seconds. None for unlimited.
+            problem_objective: The Objective instance wrapping the problem.
+            max_iterations: Maximum number of gradient steps. If None, runs until budget exceeded.
+            init_params: Initial parameters. If None, initialized via
+                obj.random_params_unbounded(). Defaults to None.
+            random_seed: Random seed for reproducibility. If None,
+                uses system entropy. Defaults to None.
             learning_rate: Learning rate for Adam optimizer. Defaults to 0.1.
-            max_iterations: Maximum number of optimization iterations. Defaults to 50,000.
             patience: Stop if no improvement for this many iterations. Defaults to 1,000.
             T0: Initial temperature for simulated annealing. Higher values
                 lead to higher probability of gradient ascent. Defaults to 15.0.
@@ -182,38 +161,27 @@ class SAGD(OptimizationAlgorithm):
             use_double_annealing: Whether to use the double simulated annealing
                 formula designed for exponentially decaying learning rates. Defaults to False.
             lr_decay: Learning rate decay factor per iteration. Defaults to 1.0.
-            verbose: Verbosity level (0=silent, 1+=prints via Objective).
-            print_every: Print summary every N evaluations.
-            plot_loss: If True, call obj.output_to_files for plotting.
-            save_run_to_file: If True, call obj.save_run_data for checkpointing.
             **adam_kwargs: Additional keyword arguments passed to optax.adam().
 
         Returns:
             The Objective instance with all logged data.
         """
-        # Set random seed if provided
-        if random_seed is not None:
-            np.random.seed(random_seed)
-            rng_key = jax.random.PRNGKey(random_seed)
+        obj = problem_objective
+        problem = obj.problem
+
+        self.setup_objective(obj, unbounded=True, random_seed=random_seed)
+
+        if random_seed is None:
+            random_seed = secrets.randbits(32)
+        obj.set_seed(random_seed)
+        np.random.seed(random_seed)
+        rng_key = jax.random.PRNGKey(random_seed)
+        print(f"Random seed: {random_seed}")
+
+        if init_params is None:
+            params = obj.random_params_unbounded()
         else:
-            rng_key = jax.random.PRNGKey(int(time.time() * 1000) % (2**31))
-
-        params = (
-            jnp.array(np.random.uniform(-10, 10, self._problem.n_params))
-            if init_params is None
-            else init_params
-        )
-
-        obj = Objective(
-            self._problem,
-            unbounded=True,
-            max_time=max_time,
-            max_evals=max_iterations,
-            save_params_history=self._save_params_history,
-            print_every=print_every,
-            verbose=verbose if verbose is not None else self._verbose,
-            algorithm_str=self.algorithm_str,
-        )
+            params = init_params
 
         # Create optimizer with gradient clipping
         optimizer = optax.chain(
@@ -221,9 +189,8 @@ class SAGD(OptimizationAlgorithm):
         )
         optimizer_state = optimizer.init(params)
 
-        if self._verbose >= 1:
-            print(f"Warming up JIT compilation...")
-        _ = obj.value_and_grad(params)  # Warm-up JIT
+        # Warm-up JIT
+        _ = obj.value_and_grad(params)
 
         obj.start_logging()
 
@@ -233,6 +200,9 @@ class SAGD(OptimizationAlgorithm):
         iteration = 0
 
         while not obj.budget_exceeded:
+            if max_iterations is not None and iteration >= max_iterations:
+                break
+                
             loss, grads = obj.value_and_grad(params)
 
             # Early stopping: patience check
@@ -281,23 +251,5 @@ class SAGD(OptimizationAlgorithm):
             params = optax.apply_updates(params, updates)
             prev_loss = float(loss)
             iteration += 1
-
-        # Final statistics
-        total_steps = ascent_count + descent_count
-        if total_steps > 0 and verbose > 0:
-            print("\nSA-GD Statistics:")
-            print(f"  Total steps: {total_steps}")
-            print(
-                f"  Ascent steps: {ascent_count} ({100 * ascent_count / total_steps:.1f}%)"
-            )
-            print(
-                f"  Descent steps: {descent_count} ({100 * descent_count / total_steps:.1f}%)"
-            )
-
-        # Outputs
-        if plot_loss:
-            obj.output_to_files()
-        if save_run_to_file:
-            obj.save_run_data()
 
         return obj

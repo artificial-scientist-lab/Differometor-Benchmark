@@ -116,7 +116,8 @@ Everything lives in `src/dfbench/`:
 ```
 src/dfbench/
 ├── core/
-│   ├── protocols.py      <-- Base classes (OptimizationAlgorithm, ContinuousProblem)
+│   ├── problem.py        <-- Base class (ContinuousProblem)
+│   ├── algorithm.py      <-- Base class (OptimizationAlgorithm)
 │   ├── objective.py      <-- Objective wrapper for tracking & logging
 │   └── utils.py          <-- Utility functions (torch<->jax conversion, etc.)
 ├── algorithms/
@@ -208,8 +209,8 @@ All algorithms must:
 3. Return the `Objective` instance from `optimize()`
 
 ```python
-from dfbench.core.protocols import (
-    ContinuousProblem,
+from dfbench.core.problem import ContinuousProblem
+from dfbench.core.algorithm import (
     OptimizationAlgorithm,
     AlgorithmType,
 )
