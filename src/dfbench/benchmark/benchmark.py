@@ -10,12 +10,12 @@ Key classes:
 
 Usage:
     >>> from dfbench.benchmark import Benchmark, AlgorithmConfig
-    >>> from dfbench.algorithms import AdamGD, PSO
+    >>> from dfbench.algorithms import AdamGD, EvoxPSO
     >>>
     >>> problem = VoyagerProblem()
     >>> configs = [
-    ...     AlgorithmConfig(AdamGD(problem), {"learning_rate": 0.1}, name="Adam_lr0.1"),
-    ...     AlgorithmConfig(PSO(problem), {"pop_size": 100}, name="PSO_100"),
+    ...     AlgorithmConfig(AdamGD(), {"learning_rate": 0.1}, name="Adam_lr0.1"),
+    ...     AlgorithmConfig(EvoxPSO(variant="PSO"), {"pop_size": 100}, name="PSO_100"),
     ... ]
     >>> benchmark = Benchmark(problem, success_loss=0.1, configs=configs, n_runs=100, max_time=300)
     >>> results = benchmark.run()
@@ -33,7 +33,9 @@ from dataclasses import dataclass, fields, field
 from typing import Any, Optional
 from jaxtyping import Array, Float
 
-from dfbench.core.protocols import ContinuousProblem, OptimizationAlgorithm
+from dfbench import Objective
+from dfbench.core.problem import ContinuousProblem
+from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 from dfbench.benchmark.metrics import (
     run_min_loss,
     run_has_success,
@@ -219,7 +221,7 @@ class Benchmark:
         >>> benchmark = Benchmark(
         ...     problem=problem,
         ...     success_loss=0.1,
-        ...     configs=[AlgorithmConfig(AdamGD(problem), {"learning_rate": 0.1})],
+        ...     configs=[AlgorithmConfig(AdamGD(), {"learning_rate": 0.1})],
         ...     n_runs=100,
         ...     max_time=300,
         ... )
@@ -232,11 +234,11 @@ class Benchmark:
         problem: ContinuousProblem,
         success_loss: float,
         configs: list[AlgorithmConfig],
+        random_seed: int | None = None,
         n_runs: int = 100,
         max_time: float = 300.0,
         n_time_samples: int = 100,
         random_baseline_loss: float | None = None,
-        random_seed: int | None = None,
     ):
         """Initialize the benchmark suite.
 
@@ -267,9 +269,6 @@ class Benchmark:
             max_time / n_time_samples, max_time, n_time_samples
         )
 
-        # Warmup JIT compilation
-        _ = problem.objective_function(jnp.zeros(problem.n_params))
-
     @property
     def time_samples(self) -> np.ndarray:
         """Time points at which metrics are computed."""
@@ -279,6 +278,7 @@ class Benchmark:
 
     def run(
         self,
+        verbose: int = 1,
         save_csv: bool = True,
         save_run_data: bool = False,
         load_from: str | Path | None = None,
@@ -292,10 +292,12 @@ class Benchmark:
             load_from: Path to directory with saved run data. If provided, loads
                 data instead of running algorithms.
             output_dir: Base directory for saving run data
+            verbose: Verbosity level (default: 1)
 
         Returns:
             List of BenchmarkResult, one per algorithm configuration
         """
+        self._verbose = verbose  # TODO implement verbosity levels
         self._print_header(load_from)
 
         if load_from is not None:
@@ -388,12 +390,26 @@ class Benchmark:
 
             # Prepare hyperparameters
             kwargs = config.hyperparameters.copy()
-            kwargs["max_time"] = self._max_time
+            
+            # Determine unbounded based on algorithm type
+            # Gradient-based algorithms use unbounded space, others use bounded
+            unbounded = config.algorithm.algorithm_type == AlgorithmType.GRADIENT_BASED
+            
+            obj = Objective(
+                problem=self._problem,
+                unbounded=unbounded,
+                max_time=self._max_time,
+                save_time_steps=True,
+                save_params_history=True,
+                verbose=self._verbose - 1,
+                print_every=100,  # Print every 100 evals if verbose >= 1
+            )
+            
             if run_seeds is not None:
                 kwargs["random_seed"] = run_seeds[i_run]
 
-            # Run optimization - returns Objective instance
-            obj = config.algorithm.optimize(**kwargs)
+            # Run optimization acts on Objective
+            config.algorithm.optimize(problem_objective=obj, **kwargs)
 
             # Extract data
             run_data = RunData.from_objective(obj)
