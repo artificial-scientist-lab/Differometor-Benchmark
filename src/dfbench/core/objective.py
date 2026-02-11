@@ -1044,6 +1044,31 @@ class Objective:
     def start_logging(self) -> None:
         """Start the optimization timer. Call this before beginning optimization."""
         self._start_time = time.time()
+        
+    def log_evaluation(
+        self,
+        params: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
+        loss: Float | Float[Array, "batch"] | None = None,
+        grad: Float | Float[Array, "batch"] | None = None,
+    ) -> None:
+        """Manually log an evaluation result. Used for custom evaluation loops which 
+        should be jitted.
+
+        This method allows external code to log evaluations that may not go through
+        the standard value/grad methods. It accepts the same parameters as _log_evals
+        and will update histories and best loss accordingly.
+
+        Args:
+            params: Parameters evaluated (raw, possibly unbounded).
+            loss: Loss value(s) computed.
+            grad: Gradient value(s) computed.
+        """
+        self._log_time()
+        self._log_evals(params, loss, grad)
+        
+        self._log_to_file()
+        return
+
 
     def value(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate objective function at given parameters.
