@@ -5,9 +5,9 @@ import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 
-from differometor.components import demodulate_signal_power
+from differometor.components import signal_detector
 from differometor.setups import voyager
-from differometor.simulate import run, run_build_step, simulate_in_parallel
+from differometor.simulate import run, run_build_step, simulate
 from differometor.utils import sigmoid_bounding, update_setup
 
 from ..base_problem import OpticalSetupProblem
@@ -42,7 +42,7 @@ class VoyagerProblem(OpticalSetupProblem):
         )
 
         # calculate the signal power at the detector ports
-        powers = demodulate_signal_power(carrier, signal)
+        powers = signal_detector(carrier, signal)
         powers = powers[detector_ports]
 
         # calculate the signal power from the two signal detectors for balanced homodyne detection
@@ -110,10 +110,10 @@ class VoyagerProblem(OpticalSetupProblem):
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],
         ) -> Float:
-            carrier, signal, noise = simulate_in_parallel(
-                optimized_parameters, *self._simulation_arrays[1:]
+            carrier, signal, noise = simulate(
+                **{**self._simulation_arrays, 'optimized_parameters': optimized_parameters}
             )
-            powers = demodulate_signal_power(carrier, signal)
+            powers = signal_detector(carrier, signal)
             powers = powers[self._detector_ports]
             powers = powers[0] - powers[1]
             sensitivities = noise / jnp.abs(powers)
@@ -128,10 +128,10 @@ class VoyagerProblem(OpticalSetupProblem):
             optimized_parameters: Float[Array, "{self.n_params}"],
         ) -> Float:
             optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
-            carrier, signal, noise = simulate_in_parallel(
-                optimized_parameters, *self._simulation_arrays[1:]
+            carrier, signal, noise = simulate(
+                **{**self._simulation_arrays, 'optimized_parameters': optimized_parameters}
             )
-            powers = demodulate_signal_power(carrier, signal)
+            powers = signal_detector(carrier, signal)
             powers = powers[self._detector_ports]
             powers = powers[0] - powers[1]
             sensitivities = noise / jnp.abs(powers)
@@ -175,7 +175,7 @@ class VoyagerProblem(OpticalSetupProblem):
         carrier, signal, noise, detector_ports, *_ = run(
             self._setup, [("f", "frequency")], self._frequencies
         )
-        powers = demodulate_signal_power(carrier, signal)
+        powers = signal_detector(carrier, signal)
         powers = powers[detector_ports]
         powers = powers[0] - powers[1]
         sensitivities = noise / jnp.abs(powers)

@@ -1,7 +1,5 @@
 """Voyager problem with realistic 3-noise model and power constraints."""
 
-from functools import partial
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -13,7 +11,7 @@ from differometor.components import (
     DETECTOR_POWER_THRESHOLD,
 )
 from differometor.setups import voyager
-from differometor.simulate import run_setups, simulate_in_parallel, run_build_step
+from differometor.simulate import run_setups, simulate, run_build_step
 from differometor.utils import (
     sigmoid_bounding,
     sensitivity_qamplfreq_noise,
@@ -54,16 +52,14 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
         self._setup = [q_setup, ampl_setup, freq_setup]
 
         # choose a sensitivity function that calculates sensitivities taking into account the three noise sources
-        self._sensitivity_function = partial(
-            sensitivity_qamplfreq_noise, frequencies=self._frequencies
-        )
+        self._sensitivity_function = sensitivity_qamplfreq_noise
 
         # simulate the setups
         simulation_results = run_setups(self._setup, self._frequencies)
 
         # calculate the sensitivity values taking into account the three noise sources
         self._target_sensitivities = calculate_sensitivities(
-            simulation_results, self._sensitivity_function
+            simulation_results, self._sensitivity_function, self._frequencies
         )
 
         # specify the ranges for the properties to be optimized
@@ -133,12 +129,12 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
 
             # simulate the three modulation setups
-            q_results = simulate_in_parallel(optimized_parameters, *self._q_arrays[1:])
-            ampl_results = simulate_in_parallel(
-                optimized_parameters, *self._ampl_arrays[1:]
+            q_results = simulate(**{**self._q_arrays, 'optimized_parameters': optimized_parameters})
+            ampl_results = simulate(
+                **{**self._ampl_arrays, 'optimized_parameters': optimized_parameters}
             )
-            freq_results = simulate_in_parallel(
-                optimized_parameters, *self._freq_arrays[1:]
+            freq_results = simulate(
+                **{**self._freq_arrays, 'optimized_parameters': optimized_parameters}
             )
             results = [
                 (*q_results, *self._q_metadata),
@@ -148,7 +144,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
 
             # calculate the sensitivities taking into account the three noise sources
             sensitivities = calculate_sensitivities(
-                results, self._sensitivity_function, homodyne=True
+                results, self._sensitivity_function, self._frequencies, homodyne=True
             )
 
             # calculate the light power at all components within the setup
@@ -158,6 +154,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             sensitivity_loss, penalty, _ = self._calculate_loss(
                 sensitivities, self._target_sensitivities, powers
             )
+            penalty = penalty / (1.0 + penalty)
 
             return sensitivity_loss + penalty
 
@@ -166,12 +163,12 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             optimized_parameters: Float[Array, "{self.n_params}"],
         ) -> Float:
             # simulate the three modulation setups
-            q_results = simulate_in_parallel(optimized_parameters, *self._q_arrays[1:])
-            ampl_results = simulate_in_parallel(
-                optimized_parameters, *self._ampl_arrays[1:]
+            q_results = simulate(**{**self._q_arrays, 'optimized_parameters': optimized_parameters})
+            ampl_results = simulate(
+                **{**self._ampl_arrays, 'optimized_parameters': optimized_parameters}
             )
-            freq_results = simulate_in_parallel(
-                optimized_parameters, *self._freq_arrays[1:]
+            freq_results = simulate(
+                **{**self._freq_arrays, 'optimized_parameters': optimized_parameters}
             )
             results = [
                 (*q_results, *self._q_metadata),
@@ -181,7 +178,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
 
             # calculate the sensitivities taking into account the three noise sources
             sensitivities = calculate_sensitivities(
-                results, self._sensitivity_function, homodyne=True
+                results, self._sensitivity_function, self._frequencies, homodyne=True
             )
 
             # calculate the light power at all components within the setup
@@ -191,6 +188,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             sensitivity_loss, penalty, _ = self._calculate_loss(
                 sensitivities, self._target_sensitivities, powers
             )
+            penalty = penalty / (1.0 + penalty)
 
             return sensitivity_loss + penalty
 
@@ -252,12 +250,12 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             Sensitivity values at each frequency point.
         """
         # simulate the three modulation setups
-        q_results = simulate_in_parallel(optimized_parameters, *self._q_arrays[1:])
-        ampl_results = simulate_in_parallel(
-            optimized_parameters, *self._ampl_arrays[1:]
+        q_results = simulate(**{**self._q_arrays, 'optimized_parameters': optimized_parameters})
+        ampl_results = simulate(
+            **{**self._ampl_arrays, 'optimized_parameters': optimized_parameters}
         )
-        freq_results = simulate_in_parallel(
-            optimized_parameters, *self._freq_arrays[1:]
+        freq_results = simulate(
+            **{**self._freq_arrays, 'optimized_parameters': optimized_parameters}
         )
         results = [
             (*q_results, *self._q_metadata),
@@ -267,7 +265,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
 
         # calculate the sensitivities taking into account the three noise sources
         sensitivities = calculate_sensitivities(
-            results, self._sensitivity_function, homodyne=True
+            results, self._sensitivity_function, self._frequencies, homodyne=True
         )  # Voyager uses homodyne detection
 
         return sensitivities
