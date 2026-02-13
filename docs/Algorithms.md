@@ -32,7 +32,7 @@ The `Benchmark` harness uses `algorithm_type` to set `unbounded` automatically. 
 
 ## Gradient-Based Algorithms
 
-These algorithms optimize in unbounded $(-\infty, +\infty)$ space using the sigmoid-transformed objective. They receive gradients via `obj.value_and_grad()`.
+These algorithms use gradient information for optimization. Most are configured to work in unbounded $(-\infty, +\infty)$ space via sigmoid-transformed objectives, though some can work directly in bounded space depending on their implementation.
 
 ### AdamGD
 
@@ -359,16 +359,16 @@ obj = optimizer.optimize(
 
 ## Summary Table
 
-| Algorithm | Type | Space | Key strength | Typical use case |
-|-----------|------|-------|-------------|-----------------|
-| `AdamGD` | Gradient | Unbounded | Fast convergence on smooth landscapes | Quick prototyping, smooth problems |
-| `SAGD` | Gradient | Unbounded | Escapes local minima via stochastic ascent | Rugged landscapes |
-| `NAAdamGD` | Gradient | Unbounded | Noise-based exploration with annealing | Balancing exploration and exploitation |
-| `LBFGSGD` | Gradient | Unbounded | Second-order curvature | Smooth, well-conditioned problems |
-| `RandomSearch` | Evolutionary | Bounded | No hyperparameters, unbiased baseline | Baseline comparison |
-| `EvoxPSO` | Evolutionary | Bounded | Swarm intelligence, many variants | Moderate-dimensional problems |
-| `EvoxES` | Evolutionary | Bounded | Covariance adaptation (CMA-ES) | General black-box optimization |
-| `BotorchBO` | Surrogate | Bounded | Sample-efficient, uncertainty-aware | Low evaluation budgets |
-| `BotorchTuRBO` | Surrogate | Bounded | Local trust region, high-dim friendly | High-dimensional, expensive evals |
-| `ReSTIR` | Surrogate | Bounded | Scalable kNN surrogate, GPU-native | Large candidate pools |
-| `VAESampling` | Generative | Bounded | Latent-space compression | Very high-dimensional problems |
+| Algorithm | Type | Key strength | Typical use case |
+|-----------|------|-------------|------------------|
+| `AdamGD` | Gradient | Fast convergence on smooth landscapes | Quick prototyping, smooth problems |
+| `SAGD` | Gradient | Escapes local minima via stochastic ascent | Rugged landscapes |
+| `NAAdamGD` | Gradient | Noise-based exploration with annealing | Balancing exploration and exploitation |
+| `LBFGSGD` | Gradient | Second-order curvature | Smooth, well-conditioned problems |
+| `RandomSearch` | Evolutionary | No hyperparameters, unbiased baseline | Baseline comparison |
+| `EvoxPSO` | Evolutionary | Swarm intelligence, many variants | Moderate-dimensional problems |
+| `EvoxES` | Evolutionary | Covariance adaptation (CMA-ES) | General black-box optimization |
+| `BotorchBO` | Surrogate | Sample-efficient, uncertainty-aware | Low evaluation budgets |
+| `BotorchTuRBO` | Surrogate | Local trust region, high-dim friendly | High-dimensional, expensive evals |
+| `ReSTIR` | Surrogate | Scalable kNN surrogate, GPU-native | Large candidate pools |
+| `VAESampling` | Generative | Latent-space compression | Very high-dimensional problems |

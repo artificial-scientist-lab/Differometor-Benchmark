@@ -52,7 +52,7 @@ $$x_{\text{unbounded}} = \log\!\left(\frac{\hat{x}}{1 - \hat{x}}\right) \quad\te
 Values are clipped to $[10^{-7},\; 1 - 10^{-7}]$ before the logit to avoid $\pm\infty$.
 
 **When you use this:**  
-When you have a bounded parameter vector (e.g., from a population-based method) and want to initialise a gradient-based refinement in unbounded space.
+When you have a bounded parameter vector and want to convert it to unbounded space (e.g., for initializing an algorithm that works in unconstrained space).
 
 ---
 

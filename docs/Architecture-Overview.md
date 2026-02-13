@@ -43,7 +43,7 @@ A problem defines *what* is being optimised. Every problem subclasses `Continuou
 | `bounds` | `(2, n_params)` lower / upper limits |
 | `optimization_pairs` | `[(component, property), …]` mapping each parameter index to a Differometor component |
 
-**Rationale — two objective functions:** Gradient-based optimisers work best in unconstrained $(-\infty, +\infty)$ space where gradients flow smoothly through every point. Population-based methods, on the other hand, naturally respect bound constraints by sampling and clamping. Providing both variants lets each family operate in its natural domain without adapter code in every algorithm.
+**Rationale — two objective functions:** Some optimization methods benefit from unconstrained $(-\infty, +\infty)$ space where gradients flow smoothly without hitting box-constraint boundaries. Population-based methods naturally respect bound constraints by sampling and clamping. Providing both variants lets algorithms choose their preferred space without adapter code.
 
 ### 2. Objective Layer (`core/objective.py`)
 
@@ -147,10 +147,10 @@ The `Benchmark` class:
 | Decision | Rationale |
 |----------|-----------|
 | **JAX for physics, PyTorch for some algorithms** | Differometor is a JAX project. Some optimisation libraries (EvoX, BoTorch) require PyTorch tensors. The `t2j` / `j2t` utilities bridge the gap with negligible overhead. |
-| **Sigmoid bounding for gradient methods** | Gradient descent in clipped-bounded space produces zero gradients at boundaries. The sigmoid map $\sigma(x) \cdot (\text{ub} - \text{lb}) + \text{lb}$ keeps gradients nonzero everywhere. |
+| **Sigmoid bounding option** | Optimization in clipped-bounded space can produce zero gradients at boundaries. The sigmoid map $\sigma(x) \cdot (\text{ub} - \text{lb}) + \text{lb}$ provides an alternative where gradients remain nonzero everywhere in unconstrained space. |
 | **Wall-clock time as primary budget** | Evaluation cost varies across problems (12 ms for Voyager, 500 ms for UIFO). Time-based budgets make cross-problem comparisons meaningful. |
 | **Time-sampled metrics** | Evaluating metrics at fixed time points (not iteration counts) normalises for per-eval cost differences between algorithms. |
 | **Atomic checkpoints** | Long HPC jobs are killed without warning. Writing to `.tmp.npz` and then calling `os.replace` avoids half-written files. |
 | **`_init_env.py` setting `MPLCONFIGDIR`** | On shared HPC filesystems, matplotlib's default config directory may be read-only. Setting a temp directory before any import prevents cryptic crashes. |
-| **`AlgorithmType` enum** | The benchmark uses the type to decide whether an algorithm should receive an `unbounded=True` objective (gradient-based) or `unbounded=False` (everything else), removing a common source of misconfiguration. |
+| **`AlgorithmType` enum** | The benchmark uses the type as a default hint: gradient-based algorithms typically get `unbounded=True`, while evolutionary/surrogate methods get `unbounded=False`. Algorithms can override this in their implementation if needed. |
 | **Reduced history properties** | Batched algorithms produce `(batch, …)` shaped histories. The `*_reduced` properties collapse each batch to a single representative (argmin of loss) so downstream analysis code never needs to handle ragged shapes. |

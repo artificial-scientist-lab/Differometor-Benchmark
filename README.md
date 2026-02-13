@@ -6,9 +6,20 @@ A benchmarking framework for optimization algorithms on gravitational-wave detec
 
 ---
 
+## Please READ
+I want to keep the process of implementing an algorithm as intuitive as possible. Questions (and ideas) help me figure out where unclarities come up.
+
+If you have ANY questions, don't hesitate to ask me via Slack (Laurin Sefa) or an Issue!
+
+
+
+---
+
 ## TL;DR (I want to try my own algorithm)
 
-It's simple. All you need is the `Objective` wrapper. It handles evaluation tracking, budget enforcement, and history logging, you just write the optimization logic.
+This is how to create a script that tests your algorithm logic on a problem (not create an algorithm class).
+
+All you need is the `Objective` wrapper. It handles evaluation tracking, budget enforcement, and history logging, you just write the optimization logic.
 
 ```python
 from dfbench import Objective
@@ -25,8 +36,10 @@ obj.start_logging()
 # Your optimization loop, that's it.
 params = obj.random_params_unbounded()
 while not obj.budget_exceeded:
-    loss, grad = obj.value_and_grad(params)
+    # --- Your Optimization here ---
+    loss, grad = obj.value_and_grad(params) # for example
     params = params - 0.1 * grad  # or any update rule
+    # No need to log losses or params.
 
 print(f"Best loss: {obj.best_loss}")
 print(f"Best params: {obj.best_params_bounded}")
@@ -40,15 +53,14 @@ obj.save_run_to_file("my_run.npz")
 
 The problems are JAX-based and fully differentiable. Use whichever method fits your algorithm:
 
-| Method | Returns | Use for |
-|--------|---------|---------|
-| `obj.value(params)` | `float` | Loss only |
-| `obj.value_and_grad(params)` | `(float, Array)` | Gradient-based optimization |
-| `obj.grad(params)` | `Array` | Gradient only (no loss logged) |
-| `obj.vmap_value(batch)` | `Array[batch]` | Population-based evaluation |
-| `obj.vmap_value_and_grad(batch)` | `(Array, Array)` | Batched gradient methods |
+- `obj.value(params)`
+- `obj.value_and_grad(params)`
+- `obj.grad(params)`
+- `obj.vmap_value(batch)`
+- `obj.vmap_value_and_grad(batch)`
+- `obj.vmap_grad(batch)`
 
-### PyTorch Interop
+### PyTorch Users
 
 ```python
 from dfbench import t2j, j2t
@@ -63,9 +75,9 @@ This adds negligible overhead compared to the objective function itself.
 
 | Problem | Speed | Notes |
 |---------|-------|-------|
-| `VoyagerProblem` | ~12 ms/eval (A100) | Lightweight, good for prototyping. Loss < 0 achievable. |
-| `ConstrainedVoyagerProblem` | ~25 ms/eval (A100) | Physical constraints. Loss < 0 very difficult. |
-| `RandomUIFOProblem` | ~500 ms/eval (A100) | Full interferometer. Loss < 0 hard but doable. |
+| `VoyagerProblem` | ~12 ms/eval (A100) | Lightweight optimization of the Voyager Setup, good for prototyping, not physics-constrained. Loss < 0 achievable. |
+| `ConstrainedVoyagerProblem` | ~25 ms/eval (A100) | The same setup but physically constrained. Loss < 0 very difficult. |
+| `RandomUIFOProblem` | ~500 ms/eval (A100) | Full 3x3 UIFO setup (constrained). Loss < 0 hard but doable. |
 
 See [Problems](docs/Problems.md) for details on loss computation, parameter meanings, and constraints.
 
@@ -112,7 +124,7 @@ OptimizationAlgorithm.optimize()
   Differometor Simulator   (JAX-based interferometer physics)
 ```
 
-**Key design:** Algorithms never create their own `Objective` — they receive a pre-configured one. This lets the benchmark harness (or user script) control budgets, seeds, and history settings uniformly. The algorithm only has to implement its optimization logic.
+**Design Idea:** Algorithms never create their own `Objective` — they receive a pre-configured one. This lets the benchmark harness (or user script) control budgets, seeds, and history settings uniformly. The algorithm only has to implement its optimization logic.
 
 See [Architecture Overview](docs/Architecture-Overview.md) for full design details.
 
@@ -169,6 +181,7 @@ obj = optimizer.optimize(
 print(f"Best loss: {obj.best_loss}")
 print(f"Best params: {obj.best_params_bounded}")
 print(f"Evaluations: {obj.eval_count}")
+obj.plot_loss()  # Also saves JSONs of losses and best params
 ```
 
 ### Running a Benchmark
@@ -207,7 +220,7 @@ See [Benchmarking](docs/Benchmarking.md) for full configuration options and [Met
 
 ---
 
-## How to Add an Algorithm
+## How to Add an Algorithm (as a Class)
 
 The interface is designed to make this as simple as possible. You write the optimization logic; `Objective` handles everything else (timing, logging, budget enforcement, file I/O).
 

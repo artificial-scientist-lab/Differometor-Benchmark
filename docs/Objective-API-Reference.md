@@ -56,10 +56,10 @@ Objective(
 
 ### Choosing `unbounded`
 
-| `unbounded` | Objective function used | Algorithms |
+| `unbounded` | Objective function used | Example algorithms |
 |-------------|-------------------------|--------------------|
 | `False` | `problem.objective_function` | Random Search, PSO, CMA-ES, Bayesian Optimization |
-| `True` | `problem.sigmoid_objective_function` | Adam, L-BFGS, SA-GD, NA-Adam |
+| `True` | `problem.sigmoid_objective_function` | Some gradient-based methods (Adam, L-BFGS, SA-GD, NA-Adam in their current implementations) |
 
 ---
 
@@ -77,7 +77,7 @@ obj.value_and_grad(params)     # → (float, Array[n_params])
 
 - `value(params)` — Evaluates the loss at `params`. Logs loss and params.
 - `grad(params)` — Computes the gradient. Logs grad and params, but **not** a loss value (the loss is not computed).
-- `value_and_grad(params)` — Computes both in a single forward+backward pass. Logs all three. **Preferred for gradient-based algorithms** because it is more efficient than calling `value` and `grad` separately and it logs the loss.
+- `value_and_grad(params)` — Computes both in a single forward+backward pass. Logs all three. **Preferred when you need both loss and gradient** because it is more efficient than calling `value` and `grad` separately and it logs the loss.
 
 ### Batched evaluation
 

@@ -7,19 +7,19 @@
 ### My gradient method diverges to NaN
 
 1. **Learning rate too high.** Differometor loss landscapes are steep. Start with `lr=0.01` or lower.
-2. **Not using unbounded mode.** Gradient-based methods must set `unbounded=True` so sigmoid bounding provides smooth gradients everywhere.
+2. **Box constraints causing zero gradients.** If parameters hit bound edges frequently, gradients become zero. Consider using `unbounded=True` so sigmoid bounding provides smooth gradients everywhere.
 3. **Using `obj.grad()` instead of `obj.value_and_grad()`.** `grad()` does **not** log a loss — use `value_and_grad()` to get both.
 
 ### Bounded vs. unbounded — which do I use?
 
-| Algorithm type | `unbounded` | Why |
-|----------------|-------------|-----|
-| Gradient-based | `True` | Sigmoid bounding gives smooth, unconstrained gradients. |
+| Algorithm type | Typical choice | Why |
+|----------------|----------------|-----|
 | Evolutionary | `False` | Populations naturally respect bound constraints. |
 | Surrogate-based | `False` | GP/BO acquisitions work in bounded space. |
+| Gradient-based | Either | Use `True` if you want smooth unconstrained space for gradient flow. Use `False` if your method handles box constraints directly. |
 | Generative | Either | Depends on internal representation. |
 
-The `Benchmark` harness sets this automatically based on `algorithm_type`.
+**Note:** The `Benchmark` harness defaults gradient-based algorithms to `unbounded=True` for convenience, but this can be overridden if your algorithm works in bounded space.
 
 ### How do I convert between bounded and unbounded parameters?
 

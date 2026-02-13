@@ -183,16 +183,18 @@ self.setup_objective(obj, unbounded=False, random_seed=random_seed)
 `setup_objective()` is a convenience helper that sets `obj.unbounded`, `obj.algorithm_str`, and calls `obj.set_seed()`. You can also set these manually.
 
 **Choose `unbounded`:**
-- `False` for algorithms that work in bounded space (evolutionary, surrogate)
-- `True` for gradient-based algorithms that need smooth, unconstrained space
+- `False` if your algorithm naturally handles bound constraints (evolutionary, surrogate-based)
+- `True` if you want smooth unconstrained space where gradients never hit box boundaries (via sigmoid transform)
 
 ### 2. Set random seeds
 
+Because of different algorithms using different packages, I left this step manual.
+
 ```python
 obj.set_seed(random_seed)         # JAX PRNG for Objective's sampling
-np.random.seed(random_seed)       # NumPy
-key = jax.random.PRNGKey(random_seed)   # JAX for your algorithm
-torch.manual_seed(random_seed)    # PyTorch (if applicable)
+np.random.seed(random_seed)       # Set random_seed for all packages used
+key = jax.random.PRNGKey(random_seed)
+torch.manual_seed(random_seed)
 ```
 
 Always print the seed so runs can be reproduced:
@@ -202,13 +204,13 @@ print(f"Random seed: {random_seed}")
 
 ### 3. Initialize parameters
 
-For **bounded** algorithms:
+For **bounded** space:
 ```python
 params = obj.random_params_bounded()              # shape: (n_params,)
 batch = obj.random_params_bounded(n_samples=100)  # shape: (100, n_params)
 ```
 
-For **unbounded** (gradient) algorithms:
+For **unbounded** space:
 ```python
 params = obj.random_params_unbounded()             # shape: (n_params,)
 ```
@@ -217,7 +219,7 @@ params = obj.random_params_unbounded()             # shape: (n_params,)
 
 ```python
 _ = obj.value(params)                    # single eval
-_ = obj.value_and_grad(params)           # for gradient methods
+_ = obj.value_and_grad(params)           # when using gradients
 _ = obj.vmap_value(batch)                # for batched methods
 ```
 
@@ -273,8 +275,11 @@ The `Objective` now contains the complete optimization history. The caller (benc
 - Parameters live in `[lower, upper]` for each dimension.
 - Use `obj.value()` or `obj.vmap_value()`.
 - Algorithms must keep parameters within bounds (via clamping, constrained sampling, etc.).
-- Good for: evolutionary methods, surrogate-based methods.
+- Useful for evolutionary methods, surrogate-based methods.
 
+Be careful!
+- Ask for a `batch_size` in the `__init__()` and try different sizes.
+- Changing the `batch_size` causes a recompile which can take a wile.
 ```python
 self.setup_objective(obj, unbounded=False)
 params = obj.random_params_bounded(n_samples=100)
@@ -285,9 +290,7 @@ losses = obj.vmap_value(params)
 
 - Parameters live in $(-\infty, +\infty)$.
 - The objective internally applies sigmoid bounding: $\text{bounded} = \text{lb} + (\text{ub} - \text{lb}) \cdot \sigma(\text{unbounded})$.
-- Use `obj.value_and_grad()` for gradient computation.
 - To get final results in the physical space: `obj.best_params_bounded`.
-- Good for: gradient descent methods.
 
 ```python
 self.setup_objective(obj, unbounded=True)
