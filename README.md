@@ -234,6 +234,8 @@ The interface is designed to make this as simple as possible. You write the opti
 4. Use `Objective` for all function evaluations
 5. Return the `Objective` when done
 
+Please create a branch called `algorithm/my-algo` for the pull request.
+
 ### Minimal Template
 
 ```python
@@ -314,7 +316,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 - **`__init__` takes only algorithm meta-parameters** (batch size, network architecture, etc.) — not the problem, not the budget.
 - **`optimize()` receives a pre-configured `Objective`** — the algorithm does not create it.
 - **`setup_objective()`** sets `unbounded`, `algorithm_str`, and seed on the Objective.
-- **Choose `unbounded`:** `True` for gradient-based (smooth unconstrained space), `False` for everything else (bounded space).
+- **Choose `unbounded`:** Set to `True` if your algorithm benefits from smooth unconstrained space (via sigmoid transform). Most evolutionary and surrogate methods use `False` (bounded space).
 - **JIT warmup before `start_logging()`** — compilation time doesn't count against the budget.
 - **`budget_exceeded`** checks both time and eval limits — use it as your loop condition.
 
@@ -346,7 +348,7 @@ while not obj.budget_exceeded:        # main loop condition
 # Random parameter generation
 params = obj.random_params_bounded()              # shape: (n_params,)
 batch = obj.random_params_bounded(n_samples=100)  # shape: (100, n_params)
-params = obj.random_params_unbounded()            # for gradient methods
+params = obj.random_params_unbounded()            # for unbounded space
 
 # Results
 obj.best_loss               # best (minimum) loss found
