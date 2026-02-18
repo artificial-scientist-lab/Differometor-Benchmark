@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 
-from dfbench import Objective
+from dfbench.core.objective import Objective
 
 
 class AlgorithmType(Enum):

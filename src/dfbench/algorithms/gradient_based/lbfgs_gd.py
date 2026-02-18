@@ -5,7 +5,7 @@ import optax
 from jaxtyping import Array, Float
 
 from dfbench.core.objective import Objective
-from dfbench.core.protocols import (
+from dfbench import (
     AlgorithmType,
     ContinuousProblem,
     OptimizationAlgorithm,
