@@ -11,6 +11,7 @@ from jaxtyping import Float, Array
 
 from differometor.utils import sigmoid_bounding
 from dfbench.core.problem import ContinuousProblem
+from dfbench.core.display import LiveDisplay, LogDisplay
 
 
 class Objective:
@@ -188,6 +189,7 @@ class Objective:
         print_every: int = 100,
         algorithm_str: str | None = None,
         save_to_file_every: int | None = None,
+        display_mode: str = "live",
     ):
         """Initialize the Objective wrapper for optimization problems.
 
@@ -207,6 +209,10 @@ class Objective:
             print_every: Print progress every N evaluations (if verbose >= 1). Defaults to 100.
             algorithm_str: String identifier for the optimization algorithm.
             save_to_file_every: Save checkpoint every N evaluations. None to disable.
+            display_mode: How to display progress when ``verbose >= 1``.
+                ``"live"`` (default) shows a continuously-refreshing in-place
+                dashboard with progress bars.  ``"log"`` prints traditional
+                multi-line log blocks that scroll the terminal.
         """
 
         self.unbounded = unbounded
@@ -228,6 +234,7 @@ class Objective:
         )
         self._save_eval_type_history = save_eval_type_history
         self._save_to_file_every = save_to_file_every
+        self._display_mode = display_mode
 
         if not self.unbounded:
             self._bounds = problem.bounds
@@ -279,6 +286,14 @@ class Objective:
         # Random seed for reproducibility (set by algorithm via set_seed method)
         self._seed = None
         self._rng_key = None
+
+        # Lightweight call-type tracking (always active, O(1) per call)
+        self._log_call_count: int = 0
+        self._eval_type_counts: dict[int, int] = {}
+        self._last_checkpoint_eval: int | None = None
+
+        # Display renderer (lazy-initialised on first use)
+        self._display: LiveDisplay | LogDisplay | None = None
 
     def __call__(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate the objective function at given parameters.
@@ -460,6 +475,49 @@ class Objective:
     def evals_since_improvement(self) -> int:
         """Evaluations since last improvement to best loss."""
         return int(self._evals_since_improvement)
+
+    @property
+    def log_call_count(self) -> int:
+        """Total number of internal _log_evals() invocations (not evaluations).
+
+        Unlike ``eval_count`` which counts individual parameter evaluations,
+        this counts how many times logging was triggered, making it possible
+        to derive the average batch size::
+
+            avg_batch = obj.eval_count / obj.log_call_count
+        """
+        return self._log_call_count
+
+    @property
+    def eval_type_counts(self) -> dict[int, int]:
+        """Distribution of evaluation call types as ``{type_code: count}`` dict.
+
+        Type codes are bitmasks: ``0b{vmap}{grad}{loss}``
+
+        +------+-----------------------------+
+        | Code | Meaning                     |
+        +======+=============================+
+        |  1   | value only                  |
+        +------+-----------------------------+
+        |  2   | grad only                   |
+        +------+-----------------------------+
+        |  3   | value + grad                |
+        +------+-----------------------------+
+        |  5   | batched value               |
+        +------+-----------------------------+
+        |  6   | batched grad                |
+        +------+-----------------------------+
+        |  7   | batched value + grad        |
+        +------+-----------------------------+
+        | -1   | unknown (params only)       |
+        +------+-----------------------------+
+        """
+        return dict(self._eval_type_counts)
+
+    @property
+    def last_checkpoint_eval(self) -> int | None:
+        """Eval count at which the most recent checkpoint was written, or None."""
+        return self._last_checkpoint_eval
 
     # --------- Reduced (non-batched) history properties ---------
 
@@ -811,6 +869,36 @@ class Objective:
             f"time={summary['time_elapsed']:.2f}s)"
         )
 
+    # --------- Display rendering ---------
+
+    def _ensure_display(self) -> None:
+        """Lazily create the display renderer if not yet initialised."""
+        if self._display is not None:
+            return
+        if self._display_mode == "live":
+            self._display = LiveDisplay(self)
+        else:
+            self._display = LogDisplay(self)
+
+    def _render_display(self) -> None:
+        """Render one frame of the progress display (live or log)."""
+        self._ensure_display()
+        assert self._display is not None
+        self._display.render()
+
+    def finalize_display(self) -> None:
+        """Print a final, non-overwritable summary after the optimisation run.
+
+        Call this once after the optimisation loop ends to leave a
+        persistent status block in the terminal.  If ``verbose < 1``
+        or no display was created, this is a no-op.
+        """
+        if self._verbose < 1:
+            return
+        self._ensure_display()
+        assert self._display is not None
+        self._display.finalize()
+
     # --------- internal logging and tracking methods ---------
 
     @staticmethod
@@ -911,6 +999,9 @@ class Objective:
             eval_type = -1  # unknown eval
         if self._save_eval_type_history:
             self._eval_type_history.append(eval_type)
+        # Always track call count and type distribution (O(1), no allocation)
+        self._log_call_count += 1
+        self._eval_type_counts[eval_type] = self._eval_type_counts.get(eval_type, 0) + 1
 
         # Helper to create NaN placeholders
         def _nan_entry():
@@ -1003,13 +1094,8 @@ class Objective:
             and self._verbose >= 1
             and (prev_eval_count // self._print_every) != (self._eval_count // self._print_every)
         ):
-            s = self.get_summary()
             try:
-                print(
-                    f"---------------\nevals={s['eval_count']}\nbest={s['best_loss']}\n"+
-                    f"time={s['time_elapsed']:.2f}s\nimprovements={s['improvement_count']}\n"+
-                    f"since_impr={s['evals_since_improvement']}"
-                )
+                self._render_display()
             except Exception:
                 # printing should not break optimization
                 pass
@@ -1041,6 +1127,7 @@ class Objective:
                 dt = time.time() - t0
                 # advance start_time so elapsed = (now - start_time) excludes dt
                 self._start_time += dt
+            self._last_checkpoint_eval = self._eval_count
         return
     
     # --------- public API for optimization ---------
@@ -1382,6 +1469,10 @@ class Objective:
         self._improvement_count = 0
         self._evals_since_improvement = 0
         self._eval_type_history = []
+        self._log_call_count = 0
+        self._eval_type_counts = {}
+        self._last_checkpoint_eval = None
+        self._display = None  # re-create on next render
 
     def output_to_files(
         self,
