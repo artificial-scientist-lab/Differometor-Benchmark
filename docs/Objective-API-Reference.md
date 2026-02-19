@@ -51,7 +51,7 @@ Objective(
 | `save_eval_type_history` | `bool` | `False` | Record a bitmask for each evaluation indicating whether it was a value, grad, value_and_grad, and/or batched call. |
 | `verbose` | `int` | `0` | Verbosity level. `0` = silent; `1` = periodic progress prints; `2` is WIP. |
 | `print_every` | `int` | `100` | When `verbose ≥ 1`, print a progress summary every N evaluations. |
-| `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm. (See `setup_objective()` of `OptimizationAlgorithm`). Optional identifier string used in file names and logs. |
+| `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
 | `save_to_file_every` | `int \| None` | `None` | Automatically checkpoint to an NPZ-file every N evaluations. `None` disables auto-saving. The time spent saving is excluded from the elapsed-time clock. |
 
 ### Choosing `unbounded`

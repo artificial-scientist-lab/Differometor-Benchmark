@@ -95,16 +95,9 @@ class MyAlgorithm(OptimizationAlgorithm):
         obj = problem_objective
         problem = obj.problem
 
-        # This helper sets unbounded mode, algorithm_str, and seed on the Objective
-        self.setup_objective(obj, unbounded=False, random_seed=random_seed)
-
-        # ─── 2. Set random seeds for all packages you use ───
-        if random_seed is None:
-            random_seed = secrets.randbits(32)
-        obj.set_seed(random_seed)
-        np.random.seed(random_seed)
-        key = jax.random.PRNGKey(random_seed)
-        print(f"Random seed: {random_seed}")
+        # Sets unbounded mode, algorithm_str, seeds np/JAX, returns resolved seed + JAX key
+        random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+        # torch.manual_seed(random_seed)  # add if you use PyTorch
 
         # ─── 3. Initialize parameters ───
         if init_params is None:
@@ -177,10 +170,10 @@ The base class `OptimizationAlgorithm.optimize()` contains a commented blueprint
 ```python
 obj = problem_objective
 problem = obj.problem
-self.setup_objective(obj, unbounded=False, random_seed=random_seed)
+random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 ```
 
-`setup_objective()` is a convenience helper that sets `obj.unbounded`, `obj.algorithm_str`, and calls `obj.set_seed()`. You can also set these manually.
+`prepare()` sets `obj.unbounded`, `obj.algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. If `random_seed=None` is passed, a seed is generated via system entropy. You can also configure the Objective manually instead of calling `prepare()`.
 
 **Choose `unbounded`:**
 - `False` if your algorithm naturally handles bound constraints (evolutionary, surrogate-based)
@@ -188,18 +181,11 @@ self.setup_objective(obj, unbounded=False, random_seed=random_seed)
 
 ### 2. Set random seeds
 
-Because of different algorithms using different packages, I left this step manual.
+`prepare()` handles `np.random`, JAX, and the seed print. If your algorithm uses PyTorch or another framework, seed it with the returned value:
 
 ```python
-obj.set_seed(random_seed)         # JAX PRNG for Objective's sampling
-np.random.seed(random_seed)       # Set random_seed for all packages used
-key = jax.random.PRNGKey(random_seed)
-torch.manual_seed(random_seed)
-```
-
-Always print the seed so runs can be reproduced:
-```python
-print(f"Random seed: {random_seed}")
+random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+torch.manual_seed(random_seed)   # only needed for PyTorch-based libraries
 ```
 
 ### 3. Initialize parameters
@@ -281,7 +267,7 @@ Be careful!
 - Ask for a `batch_size` in the `__init__()` and try different sizes.
 - Changing the `batch_size` causes a recompile which can take a wile.
 ```python
-self.setup_objective(obj, unbounded=False)
+random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 params = obj.random_params_bounded(n_samples=100)
 losses = obj.vmap_value(params)
 ```
@@ -293,7 +279,7 @@ losses = obj.vmap_value(params)
 - To get final results in the physical space: `obj.best_params_bounded`.
 
 ```python
-self.setup_objective(obj, unbounded=True)
+random_seed, key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 params = obj.random_params_unbounded()
 loss, grad = obj.value_and_grad(params)
 ```

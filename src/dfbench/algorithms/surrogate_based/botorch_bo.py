@@ -1,6 +1,5 @@
 """State-of-the-art Bayesian Optimization using BoTorch with batch acquisition."""
 
-import secrets
 
 import jax.numpy as jnp
 import numpy as np
@@ -190,14 +189,8 @@ class BotorchBO(OptimizationAlgorithm):
         if max_iterations is None:
             raise ValueError("max_iterations is required")
 
-        self.setup_objective(obj, unbounded=False, random_seed=random_seed)
-
-        if random_seed is None:
-            random_seed = secrets.randbits(32)
-        obj.set_seed(random_seed)
-        np.random.seed(random_seed)
+        random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
-        print(f"Random seed: {random_seed}")
 
         # Get bounds from problem
         lb_np = np.asarray(problem.bounds[0])

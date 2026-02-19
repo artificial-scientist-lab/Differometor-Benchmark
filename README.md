@@ -268,17 +268,10 @@ class MyAlgorithm(OptimizationAlgorithm):
         patience: int = 1000,
         **kwargs,
     ) -> Objective:
-        # 1. Setup
+        # 1. Setup + seed all RNGs
         obj = problem_objective
-        self.setup_objective(obj, unbounded=False, random_seed=random_seed)
-
-        # 2. Seed all RNGs
-        if random_seed is None:
-            random_seed = secrets.randbits(32)
-        obj.set_seed(random_seed)
-        np.random.seed(random_seed)
-        key = jax.random.PRNGKey(random_seed)
-        print(f"Random seed: {random_seed}")
+        random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+        torch.manual_seed(random_seed)  # for frameworks beyond np/jax
 
         # 3. Initialize parameters
         if init_params is None:
@@ -315,7 +308,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 
 - **`__init__` takes only algorithm meta-parameters** (batch size, network architecture, etc.) — not the problem, not the budget.
 - **`optimize()` receives a pre-configured `Objective`** — the algorithm does not create it.
-- **`setup_objective()`** sets `unbounded`, `algorithm_str`, and seed on the Objective.
+- **`prepare()`** configures `unbounded`, `algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. For PyTorch-based algorithms, call `torch.manual_seed(random_seed)` afterwards.
 - **Choose `unbounded`:** Set to `True` if your algorithm benefits from smooth unconstrained space (via sigmoid transform). Most evolutionary and surrogate methods use `False` (bounded space).
 - **JIT warmup before `start_logging()`** — compilation time doesn't count against the budget.
 - **`budget_exceeded`** checks both time and eval limits — use it as your loop condition.

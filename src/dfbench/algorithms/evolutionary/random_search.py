@@ -1,4 +1,3 @@
-import secrets
 
 import jax
 import jax.numpy as jnp
@@ -70,14 +69,7 @@ class RandomSearch(OptimizationAlgorithm):
         obj = problem_objective
         problem = obj.problem
 
-        self.setup_objective(obj, unbounded=False, random_seed=random_seed)
-
-        if random_seed is None:
-            random_seed = secrets.randbits(32)
-        obj.set_seed(random_seed)
-        np.random.seed(random_seed)
-        key = random.PRNGKey(random_seed)
-        print(f"Random seed: {random_seed}")
+        random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         # Get bounds
         lower, upper = problem.bounds[0], problem.bounds[1]

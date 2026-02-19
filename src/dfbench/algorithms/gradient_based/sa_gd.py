@@ -3,7 +3,6 @@ Simulated annealing gradient descent based on https://arxiv.org/abs/2107.07558
 """
 
 import math
-import secrets
 
 import jax
 import jax.numpy as jnp
@@ -169,14 +168,7 @@ class SAGD(OptimizationAlgorithm):
         obj = problem_objective
         problem = obj.problem
 
-        self.setup_objective(obj, unbounded=True, random_seed=random_seed)
-
-        if random_seed is None:
-            random_seed = secrets.randbits(32)
-        obj.set_seed(random_seed)
-        np.random.seed(random_seed)
-        rng_key = jax.random.PRNGKey(random_seed)
-        print(f"Random seed: {random_seed}")
+        random_seed, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         if init_params is None:
             params = obj.random_params_unbounded()

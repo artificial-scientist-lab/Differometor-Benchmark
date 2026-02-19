@@ -58,6 +58,8 @@ class OptimizationAlgorithm(ABC):
     algorithm_str: str
     algorithm_type: AlgorithmType
 
+    _random_seed: int | None = None
+
     @abstractmethod
     def __init__(self, **kwargs):
         """Initialize the algorithm with an optimization problem.
@@ -95,22 +97,17 @@ class OptimizationAlgorithm(ABC):
         obj = problem_objective
         problem = obj.problem
         
-        self.setup_objective(obj, unbounded=False, random_seed=random_seed)
-        
-        # 2. Set random seed
-        if random_seed is None:
-            random_seed = secrets.randbits(32)  # Use system entropy for true randomness
-        obj.set_seed(random_seed)
-        np.random.seed(random_seed)
-        key = jax.random.PRNGKey(random_seed)  # Set all package's seeds (np, jax, torch, etc.)
-        print(f"Random seed: {random_seed}")  # Log for reproducibility
+        # 2. Setup objective and resolve/apply random seed
+        random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+        # For frameworks that also need seeding:
+        # torch.manual_seed(random_seed)
         
         # 3. Initialize parameters
         if init_params is None:
             # Bounded optimization
             params = obj.random_params_bounded()  # If n_samples = 1, returns shape (n_params,)
             # Unbounded optimization
-            params = obj.random_params_unbounded()  # If unbounded = True was given to setup_objective()
+            params = obj.random_params_unbounded()  # If unbounded = True was given to prepare()
             # Batched optimization
             batched_params = obj.random_params_bounded(n_samples=10) # Use self.batch_size from __init__() here
         else:
@@ -146,26 +143,31 @@ class OptimizationAlgorithm(ABC):
         # Please take a look at the Objective class documentation or docstring for a guide and details.
         return obj
     
-    def setup_objective(
+    def prepare(
         self, 
         obj: Objective,
         unbounded: bool, 
         algorithm_str: str | None = None,
         random_seed: int | None = None, 
-        **kwargs) -> None:
-        """Helps set up the Objective with parameters that have to be set for all algorithms.
-        Please decide if it should be unbounded or not and give a random_seed.
-        Could also be done manually.
+        **kwargs) -> tuple[int, jax.Array]:
+        """Set up the Objective and resolve/apply the random seed.
+
+        Configures `obj.unbounded`, `obj.algorithm_str`, and seeds all relevant
+        RNG sources (`np.random`, JAX). Call this at the top of `optimize()`
+        instead of managing seed resolution manually.
 
         Args:
             obj (Objective): The Objective instance to set up.
             unbounded (bool): Whether the algorithm needs unbounded parameter space.
             algorithm_str (str | None): Optional algorithm identifier. If None, uses self.algorithm_str.
-            random_seed (int | None): Random seed given to the Objective for reproducable 
-            random parameter generation across algorithms.
+            random_seed (int | None): Seed for reproducibility. If None, one is generated
+                via system entropy and stored in self._random_seed.
+            **kwargs: Additional Objective attributes to set.
 
         Returns:
-            None
+            tuple[int, jax.Array]: Resolved integer seed and a JAX PRNGKey.
+                Use the seed for framework-specific seeding (e.g. torch.manual_seed)
+                and the key for JAX-based random operations.
         """
         obj.unbounded = unbounded
         if algorithm_str:
@@ -175,11 +177,18 @@ class OptimizationAlgorithm(ABC):
         else:
             # If neither is provided, default to the class name in lowercase
             obj.algorithm_str = self.__class__.__name__.lower()
-            
+
+        if random_seed is None:
+            random_seed = secrets.randbits(32)
+        self._random_seed = random_seed
         obj.set_seed(random_seed)
+        np.random.seed(random_seed)
+        key = jax.random.PRNGKey(random_seed)
+        print(f"Random seed: {random_seed}")
+
         for k, v in kwargs.items():
             try:
                 setattr(obj, k, v)
             except AttributeError:
                 print(f"Warning: Objective has no attribute '{k}' to set with value {v}")
-        return obj
+        return random_seed, key
