@@ -27,18 +27,24 @@ from dfbench.problems import VoyagerProblem
 
 # Pick a problem
 problem = VoyagerProblem()
+
+# Wrap that problem inside the Objective wrapper for loss and time tracking
 obj = Objective(problem, unbounded=True, max_time=120, max_evals=1000)
 
 # JIT warmup (doesn't count against budget)
 _ = obj.value_and_grad(obj.random_params_unbounded())
+
+# Start logging loss and time
 obj.start_logging()
 
 # Your optimization loop, that's it.
 params = obj.random_params_unbounded()
 while not obj.budget_exceeded:
+
     # --- Your Optimization here ---
     loss, grad = obj.value_and_grad(params) # for example
     params = params - 0.1 * grad  # or any update rule
+
     # No need to log losses or params.
 
 print(f"Best loss: {obj.best_loss}")
