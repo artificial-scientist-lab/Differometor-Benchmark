@@ -1,6 +1,6 @@
 # Algorithms
 
-All built-in algorithms subclass `OptimizationAlgorithm` and follow a common contract: they receive a pre-configured `Objective`, run their optimization loop, and return the same `Objective` instance with all results logged.
+All built-in algorithms subclass `OptimizationAlgorithm` and follow a common contract: they receive a pre-configured `Objective`, run their optimization loop, and mutate it in place (logging all results). `optimize()` returns `None` — the caller accesses results from the same `Objective` instance it passed in.
 
 **Import:**
 
@@ -40,11 +40,10 @@ Standard Adam optimizer with gradient clipping.
 
 ```python
 optimizer = AdamGD()
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     learning_rate=0.1,      # Adam learning rate
     patience=1000,           # stop after N iters without improvement
-    max_iterations=None,     # None = use budget from Objective
     random_seed=42,
 )
 ```
@@ -53,7 +52,6 @@ obj = optimizer.optimize(
 |----------------|---------|-------------|
 | `learning_rate` | `0.1` | Learning rate for Adam. |
 | `patience` | `1000` | Early stopping: halt after this many iterations without a new best loss. |
-| `max_iterations` | `None` | Maximum gradient steps. `None` = run until `budget_exceeded`. |
 
 **Implementation detail:** Uses `optax.chain(optax.clip_by_global_norm(1.0), optax.adam(lr))`. The gradient clipping prevents exploding updates in the early phase of optimization.
 
@@ -65,7 +63,7 @@ Based on [arXiv:2107.07558](https://arxiv.org/abs/2107.07558). Combines gradient
 
 ```python
 optimizer = SAGD()
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     learning_rate=0.1,
     patience=1000,
@@ -93,7 +91,7 @@ Adam with decaying Gaussian noise injection for exploration.
 
 ```python
 optimizer = NAAdamGD()
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     learning_rate=0.1,
     patience=1000,
@@ -124,13 +122,12 @@ obj = optimizer.optimize(
 
 L-BFGS optimizer from Optax. Uses second-order curvature information for faster convergence on smooth landscapes.
 
-> **Note:** This algorithm is a thin wrapper around Optax's L-BFGS. Due to L-BFGS's internal line search managing its own evaluation cadence, the integration with `Objective`'s eval counting may behave differently from other gradient methods.
+> **Note:** Because `optax.lbfgs` needs the raw value function for its internal line-search, this algorithm JIT-compiles the full optimization step and uses `obj.log_evaluation()` to record results after each step (instead of calling `obj.value_and_grad()` directly). This makes it a useful reference for implementing other algorithms that require custom JIT-compiled evaluation loops — see `src/dfbench/algorithms/gradient_based/lbfgs_gd.py`.
 
 ```python
 optimizer = LBFGSGD()
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
-    max_iterations=10000,
     patience=500,
     random_seed=42,
 )
@@ -148,7 +145,7 @@ Simplest baseline. Draws uniform random samples within bounds and evaluates them
 
 ```python
 optimizer = RandomSearch(batch_size=100)
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     max_iterations=None,
     random_seed=42,
@@ -169,7 +166,7 @@ Uses the [EvoX](https://github.com/EMI-Group/evox) library's PSO implementations
 
 ```python
 optimizer = EvoxPSO(batch_size=5, variant="CLPSO")
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     pop_size=200,
     n_generations=10000,
@@ -209,7 +206,7 @@ Uses EvoX's evolution strategy implementations. Similar structure to EvoxPSO but
 
 ```python
 optimizer = EvoxES(batch_size=5, variant="CMAES")
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     pop_size=100,
     n_generations=10000,
@@ -246,7 +243,7 @@ Standard Bayesian Optimization using a Gaussian Process surrogate and batch Expe
 
 ```python
 optimizer = BotorchBO()
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     max_iterations=100,      # required
     n_initial=10,            # Sobol samples before fitting GP
@@ -271,7 +268,7 @@ Implements TuRBO-1 from [Eriksson et al. 2019](https://proceedings.neurips.cc/pa
 
 ```python
 optimizer = BotorchTuRBO()
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     max_iterations=100,
     n_initial=20,
@@ -301,7 +298,7 @@ A kNN-surrogate-based algorithm implemented in pure JAX. Uses k-nearest-neighbor
 from dfbench.algorithms.surrogate_based.restir import MyAlgorithm as ReSTIR
 
 optimizer = ReSTIR(batch_size=100)
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     n_initial_samples=1000,
     n_knn_samples=100_000,
@@ -330,7 +327,7 @@ Two-phase approach: (1) train a Variational Autoencoder on high-quality samples 
 
 ```python
 optimizer = VAESampling()
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     max_iterations=50,
     vae_training_samples=1000,

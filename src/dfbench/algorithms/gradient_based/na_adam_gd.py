@@ -146,7 +146,6 @@ class NAAdamGD(OptimizationAlgorithm):
     def optimize(
         self,
         problem_objective: Objective,
-        max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
@@ -160,12 +159,15 @@ class NAAdamGD(OptimizationAlgorithm):
         noise_cap_relative_to_update: float | None = 0.25,
         noise_cap_start_iter: int = 500,
         **adam_kwargs,
-    ) -> Objective:
+    ) -> None:
         """Run the NA-Adam optimization loop using Objective for logging.
+
+        Each iteration performs exactly one ``value_and_grad`` call, so the
+        evaluation budget on the Objective (``max_evals``) directly controls
+        the number of gradient steps.
 
         Args:
             problem_objective: The Objective instance wrapping the problem.
-            max_iterations: Maximum number of gradient steps. If None, runs until budget exceeded.
             init_params: Starting point in unbounded space. If None, initialized
                 via obj.random_params_unbounded(). Defaults to None.
             random_seed: Seed for NumPy and JAX. If None,
@@ -190,9 +192,6 @@ class NAAdamGD(OptimizationAlgorithm):
             noise_cap_start_iter: Iteration at which relative noise capping
                 activates. Defaults to 500.
             **adam_kwargs: Passed to optax.adam().
-
-        Returns:
-            The Objective instance with all logged data.
         """
         obj = problem_objective
         problem = obj.problem
@@ -216,9 +215,6 @@ class NAAdamGD(OptimizationAlgorithm):
 
         iteration = 0
         while not obj.budget_exceeded:
-            if max_iterations is not None and iteration >= max_iterations:
-                break
-                
             progress = iteration / max(1, noise_anneal_iters)
             sigma_t = _anneal_sigma(
                 progress=progress,
@@ -258,5 +254,3 @@ class NAAdamGD(OptimizationAlgorithm):
                 params = params + noise_step
 
             iteration += 1
-
-        return obj

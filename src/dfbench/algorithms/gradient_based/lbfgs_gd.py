@@ -1,16 +1,10 @@
 import jax
 import jax.numpy as jnp
-import jax.random as jr
 import optax
 from jaxtyping import Array, Float
 
 from dfbench.core.objective import Objective
-from dfbench import (
-    AlgorithmType,
-    ContinuousProblem,
-    OptimizationAlgorithm,
-)
-from dfbench.core.utils import inverse_sigmoid_bounding
+from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 
 
 class LBFGSGD(OptimizationAlgorithm):
@@ -19,112 +13,82 @@ class LBFGSGD(OptimizationAlgorithm):
     Implements gradient-based optimization using the L-BFGS optimizer from Optax.
     Includes early stopping based on patience.
 
+    All history tracking, printing, and checkpointing is handled by the
+    `Objective` wrapper. The algorithm loop is minimal.
+
+    Because L-BFGS requires calling ``value_and_grad`` *inside* the
+    JIT-compiled optimizer step (``optax.lbfgs`` needs the value function
+    for its line-search), this algorithm uses ``obj.log_evaluation()``
+    to record results after each JIT step rather than calling
+    ``obj.value_and_grad()`` directly.
+
     Attributes:
-        algorithm_str (str): Identifier string for this algorithm ("lbfgs").
+        algorithm_str (str): Identifier string for this algorithm ("lbfgs_gd").
         algorithm_type (AlgorithmType): Type classification (GRADIENT_BASED).
-        _problem (ContinuousProblem): The optimization problem instance.
 
     Note:
-        This algorithm uses `problem.sigmoid_objective_function` which expects
-        unbounded parameters. The sigmoid bounding is applied internally by the
-        objective function, allowing the optimizer to search in (-∞, +∞) space.
+        This algorithm uses the Objective's unbounded optimization mode which applies
+        sigmoid bounding internally, allowing the optimizer to search in (-∞, +∞) space.
 
     Example:
         >>> problem = VoyagerProblem()
-        >>> optimizer = LBFGS(problem)
-        >>> objective = optimizer.optimize(
-        ...     max_iterations=10000,
-        ...     patience=500,
-        ... )
+        >>> obj = Objective(problem, max_evals=10_000)
+        >>> optimizer = LBFGSGD()
+        >>> obj = optimizer.optimize(obj, random_seed=42, patience=500)
     """
 
     algorithm_str: str = "lbfgs_gd"
     algorithm_type: AlgorithmType = AlgorithmType.GRADIENT_BASED
 
-    def __init__(
-        self,
-        problem: ContinuousProblem,
-    ) -> None:
-        """Initialize L-BFGS optimizer.
-
-        Args:
-            problem (ContinuousProblem): The continuous optimization problem to solve.
-        """
-        self._problem = problem
+    def __init__(self) -> None:
+        """Initialize L-BFGS optimizer."""
+        pass
 
     def optimize(
         self,
-        init_params: Float[Array, "{self._problem.n_params}"] | None = None,
+        problem_objective: Objective,
+        init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
-        max_time: float | None = None,
-        max_iterations: int | None = None,
         patience: int = 1000,
-        verbose: int = 0,
-        print_every: int = 100,
-        plot_loss: bool = False,
-        save_params_history: bool = True,
-        save_run_to_file: bool = False,
         **lbfgs_kwargs,
-    ) -> Objective:
-        """Run L-BFGS using `Objective` for logging.
+    ) -> None:
+        """Run L-BFGS using ``Objective`` for logging.
+
+        The optimization step (value_and_grad + optimizer update) is
+        ``jax.jit``-compiled for performance.  Because the evaluation
+        happens inside the JIT boundary, results are logged *after* each
+        step via ``obj.log_evaluation()``.
+
+        Each iteration performs exactly one evaluation, so the evaluation
+        budget on the Objective (``max_evals``) directly controls the
+        number of L-BFGS steps.
 
         Args:
-            init_params: Initial parameters. If None, random in [lower, upper] bounds
-                of problem.
-            random_seed: Seed for init param generation.
-            max_time: Time budget in seconds. None for iterations-limited only.
-            max_iterations: Max iterations. None for time-limited only.
+            problem_objective: The Objective instance wrapping the problem.
+            init_params: Initial parameters. If None, initialize randomly
+                (using random_seed) in unbounded space.
+            random_seed: Seed for reproducibility. If None, uses system
+                entropy.
             patience: Stop after this many iterations without improvement.
-            verbose: Verbosity level (0=silent, 1+=prints via Objective).
-            print_every: Print summary every N evaluations.
-            plot_loss: If True, call problem.output_to_files for plotting.
-            save_params_history: Whether to save parameter history.
-            save_run_to_file: If True, call obj.save_run_data for checkpointing.
-            **lbfgs_kwargs: Passed to optax.lbfgs().
-
-        Raises:
-            ValueError: If neither `max_iterations` nor `max_time` is specified, or if
-                neither `random_seed` nor `init_params` is provided.
-
-        Returns:
-            The Objective instance with all logged data.
+            **lbfgs_kwargs: Passed to ``optax.lbfgs()``.
         """
-        if max_iterations is None and max_time is None:
-            raise ValueError("Either `max_iterations` or `max_time` must be specified.")
+        obj = problem_objective
+        problem = obj.problem
 
-        if init_params is not None:
-            constrained_params = init_params
-        elif random_seed is not None:
-            constrained_params = jr.uniform(
-                jr.PRNGKey(random_seed),
-                shape=(self._problem.n_params,),
-                minval=self._problem.bounds[0],
-                maxval=self._problem.bounds[1],
-            )
+        random_seed, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
+
+        if init_params is None:
+            params = obj.random_params_unbounded()
         else:
-            raise ValueError("Either `random_seed` or `init_params` must be specified.")
+            params = init_params
 
-        # Map to unconstrained space for L-BFGS
-        unconstrained_params = inverse_sigmoid_bounding(
-            constrained_params, self._problem.bounds
-        )
-
-        obj = Objective(
-            self._problem,
-            unbounded=True,
-            max_time=max_time,
-            max_evals=max_iterations,
-            save_params_history=save_params_history,
-            print_every=print_every,
-            verbose=verbose,
-            algorithm_str=self.algorithm_str,
-        )
+        # Build the JIT-compiled step using the sigmoid objective directly,
+        # since optax.lbfgs needs the raw value function for line-search.
+        value_fn = problem.sigmoid_objective_function
+        value_and_grad_fn = jax.value_and_grad(value_fn)
 
         optimizer = optax.lbfgs(**lbfgs_kwargs)
-        optimizer_state = optimizer.init(unconstrained_params)
-
-        value_fn = self._problem.sigmoid_objective_function
-        value_and_grad_fn = jax.value_and_grad(value_fn)
+        optimizer_state = optimizer.init(params)
 
         @jax.jit
         def _step(params, opt_state):
@@ -140,31 +104,18 @@ class LBFGSGD(OptimizationAlgorithm):
             new_params = optax.apply_updates(params, updates)
             return jnp.asarray(new_params), new_opt_state, loss, grads
 
-        if verbose >= 1:
-            print("Warming up JIT compilation...")
-        _ = _step(unconstrained_params, optimizer_state)  # Warm-up JIT
+        # Warm-up JIT
+        _ = _step(params, optimizer_state)
 
         obj.start_logging()
 
         while not obj.budget_exceeded:
-            prior_unconstrained_params = unconstrained_params
-            unconstrained_params, optimizer_state, loss, grads = _step(
-                unconstrained_params, optimizer_state
-            )
-            obj._log_time()
-            obj._log_evals(
-                prior_unconstrained_params, loss, grads
-            )  # Log params associated with loss
-            obj._log_to_file()
+            prior_params = params
+            params, optimizer_state, loss, grads = _step(params, optimizer_state)
+
+            # Log using the public API (replaces _log_time + _log_evals + _log_to_file)
+            obj.log_evaluation(prior_params, loss, grads)
 
             # Early stopping: patience check using Objective's improvement tracker
             if obj.evals_since_improvement > patience:
                 break
-
-        # Outputs
-        if plot_loss:
-            obj.output_to_files()
-        if save_run_to_file:
-            obj.save_run_data()
-
-        return obj

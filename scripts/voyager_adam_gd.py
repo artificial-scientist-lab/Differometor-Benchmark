@@ -2,18 +2,24 @@
 
 from dfbench.problems import VoyagerProblem
 from dfbench.algorithms import AdamGD
+from dfbench import Objective
 
 # Optimization workflow with Adam
 vp = VoyagerProblem()
-optimizer = AdamGD(vp)
+obj = Objective(
+    vp,
+    max_time=300,
+    verbose=1,
+    max_evals=20000,
+)
+
+optimizer = AdamGD()
+
 
 # Run optimization - returns Objective instance
-obj = optimizer.optimize(
-    max_iterations=2000,
-    verbose=1,
-    plot_loss=True,
-    save_run_to_file=True,
-    print_every=100,
+optimizer.optimize(
+    obj,
+    learning_rate=0.1,
 )
 
 print(f"\nBest loss: {obj.best_loss:.6f}")

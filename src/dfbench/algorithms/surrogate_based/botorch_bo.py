@@ -165,7 +165,7 @@ class BotorchBO(OptimizationAlgorithm):
         n_initial: int = 10,
         batch_size: int = 1,
         **bo_kwargs,
-    ) -> Objective:
+    ) -> None:
         """Run Bayesian Optimization with batch acquisition.
 
         Args:
@@ -179,9 +179,6 @@ class BotorchBO(OptimizationAlgorithm):
                 Defaults to 10.
             batch_size: Number of points to acquire per iteration. Defaults to 1.
             **bo_kwargs: Additional keyword arguments for acquisition optimization.
-
-        Returns:
-            The Objective instance with all logged data.
         """
         obj = problem_objective
         problem = obj.problem
@@ -291,5 +288,3 @@ class BotorchBO(OptimizationAlgorithm):
                 train_Y = torch.cat([train_Y, valid_Y], dim=0)
 
             iteration += 1
-
-        return obj

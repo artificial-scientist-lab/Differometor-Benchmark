@@ -126,7 +126,6 @@ class SAGD(OptimizationAlgorithm):
     def optimize(
         self,
         problem_objective: Objective,
-        max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
@@ -137,15 +136,18 @@ class SAGD(OptimizationAlgorithm):
         use_double_annealing: bool = False,
         lr_decay: float = 1.0,
         **adam_kwargs,
-    ) -> Objective:
+    ) -> None:
         """Run SA-GD (Simulated Annealing Gradient Descent) optimization.
 
         This algorithm combines gradient descent with simulated annealing concepts.
         It probabilistically performs gradient ascent to escape local minima.
 
+        Each iteration performs exactly one ``value_and_grad`` call, so the
+        evaluation budget on the Objective (``max_evals``) directly controls
+        the number of gradient steps.
+
         Args:
             problem_objective: The Objective instance wrapping the problem.
-            max_iterations: Maximum number of gradient steps. If None, runs until budget exceeded.
             init_params: Initial parameters. If None, initialized via
                 obj.random_params_unbounded(). Defaults to None.
             random_seed: Random seed for reproducibility. If None,
@@ -161,9 +163,6 @@ class SAGD(OptimizationAlgorithm):
                 formula designed for exponentially decaying learning rates. Defaults to False.
             lr_decay: Learning rate decay factor per iteration. Defaults to 1.0.
             **adam_kwargs: Additional keyword arguments passed to optax.adam().
-
-        Returns:
-            The Objective instance with all logged data.
         """
         obj = problem_objective
         problem = obj.problem
@@ -192,9 +191,6 @@ class SAGD(OptimizationAlgorithm):
         iteration = 0
 
         while not obj.budget_exceeded:
-            if max_iterations is not None and iteration >= max_iterations:
-                break
-                
             loss, grads = obj.value_and_grad(params)
 
             # Early stopping: patience check
@@ -243,5 +239,3 @@ class SAGD(OptimizationAlgorithm):
             params = optax.apply_updates(params, updates)
             prev_loss = float(loss)
             iteration += 1
-
-        return obj

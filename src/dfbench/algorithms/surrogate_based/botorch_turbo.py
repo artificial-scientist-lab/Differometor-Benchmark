@@ -310,7 +310,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
         acqf: Literal["ts", "ei"] = "ts",
         n_restarts: int = 1,
         **turbo_kwargs,
-    ) -> Objective:
+    ) -> None:
         """Run TuRBO optimization with adaptive trust regions.
 
         Args:
@@ -324,9 +324,6 @@ class BotorchTuRBO(OptimizationAlgorithm):
             acqf: Acquisition function type ("ts" or "ei"). Defaults to "ts".
             n_restarts: Number of TuRBO restarts. Defaults to 1.
             **turbo_kwargs: Additional keyword arguments.
-
-        Returns:
-            The Objective instance with all logged data.
         """
         obj = problem_objective
         problem = obj.problem
@@ -469,5 +466,3 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
             if not should_restart:
                 break
-
-        return obj

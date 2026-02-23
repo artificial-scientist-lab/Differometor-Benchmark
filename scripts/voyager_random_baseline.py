@@ -1,19 +1,27 @@
+"""Estimate random search baseline statistics for the ConstrainedVoyagerProblem."""
+
+import numpy as np
+
+from dfbench import Objective
 from dfbench.algorithms import RandomSearch
 from dfbench.problems import ConstrainedVoyagerProblem
 
-problem = ConstrainedVoyagerProblem()
-algorithm = RandomSearch(problem, batch_size=125)
+n_runs = 20
+n_samples = 1000
+seed_start = 40
 
-# Estimate baseline statistics over multiple runs
-stats = algorithm.estimate_baseline_statistics(
-    n_samples=1000,
-    n_runs=20,
-    seed_start=40,
-)
+best_losses = []
+for run in range(n_runs):
+    problem = ConstrainedVoyagerProblem()
+    obj = Objective(problem, max_evals=n_samples)
+    algorithm = RandomSearch(batch_size=125)
+    algorithm.optimize(problem_objective=obj, random_seed=seed_start + run)
+    best_losses.append(float(obj.best_loss))
 
-print(f"\nRandom baseline over 20 runs (1000 samples each):")
-print(f"Mean: {stats['mean']:.6f}")
-print(f"Std: {stats['std']:.6f}")
-print(f"Min: {stats['min']:.6f}")
-print(f"Max: {stats['max']:.6f}")
-print(f"Median: {stats['median']:.6f}")
+best_losses = np.array(best_losses)
+print(f"\nRandom baseline over {n_runs} runs ({n_samples} samples each):")
+print(f"Mean:   {np.mean(best_losses):.6f}")
+print(f"Std:    {np.std(best_losses):.6f}")
+print(f"Min:    {np.min(best_losses):.6f}")
+print(f"Max:    {np.max(best_losses):.6f}")
+print(f"Median: {np.median(best_losses):.6f}")

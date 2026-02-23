@@ -109,6 +109,8 @@ Algorithms **never** create their own `Objective`; they receive one from the cal
 
 Every call to `obj.value()`, `obj.value_and_grad()`, or any `vmap_*` variant follows this exact pipeline. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
 
+For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.log_evaluation(params, loss, grad)` provides the same pipeline as a public API — it simulates the corresponding call internally. Do not call the private methods directly.
+
 ---
 
 ## Benchmark Orchestration

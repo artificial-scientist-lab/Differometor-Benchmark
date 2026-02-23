@@ -97,7 +97,7 @@ class EvoxPSO(OptimizationAlgorithm):
         pop_size: int = 100,
         n_generations: int = 10000,
         **pso_kwargs,
-    ) -> Objective:
+    ) -> None:
         """Run PSO optimization.
 
         Args:
@@ -109,9 +109,6 @@ class EvoxPSO(OptimizationAlgorithm):
             pop_size: Number of particles in the swarm. Defaults to 100.
             n_generations: Number of generations to run. Defaults to 10000.
             **pso_kwargs: Variant-specific keyword arguments passed to the EvoX algorithm.
-
-        Returns:
-            The Objective instance with all logged data.
         """
         obj = problem_objective
         problem = obj.problem
@@ -200,5 +197,3 @@ class EvoxPSO(OptimizationAlgorithm):
                 break
             workflow.step()
             iteration += 1
-
-        return obj

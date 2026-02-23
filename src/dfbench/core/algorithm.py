@@ -76,22 +76,26 @@ class OptimizationAlgorithm(ABC):
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         **kwargs
-    ) -> Objective:
+    ) -> None:
         """Run the optimization algorithm following the standard blueprint pattern.
 
         Subclasses must override this method and implement their algorithm-specific logic
         in step 6 (main optimization loop).
+
+        The Objective instance is mutated in place — all logged data (losses, params,
+        gradients, timestamps) is recorded directly into it. There is no return value;
+        the caller already holds the reference.
 
         Args:
             problem_objective: Pre-configured Objective instance for function evaluations.
             init_params: Initial parameters. If None, initialized randomly.
             random_seed: Random seed for reproducibility. If None, uses system entropy.
             **kwargs: Algorithm-specific hyperparameters (learning_rate, patience, etc.).
-                Also add max_iterations (!= max_evals. These are algorithm-specific iterations) 
-                or patience here.
-
-        Returns:
-            Objective instance containing complete optimization history.
+                For algorithms where one iteration != one evaluation (population-based,
+                surrogate-based, etc.), add ``max_iterations`` here to cap algorithm
+                iterations independently of the eval budget. For single-eval-per-step
+                algorithms (e.g. Adam, L-BFGS), ``max_iterations`` is redundant with
+                ``max_evals`` on the Objective and should not be added.
         """
         # 1. Setup references
         obj = problem_objective
@@ -136,12 +140,11 @@ class OptimizationAlgorithm(ABC):
             ... # --------- Looped algorithm logic here ---------
             # Loss printing is also done by the Objective. The frequency can be set in its __init__().
 
-        # 7. Return the Objective instance (IMPORTANT -- contains all logged data)
-        # What data is logged is decided by the user intializing the Objective.
-        # Plotting and saving to file can be done afterwards by calling methods on the returned Objective.
+        # 7. Done — the Objective instance now contains all logged data.
+        # What data is logged is decided by the user initializing the Objective.
+        # Plotting and saving to file can be done afterwards by calling methods on the Objective.
         # If automatic file saving was enabled by the user, the data is already saved to file and can be loaded from there as well.
         # Please take a look at the Objective class documentation or docstring for a guide and details.
-        return obj
     
     def prepare(
         self, 

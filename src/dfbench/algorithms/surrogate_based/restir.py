@@ -150,7 +150,7 @@ class ReSTIR(OptimizationAlgorithm):
         temperature: float = 1.0,
         gd_steps: int = 20,
         gd_learning_rate: float = 0.1,
-    ) -> Objective:
+    ) -> None:
         """Run the ReSTIR optimization algorithm.
 
         Uses k-nearest neighbors regression to estimate the loss surface for
@@ -172,8 +172,6 @@ class ReSTIR(OptimizationAlgorithm):
                 more exploration (flatter weights), lower means more exploitation.
             gd_steps: Number of Adam gradient steps to run for each selected GD candidate.
             gd_learning_rate: Learning rate for Optax Adam updates during GD refinement.
-        Returns:
-            The same Objective instance, now containing all optimization history.
         """
         # 1. Setup
         obj = problem_objective
@@ -344,4 +342,3 @@ class ReSTIR(OptimizationAlgorithm):
             
             iteration += 1
             
-        return obj

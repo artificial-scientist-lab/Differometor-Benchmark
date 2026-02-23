@@ -1,21 +1,29 @@
 """Test script for EvoxPSO optimizer."""
 
+from dfbench import Objective
 from dfbench.problems import VoyagerProblem
 from dfbench.algorithms import EvoxPSO
 
-# Optimization workflow with PSO
-vp = VoyagerProblem()
+problem = VoyagerProblem()
 
-optimizer = EvoxPSO(problem=vp, batch_size=50)
+obj = Objective(
+    problem,
+    max_evals=100_000,
+    verbose=1,
+    print_every=500,
+    save_params_history=True,
+)
 
-# Run optimization - returns Objective instance
-obj = optimizer.optimize(
+optimizer = EvoxPSO(batch_size=50, variant="PSO")
+
+optimizer.optimize(
+    problem_objective=obj,
     max_iterations=2000,
     pop_size=50,
-    verbose=1,
-    save_run_to_file=True,
-    print_every=100,
+    random_seed=42,
 )
 
 print(f"\nBest loss: {obj.best_loss:.6f}")
 print(f"Total evaluations: {obj.eval_count}")
+
+obj.save_run_data(optimizer.algorithm_str, hyper_param_str="standard")

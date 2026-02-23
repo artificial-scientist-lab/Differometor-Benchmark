@@ -290,6 +290,8 @@ Every evaluation method follows the same pipeline internally:
 3. **`_log_evals(params, loss, grad)`** — record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget.
 4. **`_log_to_file()`** — if `save_to_file_every` is set, trigger a periodic checkpoint.
 
+> **Important:** These are private methods — do not call `_log_time()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad)` method instead, which wraps all three. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm.md#custom-jit-compiled-loops-with-log_evaluation) for details.
+
 Budget enforcement happens *after* the evaluation returns. This means the algorithm always receives a valid result, but once any budget is exceeded the history stops growing and `budget_exceeded` becomes `True`.
 
 When a batch evaluation (`vmap_*`) would push `eval_count` past `max_evals`, the evaluations are counted but *not logged*, preserving history alignment and setting the `budget_exceeded` flag to `True`. The `time_steps` entry added by `_log_time()` is also removed to keep all lists in sync. This may be subject to change but in the current setting, this is the most straight-forward way and irrelevant if budged is planned well (reducing population as `evals_left` nears zero).

@@ -19,11 +19,10 @@ obj = Objective(
 # Create optimizer
 optimizer = LBFGSGD()
 
-# Run optimization - returns Objective instance
-obj = optimizer.optimize(
+# Run optimization
+optimizer.optimize(
     obj,
     random_seed=42,
-    max_iterations=2000,
 )
 
 print(f"\nBest loss: {obj.best_loss:.6f}")

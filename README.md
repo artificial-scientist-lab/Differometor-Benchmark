@@ -168,9 +168,9 @@ problem = VoyagerProblem()
 # The caller creates the Objective with budget and tracking settings
 obj = Objective(problem, max_time=120, max_evals=50000, verbose=1)
 
-# The algorithm receives the Objective and returns it with all logged data
+# The algorithm receives the Objective and mutates it in place
 optimizer = AdamGD()
-obj = optimizer.optimize(
+optimizer.optimize(
     problem_objective=obj,
     learning_rate=0.1,
     patience=1000,
@@ -230,9 +230,9 @@ The interface is designed to make this as simple as possible. You write the opti
 
 1. Subclass `OptimizationAlgorithm`
 2. Declare `algorithm_str` and `algorithm_type`
-3. Implement `optimize(problem_objective, ...) → Objective`
+3. Implement `optimize(problem_objective, ...) → None`
 4. Use `Objective` for all function evaluations
-5. Return the `Objective` when done
+5. The `Objective` is mutated in place — no return needed
 
 Please create a branch called `algorithm/my-algo` for the pull request.
 
@@ -267,7 +267,7 @@ class MyAlgorithm(OptimizationAlgorithm):
         random_seed: int | None = None,
         patience: int = 1000,
         **kwargs,
-    ) -> Objective:
+    ) -> None:
         # 1. Setup + seed all RNGs
         obj = problem_objective
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -300,8 +300,7 @@ class MyAlgorithm(OptimizationAlgorithm):
                 break
             iteration += 1
 
-        # 7. Return the Objective (contains all logged data)
-        return obj
+        # 7. Done — Objective is mutated in place
 ```
 
 ### Key Points

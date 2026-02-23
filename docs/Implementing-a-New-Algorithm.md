@@ -10,10 +10,9 @@ Every algorithm must:
 
 1. **Subclass** `OptimizationAlgorithm`
 2. **Declare** `algorithm_str` and `algorithm_type`
-3. **Implement** `optimize(problem_objective, …) → Objective`
+3. **Implement** `optimize(problem_objective, …) → None`
 4. **Use `Objective`** for all function evaluations
     - *Unless* you use your own JIT-compiled loop — then manually log calls via `Objective.log_evaluation(...)` afterwards. This adds negligible overhead relative to the objective function.
-5. **Return** the `Objective` instance when done
 
 That's it. No manual timing, history management or file I/O necessary.
 
@@ -77,19 +76,19 @@ class MyAlgorithm(OptimizationAlgorithm):
         my_hyperparam: float = 1.0,
         patience: int = 1000,
         **kwargs,
-    ) -> Objective:
+    ) -> None:
         """Run the optimization.
         
         Args:
             problem_objective: Pre-configured Objective instance.
             max_iterations: Max algorithm iterations (not evals). None = budget only.
+                For algorithms where each iteration performs exactly one evaluation
+                (e.g. gradient-based methods), omit this parameter —
+                `obj.budget_exceeded` already handles it.
             init_params: Optional starting point.
             random_seed: Seed for reproducibility.
             my_hyperparam: Description of your hyperparameter.
             patience: Stop after N iterations without improvement.
-        
-        Returns:
-            The same Objective instance, now containing all logged data.
         """
         # ─── 1. Setup references ───
         obj = problem_objective
@@ -132,8 +131,9 @@ class MyAlgorithm(OptimizationAlgorithm):
 
             iteration += 1
 
-        # ─── 7. Return the Objective ───
-        return obj
+        # ─── 7. Done ───
+        # The Objective is mutated in place. The caller accesses results
+        # from the same instance it passed in. No return needed.
 ```
 
 ---
@@ -229,13 +229,9 @@ while not obj.budget_exceeded:
 
 `budget_exceeded` returns `True` when either the time or evaluation budget is exhausted. Once exceeded, further evaluations still work (JAX functions still run) but their results are **not logged**.
 
-### 7. Return
+### 7. Done
 
-```python
-return obj
-```
-
-The `Objective` now contains the complete optimization history. The caller (benchmark harness or user script) extracts results from it.
+`optimize()` returns `None`. The `Objective` was mutated in place — the caller (benchmark harness or user script) accesses results from the same instance it passed in. This follows the Python convention that in-place mutating methods return `None` (like `list.sort()`).
 
 ---
 
@@ -251,6 +247,39 @@ The `Objective` now contains the complete optimization history. The caller (benc
 | `obj.log_evaluation(…)` | Custom JIT'd loop | whatever you pass |
 
 **Important:** `obj.grad()` does **not** log a loss value. If you need both, use `obj.value_and_grad()`.
+
+### Custom JIT-compiled loops with `log_evaluation()`
+
+Some optimizers (e.g. Optax's L-BFGS) need to call `value_and_grad` *inside* a JIT-compiled function — for instance because the optimizer's line-search requires the raw value function. In that case you can't use `obj.value_and_grad()` (which has Python-side logging). Instead:
+
+1. Get the raw function from `obj.problem` (e.g. `problem.sigmoid_objective_function`)
+2. Build your own JIT-compiled step
+3. After each step, call `obj.log_evaluation(params, loss, grad)` to record the results
+
+```python
+# Get the raw function for JIT compilation
+value_fn = problem.sigmoid_objective_function
+value_and_grad_fn = jax.value_and_grad(value_fn)
+
+@jax.jit
+def _step(params, opt_state):
+    loss, grads = value_and_grad_fn(params)
+    updates, new_state = optimizer.update(grads, opt_state, params, ...)
+    new_params = optax.apply_updates(params, updates)
+    return new_params, new_state, loss, grads
+
+_ = _step(params, state)   # JIT warmup
+obj.start_logging()
+
+while not obj.budget_exceeded:
+    prior_params = params
+    params, state, loss, grads = _step(params, state)
+    obj.log_evaluation(prior_params, loss, grads)  # public API for manual logging
+```
+
+> **Do NOT call** `obj._log_time()`, `obj._log_evals()`, or `obj._log_to_file()` directly — these are private methods. `log_evaluation()` wraps all three.
+
+See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/lbfgs_gd.py` for a complete working example.
 
 ---
 
@@ -328,7 +357,7 @@ params = optax.apply_updates(params, updates)
 - [ ] `algorithm_str` is set to a unique identifier
 - [ ] `algorithm_type` is set correctly
 - [ ] `optimize()` accepts `problem_objective: Objective` as first arg
-- [ ] `optimize()` returns the `Objective` instance
+- [ ] `optimize()` returns `None` (the `Objective` is mutated in place)
 - [ ] All evaluations go through `Objective` (no direct `problem.objective_function()` calls)
 - [ ] JIT warmup happens before `obj.start_logging()`
 - [ ] `random_seed` is accepted, set, and printed

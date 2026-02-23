@@ -205,7 +205,7 @@ class VAESampling(OptimizationAlgorithm):
         n_initial: int = 20,
         acqf_raw_samples: int = 512,
         acqf_num_restarts: int = 4,
-    ) -> Objective:
+    ) -> None:
         """Run VAE training followed by Bayesian Optimization in latent space.
 
         Args:
@@ -226,9 +226,6 @@ class VAESampling(OptimizationAlgorithm):
             n_initial: Number of initial Sobol samples for BO phase.
             acqf_raw_samples: Number of raw samples for acquisition optimization.
             acqf_num_restarts: Number of restarts for acquisition optimization.
-
-        Returns:
-            The Objective instance with all logged data.
         """
         obj = problem_objective
         problem = obj.problem
@@ -334,7 +331,7 @@ class VAESampling(OptimizationAlgorithm):
         train_y_torch = train_y_torch[valid_mask]
 
         if len(train_y_torch) == 0:
-            return obj
+            return
 
         # Acquisition optimization options
         acqf_options = {
@@ -393,5 +390,3 @@ class VAESampling(OptimizationAlgorithm):
             # Update training data
             train_z_norm = torch.cat([train_z_norm, candidates_norm], dim=0)
             train_y_torch = torch.cat([train_y_torch, candidates_y], dim=0)
-
-        return obj

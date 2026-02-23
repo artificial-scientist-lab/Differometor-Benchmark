@@ -36,26 +36,25 @@ class AdamGD(OptimizationAlgorithm):
     def optimize(
         self,
         problem_objective: Objective,
-        max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
         patience: int = 1000,
         **adam_kwargs,
-    ) -> Objective:
+    ) -> None:
         """Run Adam using `Objective` for logging.
+
+        Each iteration performs exactly one ``value_and_grad`` call, so the
+        evaluation budget on the Objective (``max_evals``) directly controls
+        the number of gradient steps.
 
         Args:
             problem_objective: The Objective instance wrapping the problem.
-            max_iterations: Maximum number of gradient steps. If None, runs until budget exceeded.
             init_params: Initial parameters. If None, initialize randomly (using random_seed).
             random_seed: Seed for init param generation.
             learning_rate: Adam learning rate.
             patience: Stop after this many iterations without improvement.
             **adam_kwargs: Passed to optax.adam().
-
-        Returns:
-            The Objective instance with all logged data.
         """
         obj = problem_objective
         problem = obj.problem
@@ -77,11 +76,7 @@ class AdamGD(OptimizationAlgorithm):
 
         obj.start_logging()
 
-        iteration = 0
         while not obj.budget_exceeded:
-            if max_iterations is not None and iteration >= max_iterations:
-                break
-
             loss, grads = obj.value_and_grad(params)  # Use value_and_grad, else the loss is not logged!
 
             # Early stopping: patience check using Objective's improvement tracker
@@ -90,6 +85,3 @@ class AdamGD(OptimizationAlgorithm):
 
             updates, optimizer_state = optimizer.update(grads, optimizer_state, params)
             params = optax.apply_updates(params, updates)
-            iteration += 1
-
-        return obj

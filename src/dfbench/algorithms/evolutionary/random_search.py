@@ -55,16 +55,13 @@ class RandomSearch(OptimizationAlgorithm):
         problem_objective: Objective,
         max_iterations: int | None = None,
         random_seed: int | None = None,
-    ) -> Objective:
+    ) -> None:
         """Run Random Search optimization.
 
         Args:
             problem_objective: The Objective instance wrapping the problem.
             max_iterations: Maximum number of batches to evaluate. If None, runs until budget exceeded.
             random_seed (int | None): Random seed for reproducibility. Defaults to None.
-
-        Returns:
-            The Objective instance with all logged data.
         """
         obj = problem_objective
         problem = obj.problem
@@ -97,5 +94,3 @@ class RandomSearch(OptimizationAlgorithm):
             losses = obj.vmap_value(random_params)
             
             iteration += 1
-
-        return obj
