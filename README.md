@@ -17,7 +17,7 @@ If you have ANY questions, don't hesitate to ask me via Slack (Laurin Sefa) or a
 
 ## TL;DR (I want to try my own algorithm)
 
-This is how to create a script that tests your algorithm logic on a problem (not create an algorithm class).
+This is how to create a raw script that tests your algorithm logic on a problem. Adding an algorithm as a class to the codebase is really not harder than this which would result in easier hyperparam testing (through short scripts you could then create) and the ability to add it to the benchmarking tool. But start from a script like that as you can copy that logic into the class later on.
 
 All you need is the `Objective` wrapper. It handles evaluation tracking, budget enforcement, and history logging, you just write the optimization logic.
 
