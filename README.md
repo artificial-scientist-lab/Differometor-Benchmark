@@ -6,10 +6,10 @@ A benchmarking framework for optimization algorithms on gravitational-wave detec
 
 ---
 
-## Please READ
+## Please Read
 I want to keep the process of implementing an algorithm as intuitive as possible. Questions (and ideas) help me figure out where unclarities come up.
 
-If you have ANY questions, don't hesitate to ask me via Slack (Laurin Sefa) or an Issue!
+If you have *any* questions, don't hesitate to ask me via Slack (Laurin Sefa) or an Issue!
 
 
 
@@ -113,7 +113,7 @@ See [Installation](docs/Installation.md) for GPU setup details and HPC notes.
 
 ---
 
-## Architecture Overview
+## Architecture
 
 ```
 OptimizationAlgorithm.optimize()
@@ -130,7 +130,7 @@ OptimizationAlgorithm.optimize()
   Differometor Simulator   (JAX-based interferometer physics)
 ```
 
-**Design Idea:** Algorithms never create their own `Objective` — they receive a pre-configured one. This lets the benchmark harness (or user script) control budgets, seeds, and history settings uniformly. The algorithm only has to implement its optimization logic.
+**Design Idea:** Algorithms never create their own `Objective`, they receive a pre-configured one. This lets the benchmark harness (or user script) control budgets, seeds, and history settings uniformly. The algorithm only has to implement its optimization logic.
 
 See [Architecture Overview](docs/Architecture-Overview.md) for full design details.
 
@@ -219,8 +219,8 @@ results = benchmark.run(save_csv=True, save_run_data=True)
 benchmark.print_summary(results)
 ```
 
-- `save_csv` — Writes a CSV with all metrics computed at evenly-spaced time points.
-- `save_run_data` — Persists raw loss/params/time histories to NPZ files for later re-evaluation.
+- `save_csv`: Writes a CSV with all metrics computed at evenly-spaced time points.
+- `save_run_data`: Persists raw loss/params/time histories to NPZ files for later re-evaluation.
 
 See [Benchmarking](docs/Benchmarking.md) for full configuration options and [Metrics Reference](docs/Metrics-Reference.md) for what gets computed.
 
@@ -238,7 +238,7 @@ The interface is designed to make this as simple as possible. You write the opti
 2. Declare `algorithm_str` and `algorithm_type`
 3. Implement `optimize(problem_objective, ...) → None`
 4. Use `Objective` for all function evaluations
-5. The `Objective` is mutated in place — no return needed
+5. The `Objective` is mutated in place, thereby no return is needed
 
 Please create a branch called `algorithm/my-algo` for the pull request.
 
@@ -285,7 +285,7 @@ class MyAlgorithm(OptimizationAlgorithm):
         else:
             params = init_params
 
-        # 4. JIT warmup (before start_logging — compilation time is free)
+        # 4. JIT warmup (before start_logging, compilation time is free)
         _ = obj.vmap_value(params)
 
         # 5. Start the clock
@@ -306,17 +306,17 @@ class MyAlgorithm(OptimizationAlgorithm):
                 break
             iteration += 1
 
-        # 7. Done — Objective is mutated in place
+        # 7. Done, Objective is mutated in place
 ```
 
 ### Key Points
 
-- **`__init__` takes only algorithm meta-parameters** (batch size, network architecture, etc.) — not the problem, not the budget.
-- **`optimize()` receives a pre-configured `Objective`** — the algorithm does not create it.
+- **`__init__` takes only algorithm meta-parameters** (batch size, network architecture, etc.), not the problem, not the budget.
+- **`optimize()` receives a pre-configured `Objective`**, the algorithm does not create it.
 - **`prepare()`** configures `unbounded`, `algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. For PyTorch-based algorithms, call `torch.manual_seed(random_seed)` afterwards.
 - **Choose `unbounded`:** Set to `True` if your algorithm benefits from smooth unconstrained space (via sigmoid transform). Most evolutionary and surrogate methods use `False` (bounded space).
-- **JIT warmup before `start_logging()`** — compilation time doesn't count against the budget.
-- **`budget_exceeded`** checks both time and eval limits — use it as your loop condition.
+- **JIT warmup before `start_logging()`**, compilation time doesn't count against the budget.
+- **`budget_exceeded`** checks both time and eval limits, please use it as your loop condition.
 
 ### Evaluation Methods
 
@@ -324,7 +324,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 |--------|-------------|------------------|
 | `obj.value(params)` | Loss only | loss, params |
 | `obj.value_and_grad(params)` | Gradient-based optimization | loss, grad, params |
-| `obj.grad(params)` | Gradient only (rare) | grad, params — **no loss** |
+| `obj.grad(params)` | Gradient only (rare) | grad, params, **no loss** |
 | `obj.vmap_value(batch)` | Population evaluation | batch losses, batch params |
 | `obj.vmap_value_and_grad(batch)` | Batched gradient methods | batch losses, grads, params |
 | `obj.log_evaluation(...)` | Custom JIT'd loop | whatever you pass |
@@ -383,14 +383,14 @@ See [Algorithms](docs/Algorithms.md) for hyperparameter details and usage exampl
 ## Examples
 
 Execution scripts in `./scripts/`:
-- `voyager_adam_gd.py` — single-algorithm run
-- `voyager_benchmark.py` — full benchmark with multiple algorithms
+- `voyager_adam_gd.py`: single-algorithm run
+- `voyager_benchmark.py`: full benchmark with multiple algorithms
 
 Reference implementations worth reading:
-- `adam_gd.py` — gradient-based pattern
-- `random_search.py` — simplest batched example
-- `evox_es.py` — wrapping an external library (EvoX/PyTorch)
-- `botorch_bo.py` — surrogate-based with BoTorch
+- `adam_gd.py`: gradient-based pattern
+- `random_search.py`: simplest batched example
+- `evox_es.py`: wrapping an external library (EvoX/PyTorch)
+- `botorch_bo.py`: surrogate-based with BoTorch
 
 ---
 
