@@ -21,3 +21,4 @@ temp/
 *.slurm
 results/
 notebooks/
+.env
