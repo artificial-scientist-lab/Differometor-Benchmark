@@ -236,8 +236,8 @@ class Objective:
         self._save_to_file_every = save_to_file_every
         self._display_mode = display_mode
 
+        self._bounds = problem.bounds
         if not self.unbounded:
-            self._bounds = problem.bounds
             self._func = problem.objective_function
             self._grad_func = jax.grad(problem.objective_function)
             self._value_and_grad_func = jax.value_and_grad(problem.objective_function)
@@ -247,9 +247,6 @@ class Objective:
                 jax.value_and_grad(problem.objective_function)
             )
         else:
-            self._bounds = jnp.array(
-                [[-jnp.inf] * problem.n_params, [jnp.inf] * problem.n_params]
-            )
             # Assume unbounded optimization is always done with sigmoid bounding
             self._func = problem.sigmoid_objective_function
             self._vmap_func = jax.vmap(problem.sigmoid_objective_function)

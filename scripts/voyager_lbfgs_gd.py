@@ -10,6 +10,7 @@ problem = VoyagerProblem()
 # Create Objective wrapper with configuration
 obj = Objective(
     problem,
+    unbounded=True,
     max_evals=10_000,
     verbose=1,
     print_every=100,
