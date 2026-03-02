@@ -65,7 +65,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
         # specify the ranges for the properties to be optimized
         property_bounds = {
             "reflectivity": [0, 1],
-            "tuning": [0, 90],
+            "tuning": [-180, 180],
             "db": [0.01, 20],
             "angle": [-180, 180],
             "power": [0.01, 200],
