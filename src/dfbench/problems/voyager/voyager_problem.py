@@ -24,12 +24,16 @@ class VoyagerProblem(OpticalSetupProblem):
     def __init__(
         self,
         n_frequencies: int = 100,
+        bounds_overrides: dict[str, tuple[float, float]] | None = None,
     ):
         """Initialize the Voyager optimization problem.
 
         Args:
             n_frequencies (int): Number of frequency points for sensitivity calculation.
                 Defaults to 100.
+            bounds_overrides: Optional property-level bound overrides.
+                Example: {"tuning": (0, 45)}.
+                Overrides must narrow default bounds.
         """
         super().__init__(name="voyager", n_frequencies=n_frequencies)
 
@@ -66,6 +70,10 @@ class VoyagerProblem(OpticalSetupProblem):
             "length": [1, 4000],
             "phase": [-180, 180],
         }
+        property_bounds = self._apply_property_bounds_overrides(
+            property_bounds,
+            bounds_overrides,
+        )
 
         # select properties to be optimized
         optimized_properties = [

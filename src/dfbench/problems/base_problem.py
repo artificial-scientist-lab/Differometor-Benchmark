@@ -4,7 +4,7 @@ import json
 import os
 from abc import abstractmethod
 from datetime import datetime
-from typing import Callable
+from typing import Callable, Mapping
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
@@ -89,6 +89,91 @@ class OpticalSetupProblem(ContinuousProblem):
         losses = jnp.mean(jnp.log10(sensitivities.T / reference_sensitivities), axis=-1)
         penalties = jnp.sum(violations.T, axis=-1)
         return losses, penalties, violations
+
+    def _apply_property_bounds_overrides(
+        self,
+        property_bounds: dict[str, list[float]],
+        bounds_overrides: Mapping[str, tuple[float, float]] | None = None,
+        allow_widen: bool = False,
+    ) -> dict[str, list[float]]:
+        """Return property bounds with optional user overrides applied.
+
+        Args:
+            property_bounds: Default bounds by property name.
+            bounds_overrides: Optional bounds overrides by property name.
+            allow_widen: If False (default), overrides may only narrow
+                existing bounds.
+        """
+        merged_bounds = {
+            property_name: [float(bounds[0]), float(bounds[1])]
+            for property_name, bounds in property_bounds.items()
+        }
+
+        if not bounds_overrides:
+            return merged_bounds
+
+        for property_name, override in bounds_overrides.items():
+            if property_name not in merged_bounds:
+                valid_properties = ", ".join(sorted(merged_bounds.keys()))
+                raise ValueError(
+                    f"Unknown property in bounds_overrides: '{property_name}'. "
+                    f"Valid properties: {valid_properties}"
+                )
+
+            if len(override) != 2:
+                raise ValueError(
+                    f"Override for '{property_name}' must be a tuple/list of "
+                    "(lower, upper)."
+                )
+
+            lower = float(override[0])
+            upper = float(override[1])
+            if lower >= upper:
+                raise ValueError(
+                    f"Invalid override for '{property_name}': lower ({lower}) "
+                    f"must be < upper ({upper})."
+                )
+
+            default_lower, default_upper = merged_bounds[property_name]
+            if not allow_widen and (
+                lower < default_lower or upper > default_upper
+            ):
+                raise ValueError(
+                    f"Override for '{property_name}' must narrow within "
+                    f"[{default_lower}, {default_upper}], got [{lower}, {upper}]."
+                )
+
+            merged_bounds[property_name] = [lower, upper]
+
+        return merged_bounds
+
+    @staticmethod
+    def _property_name_from_optimization_pair(optimization_pair) -> str:
+        """Extract property name from standard or coupled optimization-pair formats."""
+        if isinstance(optimization_pair[0], list):
+            return optimization_pair[0][1]
+        return optimization_pair[1]
+
+    @staticmethod
+    def _optimization_pair_label(optimization_pair) -> str:
+        """Create a readable label for an optimization pair for display."""
+        if isinstance(optimization_pair[0], list):
+            first_component = optimization_pair[0][0]
+            property_name = optimization_pair[0][1]
+            n_coupled = len(optimization_pair)
+            return f"{first_component} (coupled x{n_coupled}) :: {property_name}"
+
+        component_name, property_name = optimization_pair
+        return f"{component_name} :: {property_name}"
+
+    def print_bounds(self) -> None:
+        """Print all active parameter bounds in a human-readable list."""
+        print(f"\nBounds for problem '{self.name}':")
+        for index, optimization_pair in enumerate(self.optimization_pairs):
+            label = self._optimization_pair_label(optimization_pair)
+            lower = float(self.bounds[0, index])
+            upper = float(self.bounds[1, index])
+            print(f"  [{index:03d}] {label:<45} [{lower:.6g}, {upper:.6g}]")
 
     @property
     def name(self) -> str:

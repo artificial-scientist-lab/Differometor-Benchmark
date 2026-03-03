@@ -31,6 +31,7 @@ class RandomUIFOProblem(OpticalSetupProblem):
         n_frequencies: int = 100,
         topology_seed: int = 42,
         power_penalty_fn=None,
+        bounds_overrides: dict[str, tuple[float, float]] | None = None,
     ):
         """Initialize the random UIFO optimization problem.
 
@@ -43,6 +44,9 @@ class RandomUIFOProblem(OpticalSetupProblem):
                 options are ``squashed_relu_penalty`` (default),
                 ``relu_penalty``, and ``zero_penalty`` from
                 ``dfbench.problems.base_problem``.
+            bounds_overrides: Optional property-level bound overrides.
+                Example: {"tuning": (0, 45)}.
+                Overrides must narrow default bounds.
         """
         super().__init__(
             name=f"uifo_{size}x{size}_seed{topology_seed}", n_frequencies=n_frequencies
@@ -132,6 +136,10 @@ class RandomUIFOProblem(OpticalSetupProblem):
             "length": [0.1, 4000],
             "reflectivity": [0, 1],
         }
+        property_bounds = self._apply_property_bounds_overrides(
+            property_bounds,
+            bounds_overrides,
+        )
 
         # couple vertical and horizontal spaces at same positions, so that the grid structure of the uifo is always preserved
         self._optimization_pairs = constrain_inter_grid_cell_spaces(
@@ -142,10 +150,7 @@ class RandomUIFOProblem(OpticalSetupProblem):
         lower_bounds = []
         upper_bounds = []
         for optimization_pair in self._optimization_pairs:
-            if isinstance(optimization_pair[0], list):
-                property_name = optimization_pair[0][1]
-            else:
-                property_name = optimization_pair[1]
+            property_name = self._property_name_from_optimization_pair(optimization_pair)
             lower_bounds.append(property_bounds[property_name][0])
             upper_bounds.append(property_bounds[property_name][1])
         self._bounds = np.array([lower_bounds, upper_bounds])

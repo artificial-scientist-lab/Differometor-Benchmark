@@ -87,6 +87,8 @@ This adds negligible overhead compared to the objective function itself.
 
 Both constrained problems accept a `power_penalty_fn(value, threshold)` callable to control how power-constraint violations are penalized.  Built-in presets: `squashed_relu_penalty` (default), `relu_penalty`, `zero_penalty`. Feel free to try own ones.
 
+All problems also support `bounds_overrides` (e.g. `{"tuning": (0, 45)}`) to narrow default property bounds, and expose `problem.print_bounds()` to inspect effective bounds.
+
 See [Problems](docs/Problems.md) for details on loss computation, parameter meanings, and constraints.
 
 ---

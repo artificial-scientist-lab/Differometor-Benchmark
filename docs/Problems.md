@@ -43,6 +43,8 @@ Extends `ContinuousProblem` with optics-specific functionality shared by all Dif
 - **Target sensitivity:** Stored in `_target_sensitivities`, computed from the reference detector design at initialization.
 - **`calculate_sensitivity(params)`:** Computes the sensitivity curve for a given parameter vector — used for plotting, not optimization.
 - **`output_to_files(…)`:** Writes JSON parameter/loss files and PNG plots (loss curve + sensitivity curve vs. target).
+- **`bounds_overrides`:** All concrete problems accept optional property-level bound overrides (narrowing only).
+- **`print_bounds()`:** Prints the effective per-parameter bounds currently used by the problem.
 
 ---
 
@@ -60,6 +62,14 @@ Extends `ContinuousProblem` with optics-specific functionality shared by all Dif
 
 ```python
 problem = VoyagerProblem(n_frequencies=100)
+```
+
+```python
+problem = VoyagerProblem(
+   n_frequencies=100,
+   bounds_overrides={"tuning": (0, 45)},
+)
+problem.print_bounds()
 ```
 
 #### How the loss works
