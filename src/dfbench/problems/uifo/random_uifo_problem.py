@@ -6,12 +6,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
-
-from differometor.components import (
-    HARD_SIDE_POWER_THRESHOLD,
-    SOFT_SIDE_POWER_THRESHOLD,
-    DETECTOR_POWER_THRESHOLD,
-)
 from differometor.setups import uifo, constrain_inter_grid_cell_spaces
 from differometor.simulate import run_setups, simulate, run_build_step
 from differometor.utils import (
@@ -36,6 +30,7 @@ class RandomUIFOProblem(OpticalSetupProblem):
         size: int = 3,
         n_frequencies: int = 100,
         topology_seed: int = 42,
+        power_penalty_fn=None,
     ):
         """Initialize the random UIFO optimization problem.
 
@@ -43,10 +38,17 @@ class RandomUIFOProblem(OpticalSetupProblem):
             size: Grid size (e.g., 3 for 3x3, 5 for 5x5). Defaults to 3.
             n_frequencies: Number of frequency points. Defaults to 100.
             topology_seed: Seed for random topology generation. Defaults to 42.
+            power_penalty_fn: A callable ``fn(value, threshold) -> penalty`` applied
+                per-element to compute power-constraint violations.  Built-in
+                options are ``squashed_relu_penalty`` (default),
+                ``relu_penalty``, and ``zero_penalty`` from
+                ``dfbench.problems.base_problem``.
         """
         super().__init__(
             name=f"uifo_{size}x{size}_seed{topology_seed}", n_frequencies=n_frequencies
         )
+        if power_penalty_fn is not None:
+            self._power_penalty_fn = power_penalty_fn
         self._size = size
         self._topology_seed = topology_seed
 
@@ -203,7 +205,6 @@ class RandomUIFOProblem(OpticalSetupProblem):
             sensitivity_loss, penalty, _ = self._calculate_loss(
                 sensitivities, self._target_sensitivities, powers
             )
-            penalty = penalty / (1.0 + penalty)
 
             return sensitivity_loss + penalty
 
@@ -237,33 +238,11 @@ class RandomUIFOProblem(OpticalSetupProblem):
             sensitivity_loss, penalty, _ = self._calculate_loss(
                 sensitivities, self._target_sensitivities, powers
             )
-            penalty = penalty / (1.0 + penalty)
 
             return sensitivity_loss + penalty
 
         self.sigmoid_objective_function = sigmoid_objective_function
         self.objective_function = objective_function
-
-    def _calculate_loss(self, sensitivities, reference_sensitivities, powers):
-        """Calculate loss and penalties from sensitivities and power constraints."""
-        hard_side_violations = jnp.maximum(
-            powers[0] / HARD_SIDE_POWER_THRESHOLD - 1, 0
-        ).squeeze(1)
-        soft_side_violations = jnp.maximum(
-            powers[1] / SOFT_SIDE_POWER_THRESHOLD - 1, 0
-        ).squeeze(1)
-        detector_violations = jnp.maximum(
-            powers[2] / DETECTOR_POWER_THRESHOLD - 1, 0
-        ).squeeze(1)
-
-        violations = jnp.concatenate(
-            [hard_side_violations, detector_violations, soft_side_violations], axis=0
-        )
-
-        losses = jnp.mean(jnp.log10(sensitivities.T / reference_sensitivities), axis=-1)
-        penalties = jnp.sum(violations.T, axis=-1)
-
-        return losses, penalties, violations
 
     @property
     def optimization_pairs(self) -> list[tuple]:
@@ -293,6 +272,7 @@ class RandomUIFOProblem(OpticalSetupProblem):
             "topology_seed": self._topology_seed,
             "n_params": self.n_params,
             "homodyne": self._homodyne,
+            "power_penalty_fn": getattr(self._power_penalty_fn, "__name__", str(self._power_penalty_fn)),
         }
 
     def calculate_sensitivity(

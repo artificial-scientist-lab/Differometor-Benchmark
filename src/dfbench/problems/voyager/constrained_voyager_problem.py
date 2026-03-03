@@ -4,12 +4,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
-
-from differometor.components import (
-    HARD_SIDE_POWER_THRESHOLD,
-    SOFT_SIDE_POWER_THRESHOLD,
-    DETECTOR_POWER_THRESHOLD,
-)
 from differometor.setups import voyager
 from differometor.simulate import run_setups, simulate, run_build_step
 from differometor.utils import (
@@ -33,14 +27,22 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
     def __init__(
         self,
         n_frequencies: int = 100,
+        power_penalty_fn=None,
     ):
         """Initialize the Constrained Voyager optimization problem.
 
         Args:
             n_frequencies (int): Number of frequency points for sensitivity calculation.
                 Defaults to 100.
+            power_penalty_fn: A callable ``fn(value, threshold) -> penalty`` applied
+                per-element to compute power-constraint violations.  Built-in
+                options are ``squashed_relu_penalty`` (default),
+                ``relu_penalty``, and ``zero_penalty`` from
+                ``dfbench.problems.base_problem``.
         """
         super().__init__(name="voyager_constrained", n_frequencies=n_frequencies)
+        if power_penalty_fn is not None:
+            self._power_penalty_fn = power_penalty_fn
 
         ### Calculate the target sensitivity ###
         # --------------------------------------#
@@ -154,7 +156,6 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             sensitivity_loss, penalty, _ = self._calculate_loss(
                 sensitivities, self._target_sensitivities, powers
             )
-            penalty = penalty / (1.0 + penalty)
 
             return sensitivity_loss + penalty
 
@@ -188,39 +189,11 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             sensitivity_loss, penalty, _ = self._calculate_loss(
                 sensitivities, self._target_sensitivities, powers
             )
-            penalty = penalty / (1.0 + penalty)
 
             return sensitivity_loss + penalty
 
         self.sigmoid_objective_function = sigmoid_objective_function
         self.objective_function = objective_function
-
-    def _calculate_loss(
-        self,
-        sensitivities,
-        reference_sensitivities,
-        powers,
-    ):
-        """Calculate loss and penalties from sensitivities and power constraints."""
-        # calculate power violations (i.e. penalty based on much the power at each component exceeds its threshold)
-        hard_side_violations = jnp.maximum(
-            powers[0] / HARD_SIDE_POWER_THRESHOLD - 1, 0
-        ).squeeze(1)
-        soft_side_violations = jnp.maximum(
-            powers[1] / SOFT_SIDE_POWER_THRESHOLD - 1, 0
-        ).squeeze(1)
-        detector_violations = jnp.maximum(
-            powers[2] / DETECTOR_POWER_THRESHOLD - 1, 0
-        ).squeeze(1)
-
-        violations = jnp.concatenate(
-            [hard_side_violations, detector_violations, soft_side_violations], axis=0
-        )
-
-        losses = jnp.mean(jnp.log10(sensitivities.T / reference_sensitivities), axis=-1)
-        penalties = jnp.sum(violations.T, axis=-1)
-
-        return losses, penalties, violations
 
     @property
     def optimization_pairs(self) -> list[tuple]:

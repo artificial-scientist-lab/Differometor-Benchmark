@@ -4,13 +4,43 @@ import json
 import os
 from abc import abstractmethod
 from datetime import datetime
+from typing import Callable
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 from jaxtyping import Array, Float
 
+from differometor.components import (
+    DETECTOR_POWER_THRESHOLD,
+    HARD_SIDE_POWER_THRESHOLD,
+    SOFT_SIDE_POWER_THRESHOLD,
+)
+
 from dfbench.core.problem import ContinuousProblem
+
+
+# ---------------------------------------------------------------------------
+# Power-penalty presets
+# ---------------------------------------------------------------------------
+
+def squashed_relu_penalty(value, threshold):
+    """Default penalty: per-element ReLU squashed into [0, 1).
+
+    ``max(value/threshold - 1, 0)`` passed through ``p / (1 + p)``.
+    """
+    relu = jnp.maximum(value / threshold - 1, 0)
+    return relu / (1.0 + relu)
+
+
+def relu_penalty(value, threshold):
+    """Raw ReLU penalty: ``max(value/threshold - 1, 0)``."""
+    return jnp.maximum(value / threshold - 1, 0)
+
+
+def zero_penalty(value, threshold):
+    """No penalty — disables power constraints."""
+    return jnp.zeros_like(value)
 
 
 class OpticalSetupProblem(ContinuousProblem):
@@ -35,6 +65,30 @@ class OpticalSetupProblem(ContinuousProblem):
         self._name = name.lstrip("_")
         self._frequencies = jnp.logspace(jnp.log10(20), jnp.log10(5000), n_frequencies)
         self._target_sensitivities = None  # to be set by subclasses
+        self._power_penalty_fn: Callable = squashed_relu_penalty
+
+    @property
+    def power_penalty_fn(self) -> Callable:
+        """The function used to compute per-element power-constraint penalties.
+
+        Signature: ``fn(value, threshold) -> penalty_contribution``
+        """
+        return self._power_penalty_fn
+
+    def _compute_power_violations(self, powers):
+        """Apply ``power_penalty_fn`` to each component group and concatenate."""
+        fn = self._power_penalty_fn
+        hard = fn(powers[0].squeeze(1), HARD_SIDE_POWER_THRESHOLD)
+        soft = fn(powers[1].squeeze(1), SOFT_SIDE_POWER_THRESHOLD)
+        det = fn(powers[2].squeeze(1), DETECTOR_POWER_THRESHOLD)
+        return jnp.concatenate([hard, det, soft], axis=0)
+
+    def _calculate_loss(self, sensitivities, reference_sensitivities, powers):
+        """Calculate loss and penalties from sensitivities and power constraints."""
+        violations = self._compute_power_violations(powers)
+        losses = jnp.mean(jnp.log10(sensitivities.T / reference_sensitivities), axis=-1)
+        penalties = jnp.sum(violations.T, axis=-1)
+        return losses, penalties, violations
 
     @property
     def name(self) -> str:

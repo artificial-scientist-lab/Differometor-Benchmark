@@ -112,14 +112,33 @@ problem = ConstrainedVoyagerProblem(n_frequencies=100)
 
 1. **Realistic noise model:** Uses three separate modulation modes (quantum noise, amplitude noise, frequency noise) and combines their contributions into a single sensitivity curve. This produces a more accurate picture of real detector performance.
 
-2. **Power constraints:** The loss includes a penalty term for violating optical power limits:
+2. **Power constraints (ReLU-based):** The loss includes a penalty term for violating optical power limits:
    - `HARD_SIDE_POWER_THRESHOLD` — maximum power on mirror/beamsplitter side ports
    - `SOFT_SIDE_POWER_THRESHOLD` — softer limit with gradual penalty
    - `DETECTOR_POWER_THRESHOLD` — maximum power on detector ports
 
-   The penalty is passed through $p / (1 + p)$ to squash it into $[0, 1)$, preventing it from dominating the loss while still providing a smooth gradient signal.
+   For each component the configured `power_penalty_fn(value, threshold)` is called and the results are summed.  Three presets are provided:
 
-**Rationale — penalty squashing:** A raw penalty can become orders of magnitude larger than the sensitivity loss, making gradient-based optimizers ignore sensitivity entirely. The $p/(1+p)$ transform bounds the penalty contribution while preserving its gradient direction.
+   | Preset | Formula | Import |
+   |--------|---------|--------|
+   | `squashed_relu_penalty` (default) | $\frac{\max(v/t-1,\,0)}{1+\max(v/t-1,\,0)}$ | `from dfbench.problems import squashed_relu_penalty` |
+   | `relu_penalty` | $\max(v/t-1,\,0)$ | `from dfbench.problems import relu_penalty` |
+   | `zero_penalty` | $0$ | `from dfbench.problems import zero_penalty` |
+
+   You can also pass any custom function with signature `fn(value, threshold) -> penalty`:
+
+   ```python
+   import jax.numpy as jnp
+
+   def my_quadratic_penalty(value, threshold):
+       relu = jnp.maximum(value / threshold - 1, 0)
+       return relu ** 2
+
+   problem = ConstrainedVoyagerProblem(power_penalty_fn=my_quadratic_penalty)
+   ```
+
+**Rationale — penalty squashing:** A raw penalty can become orders of magnitude larger than the sensitivity loss, making gradient-based optimizers ignore sensitivity entirely. The default `squashed_relu_penalty` bounds the penalty contribution while preserving its gradient direction.\
+It could very well be that other penalty functions work better for certain algorithms (or even Adam). Feel free to play around!
 
 ---
 
@@ -143,6 +162,7 @@ problem = RandomUIFOProblem(size=3, n_frequencies=100, topology_seed=42)
 | `size` | `3` | Grid dimensions (3 = 3×3). Larger grids have more components and parameters. |
 | `n_frequencies` | `100` | Frequency points for sensitivity calculation. |
 | `topology_seed` | `42` | Seed for the random graph structure. The same seed always produces the same interferometer topology. |
+| `power_penalty_fn` | `squashed_relu_penalty` | Per-element penalty function `fn(value, threshold)`. See presets above. |
 
 #### What is a UIFO?
 
