@@ -8,7 +8,6 @@ problem = VoyagerProblem()
 
 obj = Objective(
     problem,
-    unbounded=True,
     max_evals=20_000,
     verbose=1,
     print_every=100,

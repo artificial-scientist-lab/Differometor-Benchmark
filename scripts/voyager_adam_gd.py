@@ -8,7 +8,6 @@ from dfbench import Objective
 vp = VoyagerProblem()
 obj = Objective(
     vp,
-    unbounded=True,
     max_time=300,
     verbose=1,
     max_evals=20000,
