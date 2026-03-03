@@ -149,7 +149,7 @@ class NAAdamGD(OptimizationAlgorithm):
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
-        patience: int = 1000,
+        patience: int | None = None,
         noise_std_start: float = 0.3,
         noise_std_end: float = 0.0,
         noise_schedule: NoiseSchedule = "exponential",
@@ -174,7 +174,7 @@ class NAAdamGD(OptimizationAlgorithm):
                 uses system entropy. Defaults to None.
             learning_rate: Adam learning rate. Defaults to 0.1.
             patience: Early stopping trigger. Stops if best loss doesn't improve
-                for this many consecutive iterations. Defaults to 1,000.
+                for this many consecutive iterations. Defaults to None (no early stopping).
             noise_std_start: Initial noise standard deviation. Defaults to 0.3.
             noise_std_end: Final noise standard deviation. Defaults to 0.0.
             noise_schedule: How noise decays over time.
@@ -226,7 +226,7 @@ class NAAdamGD(OptimizationAlgorithm):
             loss, grads = obj.value_and_grad(params)
 
             # Early stopping: patience check
-            if obj.evals_since_improvement > patience:
+            if patience is not None and obj.evals_since_improvement > patience:
                 break
 
             updates, optimizer_state = optimizer.update(grads, optimizer_state, params)

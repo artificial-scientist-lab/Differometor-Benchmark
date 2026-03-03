@@ -28,7 +28,7 @@ class RandomSearch(OptimizationAlgorithm):
         >>> from dfbench.problems import VoyagerProblem
         >>> problem = VoyagerProblem()
         >>> obj = Objective(problem, unbounded=False, max_time=120)
-        >>> optimizer = RandomSearch(batch_size=100)
+        >>> optimizer = RandomSearch(batch_size=1)
         >>> result = optimizer.optimize(
         ...     problem_objective=obj,
         ...     max_iterations=100,
@@ -40,13 +40,13 @@ class RandomSearch(OptimizationAlgorithm):
 
     def __init__(
         self,
-        batch_size: int = 100,
+        batch_size: int = 1,
     ) -> None:
         """Initialize Random Search optimizer.
 
         Args:
             batch_size (int): Number of samples to evaluate in parallel per batch.
-                Defaults to 100.
+                Defaults to 1.
         """
         self.batch_size = batch_size
 

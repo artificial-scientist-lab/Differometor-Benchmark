@@ -38,8 +38,8 @@ class AdamGD(OptimizationAlgorithm):
         problem_objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
+        patience: int | None = None,
         learning_rate: float = 0.1,
-        patience: int = 1000,
         **adam_kwargs,
     ) -> None:
         """Run Adam using `Objective` for logging.
@@ -80,7 +80,7 @@ class AdamGD(OptimizationAlgorithm):
             loss, grads = obj.value_and_grad(params)  # Use value_and_grad, else the loss is not logged!
 
             # Early stopping: patience check using Objective's improvement tracker
-            if obj.evals_since_improvement > patience:
+            if patience is not None and obj.evals_since_improvement > patience:
                 break
 
             updates, optimizer_state = optimizer.update(grads, optimizer_state, params)

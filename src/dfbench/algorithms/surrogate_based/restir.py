@@ -123,7 +123,7 @@ class ReSTIR(OptimizationAlgorithm):
 
     def __init__(
         self,
-        batch_size: int = 100,
+        batch_size: int = 1,
         knn_batch_size: int = 50_000,
     ) -> None:
         """Initialize the ReSTIR algorithm.

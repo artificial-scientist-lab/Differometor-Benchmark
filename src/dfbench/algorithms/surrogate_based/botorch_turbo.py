@@ -306,7 +306,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int | None = None,
-        batch_size: int = 4,
+        batch_size: int = 1,
         acqf: Literal["ts", "ei"] = "ts",
         n_restarts: int = 1,
         **turbo_kwargs,
@@ -320,7 +320,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
             init_params: Initial parameters to include in the training set.
             random_seed: Random seed for reproducibility.
             n_initial: Number of initial Sobol samples. Defaults to 2 * dim.
-            batch_size: Number of points to acquire per iteration. Defaults to 4.
+            batch_size: Number of points to acquire per iteration. Defaults to 1.
             acqf: Acquisition function type ("ts" or "ei"). Defaults to "ts".
             n_restarts: Number of TuRBO restarts. Defaults to 1.
             **turbo_kwargs: Additional keyword arguments.

@@ -49,7 +49,7 @@ class LBFGSGD(OptimizationAlgorithm):
         problem_objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
-        patience: int = 1000,
+        patience: int | None = None,
         **lbfgs_kwargs,
     ) -> None:
         """Run L-BFGS using ``Objective`` for logging.

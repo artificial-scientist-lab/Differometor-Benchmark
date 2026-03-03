@@ -82,14 +82,14 @@ class EvoxES(OptimizationAlgorithm):
 
     def __init__(
         self,
-        batch_size: int = 5,
+        batch_size: int = 1,
         variant: ESVariant = "CMAES",
     ) -> None:
         """Initialize EvoX Evolution Strategy.
 
         Args:
             batch_size (int): Number of individuals to evaluate simultaneously in each batch.
-                Reduce this value if encountering out-of-memory errors. Defaults to 5.
+                Reduce this value if encountering out-of-memory errors. Defaults to 1.
             variant (ESVariant): ES variant to use. Options:
                 - 'CMAES': Covariance Matrix Adaptation Evolution Strategy (default)
                 - 'OpenES': OpenAI Evolution Strategy

@@ -196,7 +196,7 @@ class VAESampling(OptimizationAlgorithm):
         random_seed: int | None = None,
         vae_training_samples: int = 1000,
         vae_epochs: int = 100,
-        batch_size: int = 64,
+        batch_size: int = 1,
         latent_dim_factor: int = 10,
         hidden_dim: int = 256,
         num_blocks: int = 4,

@@ -129,7 +129,7 @@ class SAGD(OptimizationAlgorithm):
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
-        patience: int = 1000,
+        patience: int | None = None,
         T0: float = 15.0,
         sigma: float = 1.0,
         max_ascent_prob: float = 0.33,
@@ -153,7 +153,7 @@ class SAGD(OptimizationAlgorithm):
             random_seed: Random seed for reproducibility. If None,
                 uses system entropy. Defaults to None.
             learning_rate: Learning rate for Adam optimizer. Defaults to 0.1.
-            patience: Stop if no improvement for this many iterations. Defaults to 1,000.
+            patience: Stop if no improvement for this many iterations. Defaults to None (no early stopping).
             T0: Initial temperature for simulated annealing. Higher values
                 lead to higher probability of gradient ascent. Defaults to 15.0.
             sigma: Expansion factor for gradient ascent step size. Defaults to 1.0.
@@ -194,7 +194,7 @@ class SAGD(OptimizationAlgorithm):
             loss, grads = obj.value_and_grad(params)
 
             # Early stopping: patience check
-            if obj.evals_since_improvement > patience:
+            if patience is not None and obj.evals_since_improvement > patience:
                 break
 
             # Compute loss difference (ΔE)

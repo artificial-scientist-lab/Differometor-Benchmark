@@ -56,14 +56,14 @@ class EvoxPSO(OptimizationAlgorithm):
 
     def __init__(
         self,
-        batch_size: int = 5,
+        batch_size: int = 1,
         variant: PSOVariant = "PSO",
     ) -> None:
         """Initialize EvoX Particle Swarm Optimization.
 
         Args:
             batch_size (int): Number of particles to evaluate simultaneously in each batch.
-                Reduce this value if encountering out-of-memory errors. Defaults to 5.
+                Reduce this value if encountering out-of-memory errors. Defaults to 1.
             variant (PSOVariant): PSO variant to use. Options:
                 - 'PSO': Standard Particle Swarm Optimization (default)
                 - 'CLPSO': Comprehensive Learning PSO
