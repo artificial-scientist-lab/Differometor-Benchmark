@@ -57,7 +57,6 @@ class AdamGD(OptimizationAlgorithm):
             **adam_kwargs: Passed to optax.adam().
         """
         obj = problem_objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
