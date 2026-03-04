@@ -38,3 +38,15 @@ debug = [
     "snakeviz>=2.2.2",
     "tueplots>=0.2.1",
 ]
+test = [
+    "pytest>=8.0",
+    "pytest-timeout>=2.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: tests that call Differometor simulation or run a real optimizer (>5s); requires srun.",
+    "gpu: tests that require a CUDA device; must not block CPU-only CI.",
+]
+addopts = "-m 'not slow and not gpu' --tb=short -q"
