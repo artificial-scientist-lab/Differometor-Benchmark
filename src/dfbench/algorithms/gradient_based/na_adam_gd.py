@@ -1,4 +1,3 @@
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -196,7 +195,9 @@ class NAAdamGD(OptimizationAlgorithm):
         obj = problem_objective
         problem = obj.problem
 
-        random_seed, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
+        random_seed, rng_key = self.prepare(
+            obj, unbounded=True, random_seed=random_seed
+        )
 
         if init_params is None:
             params = obj.random_params_unbounded()

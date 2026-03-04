@@ -71,11 +71,11 @@ class OptimizationAlgorithm(ABC):
 
     @abstractmethod
     def optimize(
-        self, 
+        self,
         problem_objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
-        **kwargs
+        **kwargs,
     ) -> None:
         """Run the optimization algorithm following the standard blueprint pattern.
 
@@ -100,44 +100,49 @@ class OptimizationAlgorithm(ABC):
         # 1. Setup references
         obj = problem_objective
         problem = obj.problem
-        
+
         # 2. Setup objective and resolve/apply random seed
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
         # For frameworks that also need seeding:
         # torch.manual_seed(random_seed)
-        
+
         # 3. Initialize parameters
         if init_params is None:
             # Bounded optimization
-            params = obj.random_params_bounded()  # If n_samples = 1, returns shape (n_params,)
+            params = (
+                obj.random_params_bounded()
+            )  # If n_samples = 1, returns shape (n_params,)
             # Unbounded optimization
-            params = obj.random_params_unbounded()  # If unbounded = True was given to prepare()
+            params = (
+                obj.random_params_unbounded()
+            )  # If unbounded = True was given to prepare()
             # Batched optimization
-            batched_params = obj.random_params_bounded(n_samples=10) # Use self.batch_size from __init__() here
+            batched_params = obj.random_params_bounded(
+                n_samples=10
+            )  # Use self.batch_size from __init__() here
         else:
             params = init_params
-        
+
         # 4. JIT warmup (optional but recommended, else much time is lost during the first evaluation)
         _ = obj.value(params)
         _ = obj.value_and_grad(params)  # For gradientients and loss
         _ = obj.grad(params)  # Loss won't get logged
-            # Or for batched:
+        # Or for batched:
         _ = obj.vmap_value()
         _ = obj.vmap_value_and_grad()
         _ = obj.vmap_grad()
-        
+
         # 5. Start logging
         obj.start_logging()
-        
+
         # 6. Optimization
         # This tracks evals and time. Once exhausted the objective won't log anymore.
         # Obviously, you can add iteration-based stopping criteria here as well.
-        
+
         # --------- Initializing algorithm logic here ---------
-        
+
         while not obj.budget_exceeded:
-            
-            ... # --------- Looped algorithm logic here ---------
+            ...  # --------- Looped algorithm logic here ---------
             # Loss printing is also done by the Objective. The frequency can be set in its __init__().
 
         # 7. Done — the Objective instance now contains all logged data.
@@ -145,14 +150,15 @@ class OptimizationAlgorithm(ABC):
         # Plotting and saving to file can be done afterwards by calling methods on the Objective.
         # If automatic file saving was enabled by the user, the data is already saved to file and can be loaded from there as well.
         # Please take a look at the Objective class documentation or docstring for a guide and details.
-    
+
     def prepare(
-        self, 
+        self,
         obj: Objective,
-        unbounded: bool, 
+        unbounded: bool,
         algorithm_str: str | None = None,
-        random_seed: int | None = None, 
-        **kwargs) -> tuple[int, jax.Array]:
+        random_seed: int | None = None,
+        **kwargs,
+    ) -> tuple[int, jax.Array]:
         """Set up the Objective and resolve/apply the random seed.
 
         Configures `obj.unbounded`, `obj.algorithm_str`, and seeds all relevant
@@ -193,5 +199,7 @@ class OptimizationAlgorithm(ABC):
             try:
                 setattr(obj, k, v)
             except AttributeError:
-                print(f"Warning: Objective has no attribute '{k}' to set with value {v}")
+                print(
+                    f"Warning: Objective has no attribute '{k}' to set with value {v}"
+                )
         return random_seed, key

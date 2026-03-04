@@ -1,4 +1,3 @@
-
 import jax.numpy as jnp
 import numpy as np
 import optax
@@ -76,7 +75,9 @@ class AdamGD(OptimizationAlgorithm):
         obj.start_logging()
 
         while not obj.budget_exceeded:
-            loss, grads = obj.value_and_grad(params)  # Use value_and_grad, else the loss is not logged!
+            loss, grads = obj.value_and_grad(
+                params
+            )  # Use value_and_grad, else the loss is not logged!
 
             # Early stopping: patience check using Objective's improvement tracker
             if patience is not None and obj.evals_since_improvement > patience:

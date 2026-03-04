@@ -167,7 +167,9 @@ class SAGD(OptimizationAlgorithm):
         obj = problem_objective
         problem = obj.problem
 
-        random_seed, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
+        random_seed, rng_key = self.prepare(
+            obj, unbounded=True, random_seed=random_seed
+        )
 
         if init_params is None:
             params = obj.random_params_unbounded()
@@ -223,9 +225,7 @@ class SAGD(OptimizationAlgorithm):
             random_val = float(jax.random.uniform(subkey))
 
             # Compute updates from optimizer
-            updates, optimizer_state = optimizer.update(
-                grads, optimizer_state, params
-            )
+            updates, optimizer_state = optimizer.update(grads, optimizer_state, params)
 
             if random_val < ascent_prob:
                 # Gradient ASCENT: go uphill

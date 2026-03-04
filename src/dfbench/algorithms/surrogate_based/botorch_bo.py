@@ -1,6 +1,5 @@
 """State-of-the-art Bayesian Optimization using BoTorch with batch acquisition."""
 
-
 import jax.numpy as jnp
 import numpy as np
 import torch
@@ -53,7 +52,7 @@ class BotorchBO(OptimizationAlgorithm):
 
     def __init__(self) -> None:
         """Initialize BoTorch Bayesian Optimization.
-        
+
         No configuration parameters needed - all settings are provided
         at optimization time via the optimize() method.
         """
@@ -199,12 +198,8 @@ class BotorchBO(OptimizationAlgorithm):
 
         unit_bounds = torch.stack(
             [
-                torch.zeros(
-                    problem.n_params, dtype=self.dtype, device=self.device
-                ),
-                torch.ones(
-                    problem.n_params, dtype=self.dtype, device=self.device
-                ),
+                torch.zeros(problem.n_params, dtype=self.dtype, device=self.device),
+                torch.ones(problem.n_params, dtype=self.dtype, device=self.device),
             ],
             dim=0,
         )

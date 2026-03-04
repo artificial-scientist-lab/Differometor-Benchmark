@@ -24,6 +24,7 @@ from dfbench.core.problem import ContinuousProblem
 # Power-penalty presets
 # ---------------------------------------------------------------------------
 
+
 def squashed_relu_penalty(value, threshold):
     """Default penalty: per-element ReLU squashed into [0, 1).
 
@@ -135,9 +136,7 @@ class OpticalSetupProblem(ContinuousProblem):
                 )
 
             default_lower, default_upper = merged_bounds[property_name]
-            if not allow_widen and (
-                lower < default_lower or upper > default_upper
-            ):
+            if not allow_widen and (lower < default_lower or upper > default_upper):
                 raise ValueError(
                     f"Override for '{property_name}' must narrow within "
                     f"[{default_lower}, {default_upper}], got [{lower}, {upper}]."

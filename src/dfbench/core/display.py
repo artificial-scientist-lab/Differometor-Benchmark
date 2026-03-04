@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 # ── ANSI helpers ──────────────────────────────────────────────────────
 
-_MOVE_UP = "\033[{}A"   # parameterised: \033[<n>A
+_MOVE_UP = "\033[{}A"  # parameterised: \033[<n>A
 _CLEAR_LINE = "\033[2K"
 
 
@@ -57,8 +57,13 @@ _BAR_EMPTY = "░"
 
 #: Human-readable names for eval-type bitmask codes
 _TYPE_NAMES: dict[int, str] = {
-    1: "val", 2: "grad", 3: "val+g",
-    5: "vmap-v", 6: "vmap-g", 7: "vmap+g", -1: "other",
+    1: "val",
+    2: "grad",
+    3: "val+g",
+    5: "vmap-v",
+    6: "vmap-g",
+    7: "vmap+g",
+    -1: "other",
 }
 
 
@@ -88,7 +93,7 @@ def _fmt_loss(n: int | float | None) -> str:
     if n is None:
         return "—"
     if isinstance(n, float):
-        if n != n:          # NaN
+        if n != n:  # NaN
             return "NaN"
         if n == float("inf"):
             return "∞"
@@ -120,6 +125,7 @@ def _get_jax_memory() -> tuple[int | None, int | None, int | None]:
     """
     try:
         import jax
+
         device = jax.devices()[0]
         stats = device.memory_stats()
         if stats is None:
@@ -171,6 +177,7 @@ def _sparkline(values: list[float], width: int) -> str:
 
 
 # ── Live display class ───────────────────────────────────────────────
+
 
 class LiveDisplay:
     """Renders a continuously-updated optimisation dashboard in the terminal.
@@ -238,20 +245,20 @@ class LiveDisplay:
         inner = tw - 2  # chars between the two │ border characters
 
         # ── Stat gathering ────────────────────────────────────────
-        algorithm   = obj.algorithm_str or "unknown"
-        problem     = obj.problem.name if hasattr(obj.problem, "name") else "problem"
-        n_params    = obj.n_params if obj.bounds is not None else "?"
-        eval_count  = obj.eval_count
-        max_evals   = obj._max_evals
-        max_time    = obj._max_time
+        algorithm = obj.algorithm_str or "unknown"
+        problem = obj.problem.name if hasattr(obj.problem, "name") else "problem"
+        n_params = obj.n_params if obj.bounds is not None else "?"
+        eval_count = obj.eval_count
+        max_evals = obj._max_evals
+        max_time = obj._max_time
         time_elapsed = obj.time_elapsed
-        best_loss   = obj.best_loss
-        improvement_count  = obj.improvement_count
-        evals_since_imp    = obj.evals_since_improvement
-        log_calls   = obj.log_call_count
+        best_loss = obj.best_loss
+        improvement_count = obj.improvement_count
+        evals_since_imp = obj.evals_since_improvement
+        log_calls = obj.log_call_count
         type_counts = obj.eval_type_counts
-        ckpt_every  = obj._save_to_file_every
-        last_ckpt   = obj.last_checkpoint_eval
+        ckpt_every = obj._save_to_file_every
+        last_ckpt = obj.last_checkpoint_eval
 
         # Track first-eval wall time for throughput
         if eval_count > 0 and self._first_eval_time is None:
@@ -261,6 +268,7 @@ class LiveDisplay:
         current_loss: float | None = None
         try:
             import jax.numpy as jnp
+
             raw = obj.current_loss
             if raw is not None:
                 nd = getattr(raw, "ndim", 0)
@@ -292,7 +300,7 @@ class LiveDisplay:
         def _row2(lbl1: str, val1: str, lbl2: str, val2: str) -> str:
             """Two-stat row with fixed half-width columns."""
             half = inner // 2
-            left  = f" {lbl1:<13}{val1}"
+            left = f" {lbl1:<13}{val1}"
             right = f" {lbl2:<13}{val2}"
             # Pad left column to half, then append right
             lpad = " " * max(0, half - len(left))
@@ -328,7 +336,7 @@ class LiveDisplay:
             eta_t = _eta(remaining_time=time_left)
             row_t = (
                 f" Time   [{_bar(t_frac, bar_width)}]"
-                f" {t_frac*100:5.1f}%  {_fmt_time(time_elapsed)} / {_fmt_time(max_time)}"
+                f" {t_frac * 100:5.1f}%  {_fmt_time(time_elapsed)} / {_fmt_time(max_time)}"
                 f"{eta_t}"
             )
         else:
@@ -341,7 +349,7 @@ class LiveDisplay:
             eta_e = _eta(remaining_evals=evals_left)
             row_e = (
                 f" Evals  [{_bar(e_frac, bar_width)}]"
-                f" {e_frac*100:5.1f}%  {eval_count:,} / {max_evals:,}"
+                f" {e_frac * 100:5.1f}%  {eval_count:,} / {max_evals:,}"
                 f"{eta_e}"
             )
         else:
@@ -351,17 +359,28 @@ class LiveDisplay:
         lines.append(_sep())
 
         # ── Stats block ───────────────────────────────────────────
-        lines.append(_row2("Best Loss",    _fmt_loss(best_loss),
-                            "Current Loss", _fmt_loss(current_loss)))
+        lines.append(
+            _row2(
+                "Best Loss",
+                _fmt_loss(best_loss),
+                "Current Loss",
+                _fmt_loss(current_loss),
+            )
+        )
 
         avg_batch = (eval_count / log_calls) if log_calls > 0 else None
-        eps_str   = f"{evals_per_sec:,.1f}" if evals_per_sec > 0 else "—"
+        eps_str = f"{evals_per_sec:,.1f}" if evals_per_sec > 0 else "—"
         batch_str = f"{avg_batch:.1f}" if avg_batch is not None else "—"
-        lines.append(_row2("Evals/sec",   eps_str,
-                            "Avg Batch",   batch_str))
+        lines.append(_row2("Evals/sec", eps_str, "Avg Batch", batch_str))
 
-        lines.append(_row2("Improvements",  str(improvement_count),
-                            "Since Improv.", str(evals_since_imp)))
+        lines.append(
+            _row2(
+                "Improvements",
+                str(improvement_count),
+                "Since Improv.",
+                str(evals_since_imp),
+            )
+        )
 
         # ── Loss trend sparkline ──────────────────────────────────
         try:
@@ -410,7 +429,9 @@ class LiveDisplay:
                 )
             else:
                 next_in = ckpt_every - (eval_count % ckpt_every if ckpt_every else 0)
-                ckpt_str = f"next in {next_in:,} evals  (every {ckpt_every:,}, none yet)"
+                ckpt_str = (
+                    f"next in {next_in:,} evals  (every {ckpt_every:,}, none yet)"
+                )
             lines.append(_row(f" Checkpoint   {ckpt_str}"))
 
         # ── JAX device memory ─────────────────────────────────────
@@ -428,6 +449,7 @@ class LiveDisplay:
 
 # ── Log-style display class ───────────────────────────────────────────
 
+
 class LogDisplay:
     """Renders periodic scrolling log blocks.
 
@@ -442,12 +464,12 @@ class LogDisplay:
     def render(self) -> None:
         """Print a log block with current stats."""
         obj = self._obj
-        s   = obj.get_summary()
-        log_calls   = obj.log_call_count
+        s = obj.get_summary()
+        log_calls = obj.log_call_count
         type_counts = obj.eval_type_counts
-        ckpt_every  = obj._save_to_file_every
-        last_ckpt   = obj.last_checkpoint_eval
-        avg_batch   = (s["eval_count"] / log_calls) if log_calls > 0 else None
+        ckpt_every = obj._save_to_file_every
+        last_ckpt = obj.last_checkpoint_eval
+        avg_batch = (s["eval_count"] / log_calls) if log_calls > 0 else None
 
         parts = [
             "───────────────",
@@ -481,4 +503,3 @@ class LogDisplay:
     def finalize(self) -> None:
         """Print a final summary (identical to a regular render in log mode)."""
         self.render()
-

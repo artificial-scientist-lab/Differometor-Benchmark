@@ -108,7 +108,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
     def __init__(self) -> None:
         """Initialize BoTorch TuRBO Optimization.
-        
+
         No configuration parameters needed - all settings are provided
         at optimization time via the optimize() method.
         """
@@ -380,9 +380,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
             train_Y = train_Y_raw[valid_mask]
 
             if len(train_Y) == 0:
-                raise ValueError(
-                    "All initial evaluations returned NaN/Inf."
-                )
+                raise ValueError("All initial evaluations returned NaN/Inf.")
 
             state = TurboState(
                 dim=dim,
@@ -395,7 +393,11 @@ class BotorchTuRBO(OptimizationAlgorithm):
             )
 
             iteration = 0
-            while not obj.budget_exceeded and not state.restart_triggered and iteration < max_iterations:
+            while (
+                not obj.budget_exceeded
+                and not state.restart_triggered
+                and iteration < max_iterations
+            ):
                 # Normalize Y for GP fitting
                 Y_mean = train_Y.mean()
                 Y_std = train_Y.std()

@@ -150,7 +150,9 @@ class RandomUIFOProblem(OpticalSetupProblem):
         lower_bounds = []
         upper_bounds = []
         for optimization_pair in self._optimization_pairs:
-            property_name = self._property_name_from_optimization_pair(optimization_pair)
+            property_name = self._property_name_from_optimization_pair(
+                optimization_pair
+            )
             lower_bounds.append(property_bounds[property_name][0])
             upper_bounds.append(property_bounds[property_name][1])
         self._bounds = np.array([lower_bounds, upper_bounds])
@@ -185,12 +187,14 @@ class RandomUIFOProblem(OpticalSetupProblem):
             optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
 
             # simulate the three modulation setups
-            q_results = simulate(**{**self._q_arrays, 'optimized_parameters': optimized_parameters})
+            q_results = simulate(
+                **{**self._q_arrays, "optimized_parameters": optimized_parameters}
+            )
             ampl_results = simulate(
-                **{**self._ampl_arrays, 'optimized_parameters': optimized_parameters}
+                **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
             )
             freq_results = simulate(
-                **{**self._freq_arrays, 'optimized_parameters': optimized_parameters}
+                **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
             )
             results = [
                 (*q_results, *self._q_metadata),
@@ -200,7 +204,10 @@ class RandomUIFOProblem(OpticalSetupProblem):
 
             # calculate the sensitivities taking into account the three noise sources
             sensitivities = calculate_sensitivities(
-                results, self._sensitivity_function, self._frequencies, homodyne=self._homodyne
+                results,
+                self._sensitivity_function,
+                self._frequencies,
+                homodyne=self._homodyne,
             )
 
             # calculate the light power at all components within the setup
@@ -218,12 +225,14 @@ class RandomUIFOProblem(OpticalSetupProblem):
             optimized_parameters: Float[Array, "{self.n_params}"],
         ) -> Float:
             # simulate the three modulation setups
-            q_results = simulate(**{**self._q_arrays, 'optimized_parameters': optimized_parameters})
+            q_results = simulate(
+                **{**self._q_arrays, "optimized_parameters": optimized_parameters}
+            )
             ampl_results = simulate(
-                **{**self._ampl_arrays, 'optimized_parameters': optimized_parameters}
+                **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
             )
             freq_results = simulate(
-                **{**self._freq_arrays, 'optimized_parameters': optimized_parameters}
+                **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
             )
             results = [
                 (*q_results, *self._q_metadata),
@@ -233,7 +242,10 @@ class RandomUIFOProblem(OpticalSetupProblem):
 
             # calculate the sensitivities taking into account the three noise sources
             sensitivities = calculate_sensitivities(
-                results, self._sensitivity_function, self._frequencies, homodyne=self._homodyne
+                results,
+                self._sensitivity_function,
+                self._frequencies,
+                homodyne=self._homodyne,
             )
 
             # calculate the light power at all components within the setup
@@ -277,7 +289,9 @@ class RandomUIFOProblem(OpticalSetupProblem):
             "topology_seed": self._topology_seed,
             "n_params": self.n_params,
             "homodyne": self._homodyne,
-            "power_penalty_fn": getattr(self._power_penalty_fn, "__name__", str(self._power_penalty_fn)),
+            "power_penalty_fn": getattr(
+                self._power_penalty_fn, "__name__", str(self._power_penalty_fn)
+            ),
         }
 
     def calculate_sensitivity(
@@ -293,12 +307,14 @@ class RandomUIFOProblem(OpticalSetupProblem):
             Sensitivity values at each frequency point.
         """
         # simulate the three modulation setups
-        q_results = simulate(**{**self._q_arrays, 'optimized_parameters': optimized_parameters})
+        q_results = simulate(
+            **{**self._q_arrays, "optimized_parameters": optimized_parameters}
+        )
         ampl_results = simulate(
-            **{**self._ampl_arrays, 'optimized_parameters': optimized_parameters}
+            **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
         )
         freq_results = simulate(
-            **{**self._freq_arrays, 'optimized_parameters': optimized_parameters}
+            **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
         )
         results = [
             (*q_results, *self._q_metadata),
@@ -308,7 +324,10 @@ class RandomUIFOProblem(OpticalSetupProblem):
 
         # calculate the sensitivities taking into account the three noise sources
         sensitivities = calculate_sensitivities(
-            results, self._sensitivity_function, self._frequencies, homodyne=self._homodyne
+            results,
+            self._sensitivity_function,
+            self._frequencies,
+            homodyne=self._homodyne,
         )
 
         return sensitivities

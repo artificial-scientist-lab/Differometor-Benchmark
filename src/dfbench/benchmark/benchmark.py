@@ -113,8 +113,12 @@ class RunData:
             loss_history=np.array(obj.loss_history_reduced, dtype=np.float32),
             time_steps=np.array(obj.time_steps, dtype=np.float32),
             params_history=np.array(obj.params_history_reduced_bounded, dtype=object),
-            best_loss=float(obj.best_loss) if obj.best_loss is not None else float("inf"),
-            best_params=np.array(best_params) if best_params is not None else np.array([]),
+            best_loss=float(obj.best_loss)
+            if obj.best_loss is not None
+            else float("inf"),
+            best_params=np.array(best_params)
+            if best_params is not None
+            else np.array([]),
             eval_count=obj.eval_count,
         )
 
@@ -390,11 +394,11 @@ class Benchmark:
 
             # Prepare hyperparameters
             kwargs = config.hyperparameters.copy()
-            
+
             # Determine unbounded based on algorithm type
             # Gradient-based algorithms use unbounded space, others use bounded
             unbounded = config.algorithm.algorithm_type == AlgorithmType.GRADIENT_BASED
-            
+
             obj = Objective(
                 problem=self._problem,
                 unbounded=unbounded,
@@ -404,7 +408,7 @@ class Benchmark:
                 verbose=self._verbose - 1,
                 print_every=100,  # Print every 100 evals if verbose >= 1
             )
-            
+
             if run_seeds is not None:
                 kwargs["random_seed"] = run_seeds[i_run]
 
@@ -479,8 +483,13 @@ class Benchmark:
 
                 # First success eval count
                 from dfbench.benchmark.metrics import run_first_success_idx
-                first_success_idx = run_first_success_idx(losses_arr, self._success_loss)
-                first_success_evals = first_success_idx + 1 if first_success_idx is not None else None
+
+                first_success_idx = run_first_success_idx(
+                    losses_arr, self._success_loss
+                )
+                first_success_evals = (
+                    first_success_idx + 1 if first_success_idx is not None else None
+                )
 
                 # AUC
                 auc = run_auc(
@@ -519,7 +528,9 @@ class Benchmark:
                 auc_top_1_list.append(run_aucs[best_run_idx])
             else:
                 auc_top_1_list.append(float("nan"))
-            auc_top_10_list.append(multi_auc_top_k(run_min_losses, run_aucs, k_fraction=0.1))
+            auc_top_10_list.append(
+                multi_auc_top_k(run_min_losses, run_aucs, k_fraction=0.1)
+            )
 
             # Performance profile
             _, _, perf_auc = compute_performance_profile(run_min_losses)
@@ -528,7 +539,9 @@ class Benchmark:
             # Diversity
             if len(run_params_at_t) >= 2:
                 params_array = jnp.array(run_params_at_t)
-                bounds = self._problem.bounds if hasattr(self._problem, "bounds") else None
+                bounds = (
+                    self._problem.bounds if hasattr(self._problem, "bounds") else None
+                )
                 diversity_overall_list.append(
                     multi_solution_diversity_overall(params_array, bounds)
                 )
@@ -571,7 +584,9 @@ class Benchmark:
                 mean=jnp.array([m for m, _ in auc_top_10_list]),
                 std=jnp.array([s for _, s in auc_top_10_list]),
             ),
-            performance_profile_auc=SingleMetric(value=jnp.array(performance_profile_auc_list)),
+            performance_profile_auc=SingleMetric(
+                value=jnp.array(performance_profile_auc_list)
+            ),
         )
 
     # --------- Save/Load ---------
@@ -600,11 +615,19 @@ class Benchmark:
             algorithm_name=algo_data.algorithm_name,
             hyperparameters=json.dumps(algo_data.hyperparameters),
             n_runs=len(algo_data.runs),
-            loss_histories=np.array([r.loss_history for r in algo_data.runs], dtype=object),
-            time_steps_list=np.array([r.time_steps for r in algo_data.runs], dtype=object),
-            params_histories=np.array([r.params_history for r in algo_data.runs], dtype=object),
+            loss_histories=np.array(
+                [r.loss_history for r in algo_data.runs], dtype=object
+            ),
+            time_steps_list=np.array(
+                [r.time_steps for r in algo_data.runs], dtype=object
+            ),
+            params_histories=np.array(
+                [r.params_history for r in algo_data.runs], dtype=object
+            ),
             best_losses=np.array([r.best_loss for r in algo_data.runs]),
-            best_params_list=np.array([r.best_params for r in algo_data.runs], dtype=object),
+            best_params_list=np.array(
+                [r.best_params for r in algo_data.runs], dtype=object
+            ),
             eval_counts=np.array([r.eval_count for r in algo_data.runs]),
         )
 
@@ -667,13 +690,17 @@ class Benchmark:
                     # Legacy format - convert wall_time_indices to time_steps
                     runs = self._load_legacy_format(data, metadata)
                 else:
-                    raise ValueError(f"Unknown data format in {npz_path}, time_steps or wall_time_indices missing.")
+                    raise ValueError(
+                        f"Unknown data format in {npz_path}, time_steps or wall_time_indices missing."
+                    )
 
-                all_run_data.append(AlgorithmRunData(
-                    algorithm_name=str(data["algorithm_name"]),
-                    runs=runs,
-                    hyperparameters=algo_info.get("hyperparameters", {}),
-                ))
+                all_run_data.append(
+                    AlgorithmRunData(
+                        algorithm_name=str(data["algorithm_name"]),
+                        runs=runs,
+                        hyperparameters=algo_info.get("hyperparameters", {}),
+                    )
+                )
 
         return all_run_data
 
@@ -683,14 +710,16 @@ class Benchmark:
         n_runs = int(data["n_runs"])
 
         for i in range(n_runs):
-            runs.append(RunData(
-                loss_history=data["loss_histories"][i],
-                time_steps=data["time_steps_list"][i],
-                params_history=data["params_histories"][i],
-                best_loss=float(data["best_losses"][i]),
-                best_params=data["best_params_list"][i],
-                eval_count=int(data["eval_counts"][i]),
-            ))
+            runs.append(
+                RunData(
+                    loss_history=data["loss_histories"][i],
+                    time_steps=data["time_steps_list"][i],
+                    params_history=data["params_histories"][i],
+                    best_loss=float(data["best_losses"][i]),
+                    best_params=data["best_params_list"][i],
+                    eval_count=int(data["eval_counts"][i]),
+                )
+            )
 
         return runs
 
@@ -710,7 +739,9 @@ class Benchmark:
         all_losses = data["all_losses"]
         all_wall_time_indices = data["all_wall_time_indices"]
         all_best_params = data["all_best_params"]
-        all_best_params_history = data.get("all_best_params_history", [None] * len(all_losses))
+        all_best_params_history = data.get(
+            "all_best_params_history", [None] * len(all_losses)
+        )
 
         for i in range(len(all_losses)):
             losses = np.array(all_losses[i])
@@ -725,14 +756,20 @@ class Benchmark:
                 wall_time_steps=wall_time_steps,
             )
 
-            runs.append(RunData(
-                loss_history=losses.astype(np.float32),
-                time_steps=time_steps.astype(np.float32),
-                params_history=np.array(params_history, dtype=object) if params_history is not None else np.array([]),
-                best_loss=float(np.min(losses)) if len(losses) > 0 else float("inf"),
-                best_params=best_params,
-                eval_count=len(losses),
-            ))
+            runs.append(
+                RunData(
+                    loss_history=losses.astype(np.float32),
+                    time_steps=time_steps.astype(np.float32),
+                    params_history=np.array(params_history, dtype=object)
+                    if params_history is not None
+                    else np.array([]),
+                    best_loss=float(np.min(losses))
+                    if len(losses) > 0
+                    else float("inf"),
+                    best_params=best_params,
+                    eval_count=len(losses),
+                )
+            )
 
         return runs
 
@@ -798,9 +835,13 @@ class Benchmark:
     def _print_result_summary(self, result: BenchmarkResult) -> None:
         """Print summary for a single algorithm result."""
         print(f"\n--- Summary for {result.algorithm_name} ---")
-        print(f"  Success rate (final): {float(result.fraction_of_success.value[-1]):.1%}")
+        print(
+            f"  Success rate (final): {float(result.fraction_of_success.value[-1]):.1%}"
+        )
         print(f"  Min loss (final): {float(result.min_loss.value[-1]):.6f}")
-        print(f"  Avg loss (final): {float(result.avg_loss.mean[-1]):.6f} ± {float(result.avg_loss.std[-1]):.6f}")
+        print(
+            f"  Avg loss (final): {float(result.avg_loss.mean[-1]):.6f} ± {float(result.avg_loss.std[-1]):.6f}"
+        )
         tts_mean = float(result.time_to_success.mean[-1])
         tts_std = float(result.time_to_success.std[-1])
         if not np.isnan(tts_mean):
@@ -828,9 +869,13 @@ class Benchmark:
             tts_std = float(result.time_to_success.std[-1])
 
             avg_str = f"{avg_mean:.4f}±{avg_std:.4f}"
-            tts_str = f"{tts_mean:.1f}±{tts_std:.1f}" if not np.isnan(tts_mean) else "N/A"
+            tts_str = (
+                f"{tts_mean:.1f}±{tts_std:.1f}" if not np.isnan(tts_mean) else "N/A"
+            )
 
-            print(f"{name:<25} {success:>9.1f}% {min_loss:>12.6f} {avg_str:>18} {tts_str:>15}")
+            print(
+                f"{name:<25} {success:>9.1f}% {min_loss:>12.6f} {avg_str:>18} {tts_str:>15}"
+            )
 
         print("=" * 90)
 

@@ -1,4 +1,3 @@
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -80,7 +79,7 @@ class RandomSearch(OptimizationAlgorithm):
         while not obj.budget_exceeded:
             if max_iterations is not None and iteration >= max_iterations:
                 break
-                
+
             # Generate random samples
             key, subkey = random.split(key)
             random_params = random.uniform(
@@ -92,5 +91,5 @@ class RandomSearch(OptimizationAlgorithm):
 
             # Evaluate batch
             losses = obj.vmap_value(random_params)
-            
+
             iteration += 1

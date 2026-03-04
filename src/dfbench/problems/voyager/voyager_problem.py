@@ -119,7 +119,10 @@ class VoyagerProblem(OpticalSetupProblem):
             optimized_parameters: Float[Array, "{self.n_params}"],
         ) -> Float:
             carrier, signal, noise = simulate(
-                **{**self._simulation_arrays, 'optimized_parameters': optimized_parameters}
+                **{
+                    **self._simulation_arrays,
+                    "optimized_parameters": optimized_parameters,
+                }
             )
             powers = signal_detector(carrier, signal)
             powers = powers[self._detector_ports]
@@ -137,7 +140,10 @@ class VoyagerProblem(OpticalSetupProblem):
         ) -> Float:
             optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
             carrier, signal, noise = simulate(
-                **{**self._simulation_arrays, 'optimized_parameters': optimized_parameters}
+                **{
+                    **self._simulation_arrays,
+                    "optimized_parameters": optimized_parameters,
+                }
             )
             powers = signal_detector(carrier, signal)
             powers = powers[self._detector_ports]

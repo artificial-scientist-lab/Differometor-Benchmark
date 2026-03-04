@@ -28,6 +28,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
         self,
         n_frequencies: int = 100,
         power_penalty_fn=None,
+        bounds_overrides: dict[str, tuple[float, float]] | None = None,
     ):
         """Initialize the Constrained Voyager optimization problem.
 
@@ -39,6 +40,9 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
                 options are ``squashed_relu_penalty`` (default),
                 ``relu_penalty``, and ``zero_penalty`` from
                 ``dfbench.problems.base_problem``.
+            bounds_overrides: Optional property-level bound overrides.
+                Example: {"tuning": (0, 45)}.
+                Overrides must narrow default bounds.
         """
         super().__init__(name="voyager_constrained", n_frequencies=n_frequencies)
         if power_penalty_fn is not None:
@@ -75,6 +79,10 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             "length": [1, 4000],
             "phase": [-180, 180],
         }
+        property_bounds = self._apply_property_bounds_overrides(
+            property_bounds,
+            bounds_overrides,
+        )
 
         # select properties to be optimized
         optimized_properties = [
@@ -131,12 +139,14 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
 
             # simulate the three modulation setups
-            q_results = simulate(**{**self._q_arrays, 'optimized_parameters': optimized_parameters})
+            q_results = simulate(
+                **{**self._q_arrays, "optimized_parameters": optimized_parameters}
+            )
             ampl_results = simulate(
-                **{**self._ampl_arrays, 'optimized_parameters': optimized_parameters}
+                **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
             )
             freq_results = simulate(
-                **{**self._freq_arrays, 'optimized_parameters': optimized_parameters}
+                **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
             )
             results = [
                 (*q_results, *self._q_metadata),
@@ -164,12 +174,14 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             optimized_parameters: Float[Array, "{self.n_params}"],
         ) -> Float:
             # simulate the three modulation setups
-            q_results = simulate(**{**self._q_arrays, 'optimized_parameters': optimized_parameters})
+            q_results = simulate(
+                **{**self._q_arrays, "optimized_parameters": optimized_parameters}
+            )
             ampl_results = simulate(
-                **{**self._ampl_arrays, 'optimized_parameters': optimized_parameters}
+                **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
             )
             freq_results = simulate(
-                **{**self._freq_arrays, 'optimized_parameters': optimized_parameters}
+                **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
             )
             results = [
                 (*q_results, *self._q_metadata),
@@ -223,12 +235,14 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             Sensitivity values at each frequency point.
         """
         # simulate the three modulation setups
-        q_results = simulate(**{**self._q_arrays, 'optimized_parameters': optimized_parameters})
+        q_results = simulate(
+            **{**self._q_arrays, "optimized_parameters": optimized_parameters}
+        )
         ampl_results = simulate(
-            **{**self._ampl_arrays, 'optimized_parameters': optimized_parameters}
+            **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
         )
         freq_results = simulate(
-            **{**self._freq_arrays, 'optimized_parameters': optimized_parameters}
+            **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
         )
         results = [
             (*q_results, *self._q_metadata),

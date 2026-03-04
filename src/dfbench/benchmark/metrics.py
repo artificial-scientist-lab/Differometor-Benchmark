@@ -4,7 +4,7 @@ This module contains all metric computation functions, separated from the main
 Benchmark class for clarity. Functions are organized into three categories:
 
 1. Per-run functions (_run_*): Compute values for a single run's data
-2. Aggregation functions (_agg_*): Combine per-run results into statistics  
+2. Aggregation functions (_agg_*): Combine per-run results into statistics
 3. Multi-run functions (_multi_*): Require data from all runs (e.g., diversity)
 """
 

@@ -167,11 +167,12 @@ class Objective:
     - All ``*_reduced`` properties collapse batched entries to a single
       representative value (argmin of loss, then argmin of gradient norm,
       then first element).
-    - ``jax.grad``, ``jax.value_and_grad``, and ``jax.vmap`` variants 
+    - ``jax.grad``, ``jax.value_and_grad``, and ``jax.vmap`` variants
       are jit-compiled. So warmup is recommended before timing-sensitive runs.
     - Checkpoints are saved atomically (write to ``.tmp.npz``, then
       ``os.replace``) to prevent corruption from interrupted jobs.
     """
+
     def __init__(
         self,
         problem: ContinuousProblem,
@@ -279,7 +280,7 @@ class Objective:
         self._params_history = []
         self._eval_type_history = []
         self._time_steps = []
-        
+
         # Random seed for reproducibility (set by algorithm via set_seed method)
         self._seed = None
         self._rng_key = None
@@ -302,7 +303,7 @@ class Objective:
             Loss value at the given parameters.
         """
         return self.value(params)
-    
+
     # --------- Problem Information Properties ---------
 
     @property
@@ -681,7 +682,7 @@ class Objective:
                 key set by set_seed(), or falls back to numpy random.
 
         Returns:
-            Array of shape (n_samples, n_params) if n_samples > 1, 
+            Array of shape (n_samples, n_params) if n_samples > 1,
             or (n_params,) if n_samples == 1.
 
         Example:
@@ -693,10 +694,12 @@ class Objective:
             >>> samples = obj.random_params_bounded(n_samples=1000, rng_key=key)
         """
         if self._bounds is None:
-            raise ValueError("Cannot sample bounded params: bounds are None (unbounded objective).")
-        
+            raise ValueError(
+                "Cannot sample bounded params: bounds are None (unbounded objective)."
+            )
+
         lower, upper = self._bounds[0], self._bounds[1]
-        
+
         # Determine which random key to use
         if rng_key is not None:
             # Use provided key (manual override)
@@ -706,7 +709,7 @@ class Objective:
             key_to_use, self._rng_key = jax.random.split(self._rng_key)
         else:
             key_to_use = None
-        
+
         if key_to_use is not None:
             # Use JAX random
             samples = jax.random.uniform(
@@ -723,7 +726,7 @@ class Objective:
                 size=(n_samples, self.n_params),
             )
             samples = jnp.asarray(samples)
-        
+
         # Return 1D if single sample
         if n_samples == 1:
             return samples[0]
@@ -736,7 +739,7 @@ class Objective:
     ) -> Float[Array, "n_samples n_params"] | Float[Array, "n_params"]:
         """Generate random parameters in unbounded space.
 
-        Samples uniformly in bounded space, then applies inverse sigmoid 
+        Samples uniformly in bounded space, then applies inverse sigmoid
         transform to map to unbounded space (-∞, +∞).
 
         The inverse sigmoid transform ensures that when these unbounded params
@@ -764,10 +767,12 @@ class Objective:
         """
         # Generate bounded samples (will use internal key if set)
         bounded_samples = self.random_params_bounded(n_samples, rng_key=rng_key)
-        
+
         # Apply inverse sigmoid bounding
-        unbounded = self._inverse_sigmoid_bounding(bounded_samples, self._problem.bounds)
-        
+        unbounded = self._inverse_sigmoid_bounding(
+            bounded_samples, self._problem.bounds
+        )
+
         return unbounded
 
     @staticmethod
@@ -796,18 +801,18 @@ class Objective:
             Parameters in unbounded space.
         """
         lower, upper = bounds[0], bounds[1]
-        
+
         # Normalize to [0, 1]
         normalized = (bounded_params - lower) / (upper - lower)
-        
+
         # Clip to prevent numerical issues with logit at boundaries
         # logit(0) = -inf, logit(1) = +inf
         eps = 1e-7
         normalized = jnp.clip(normalized, eps, 1.0 - eps)
-        
+
         # Apply logit transform: logit(p) = log(p / (1 - p))
         unbounded = jnp.log(normalized / (1.0 - normalized))
-        
+
         return unbounded
 
     # ---------
@@ -905,10 +910,10 @@ class Objective:
 
     def _log_time(self) -> None:
         """Internal: Log current timestamp and check time budget."""
-        
+
         if self._start_time is None:
             return
-        
+
         time_elapsed = (
             time.time() - self._start_time if self._start_time is not None else 0.0
         )
@@ -991,7 +996,9 @@ class Objective:
             self._evals_exceeded = self._evals_left <= 0
         # Decide eval type
         # Format as bitmask: 0b{vmap}{grad}{loss}
-        eval_type = int(n_items > 1) << 2 | int(grad is not None) << 1 | int(loss is not None)
+        eval_type = (
+            int(n_items > 1) << 2 | int(grad is not None) << 1 | int(loss is not None)
+        )
         if eval_type == 0:
             eval_type = -1  # unknown eval
         if self._save_eval_type_history:
@@ -1013,7 +1020,9 @@ class Objective:
         else:
             # insert NaN(s) to keep alignment
             self._loss_history.append(
-                jnp.array([jnp.nan] * n_items) if (n_items > 1 and self._save_batched_losses_history) else _nan_entry()
+                jnp.array([jnp.nan] * n_items)
+                if (n_items > 1 and self._save_batched_losses_history)
+                else _nan_entry()
             )
 
         # log grads (only when saving grads)
@@ -1089,7 +1098,8 @@ class Objective:
             self._print_every is not None
             and self._print_every > 0
             and self._verbose >= 1
-            and (prev_eval_count // self._print_every) != (self._eval_count // self._print_every)
+            and (prev_eval_count // self._print_every)
+            != (self._eval_count // self._print_every)
         ):
             try:
                 self._render_display()
@@ -1126,20 +1136,20 @@ class Objective:
                 self._start_time += dt
             self._last_checkpoint_eval = self._eval_count
         return
-    
+
     # --------- public API for optimization ---------
 
     def start_logging(self) -> None:
         """Start the optimization timer. Call this before beginning optimization."""
         self._start_time = time.time()
-        
+
     def log_evaluation(
         self,
         params: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
         loss: Float | Float[Array, "batch"] | None = None,
         grad: Float | Float[Array, "batch"] | None = None,
     ) -> None:
-        """Manually log an evaluation result. Used for custom evaluation loops which 
+        """Manually log an evaluation result. Used for custom evaluation loops which
         should be jitted.
 
         This method allows external code to log evaluations that may not go through
@@ -1153,10 +1163,9 @@ class Objective:
         """
         self._log_time()
         self._log_evals(params, loss, grad)
-        
+
         self._log_to_file()
         return
-
 
     def value(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate objective function at given parameters.
@@ -1431,7 +1440,7 @@ class Objective:
                 current_loss_value = None
         else:
             current_loss_value = None
-            
+
         return {
             "eval_count": self._eval_count,
             "time_elapsed": self.time_elapsed,
@@ -1524,7 +1533,9 @@ class Objective:
         file_suffix = hyper_param_str_fmt if hyper_param_str_in_filename else ""
 
         # Output best parameters to JSON
-        with open(output_path / f"{file_prefix}_parameters{file_suffix}.json", "w") as f:
+        with open(
+            output_path / f"{file_prefix}_parameters{file_suffix}.json", "w"
+        ) as f:
             json.dump(best_params.tolist(), f, indent=4)
 
         # Output historical losses to JSON

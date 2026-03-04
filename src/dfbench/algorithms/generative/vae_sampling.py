@@ -10,7 +10,6 @@ The VAE learns a low-dimensional (d/10) latent space that captures the structure
 of high-quality solutions, making optimization more efficient in high dimensions.
 """
 
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -279,16 +278,22 @@ class VAESampling(OptimizationAlgorithm):
             loader = DataLoader(dataset, batch_size=32, shuffle=True)
 
             vae.train()
-            train_vae(vae, loader, epochs=vae_epochs, device=self._device, verbose=False)
+            train_vae(
+                vae, loader, epochs=vae_epochs, device=self._device, verbose=False
+            )
 
         else:
             # Mode 2: Pure Random Sampling
-            data = torch.randn(vae_training_samples, input_dim, device=self._device) * 1.65
+            data = (
+                torch.randn(vae_training_samples, input_dim, device=self._device) * 1.65
+            )
             dataset = TensorDataset(data)
             loader = DataLoader(dataset, batch_size=32, shuffle=True)
 
             vae.train()
-            train_vae(vae, loader, epochs=vae_epochs, device=self._device, verbose=False)
+            train_vae(
+                vae, loader, epochs=vae_epochs, device=self._device, verbose=False
+            )
 
         # === Bayesian Optimization in Latent Space ===
 
@@ -350,7 +355,9 @@ class VAESampling(OptimizationAlgorithm):
         # BO loop - iterate up to max_iterations
         bo_iterations = 0
 
-        while (max_iterations is None or bo_iterations < max_iterations) and not obj.budget_exceeded:
+        while (
+            max_iterations is None or bo_iterations < max_iterations
+        ) and not obj.budget_exceeded:
             bo_iterations += 1
 
             # Fit GP model
