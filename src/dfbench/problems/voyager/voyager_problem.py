@@ -59,7 +59,7 @@ class VoyagerProblem(OpticalSetupProblem):
         property_bounds = {
             "reflectivity": [0, 1],
             "tuning": [-180, 180],
-            "db": [0.01, 20],
+            "db": [0.01, 10],
             "angle": [-180, 180],
             "power": [0.01, 200],
             "mass": [0.01, 200],

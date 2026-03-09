@@ -55,13 +55,13 @@ def main():
     )
     args = parser.parse_args()
 
-    results_root = Path(f"results/cd/{args.problem}")
+    results_root = Path(f"results/cd/{args.problem}_updated_bounds")
     results_root.mkdir(parents=True, exist_ok=True)
 
     exp_name = (
         f"cd_{args.problem}_seed_{args.random_seed}_rounds_{args.rounds}"
         f"_window_{args.initial_window}_shrink_{args.window_shrink}"
-        f"_min_window_{args.min_window}_sweep_{args.n_sweep}"
+        f"_min_window_{args.min_window}_sweep_{args.n_sweep}_updated_bounds"
     )
     save_path = results_root / exp_name
 
