@@ -23,8 +23,10 @@ Objective(
     save_time_steps: bool = True,
     save_params_history: bool = True,
     save_grad_history: bool = False,
+    save_hessian_history: bool = False,
     save_batched_losses_history: bool = False,
     save_batched_grads_history: bool = False,
+    save_batched_hessians_history: bool = False,
     save_batched_history: bool = False,
     save_eval_type_history: bool = False,
     verbose: int = 0,
@@ -45,10 +47,12 @@ Objective(
 | `save_time_steps` | `bool` | `True` | Record elapsed-time timestamp for each evaluation. |
 | `save_params_history` | `bool` | `True` | Record the parameter vector at each evaluation. |
 | `save_grad_history` | `bool` | `False` | Record gradient vectors. Off by default to save memory. |
+| `save_hessian_history` | `bool` | `False` | Record Hessian matrices. Off by default because this can become memory-heavy quickly. |
 | `save_batched_losses_history` | `bool` | `False` | When using `vmap_*` methods, store the full `(batch,)` loss vector instead of just the minimum loss of the batch. |
 | `save_batched_grads_history` | `bool` | `False` | Store full batched gradient arrays. Careful: As the gradients are of dim `(n_params,)`, the batched version is of dim `(batch, n_params)` with the batched history being `(n_evals, batch, n_params)`! |
-| `save_batched_history` | `bool` | `False` | Also stores the params batched. Enables both `save_batched_losses_history` and `save_batched_grads_history`. |
-| `save_eval_type_history` | `bool` | `False` | Record a bitmask for each evaluation indicating whether it was a value, grad, value_and_grad, and/or batched call. |
+| `save_batched_hessians_history` | `bool` | `False` | Store full batched Hessian arrays with shape `(batch, n_params, n_params)`. Use sparingly for large batches or high-dimensional problems. |
+| `save_batched_history` | `bool` | `False` | Also stores batched params and enables the full batched loss / grad / Hessian histories when those derivative histories are enabled. |
+| `save_eval_type_history` | `bool` | `False` | Record a bitmask for each evaluation indicating whether it was a value, grad, hessian, combined call, and/or batched call. |
 | `verbose` | `int` | `0` | Verbosity level. `0` = silent; `1` = periodic progress prints; `2` is WIP. |
 | `print_every` | `int` | `100` | When `verbose ≥ 1`, print a progress summary every N evaluations. |
 | `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
@@ -72,19 +76,26 @@ All evaluation methods automatically record their results in the internal histor
 ```python
 obj.value(params)              # → float
 obj.grad(params)               # → Array[n_params]
+obj.hessian(params)            # → Array[n_params, n_params]
 obj.value_and_grad(params)     # → (float, Array[n_params])
+obj.value_grad_and_hessian(params)  # → (float, Array[n_params], Array[n_params, n_params])
 ```
 
 - `value(params)` — Evaluates the loss at `params`. Logs loss and params.
 - `grad(params)` — Computes the gradient. Logs grad and params, but **not** a loss value (the loss is not computed).
+- `hessian(params)` — Computes the exact Hessian. Logs Hessian and params, but **not** a loss value.
 - `value_and_grad(params)` — Computes both in a single forward+backward pass. Logs all three. **Preferred when you need both loss and gradient** because it is more efficient than calling `value` and `grad` separately and it logs the loss.
+- `value_grad_and_hessian(params)` — Computes loss, gradient, and Hessian together and logs all four.
 
 ### Batched evaluation
 
 ```python
 obj.vmap_value(params_batch)              # → Array[batch]
 obj.vmap_grad(params_batch)               # → Array[batch, n_params]
+obj.vmap_hessian(params_batch)            # → Array[batch, n_params, n_params]
 obj.vmap_value_and_grad(params_batch)     # → (Array[batch], Array[batch, n_params])
+obj.vmap_value_grad_and_hessian(params_batch)
+# → (Array[batch], Array[batch, n_params], Array[batch, n_params, n_params])
 ```
 
 Convenience aliases:
@@ -92,7 +103,9 @@ Convenience aliases:
 ```python
 obj.batched_value(…)            # same as vmap_value
 obj.batched_grad(…)             # same as vmap_grad
+obj.batched_hessian(…)          # same as vmap_hessian
 obj.batched_value_and_grad(…)   # same as vmap_value_and_grad
+obj.batched_value_grad_and_hessian(…)  # same as vmap_value_grad_and_hessian
 ```
 
 Batched methods use `jax.vmap` and evaluate the entire batch as **one** history entry. The eval counter is incremented by the batch size. When `save_batched_losses_history` is off (default), only the batch minimum loss is stored.
@@ -106,10 +119,10 @@ loss = obj(params)   # equivalent to obj.value(params)
 ### Manual logging
 
 ```python
-obj.log_evaluation(params=…, loss=…, grad=…)
+obj.log_evaluation(params=…, loss=…, grad=…, hessian=…)
 ```
 
-For algorithms with custom JIT-compiled evaluation loops that can't call `obj.value()` directly. Accepts the same `params`, `loss`, `grad` arguments and performs identical history recording.
+For algorithms with custom JIT-compiled evaluation loops that can't call `obj.value()` directly. Accepts the same `params`, `loss`, `grad`, `hessian` arguments and performs identical history recording.
 
 ---
 
@@ -121,11 +134,30 @@ Starts the wall-clock timer. **Must be called after JIT warmup and before the op
 
 ```python
 # Typical sequence
-_ = obj.value_and_grad(init_params)   # warmup
+obj.warmup_value_and_grad()           # warmup
 obj.start_logging()                    # timer starts NOW
 while not obj.budget_exceeded:
     …
 ```
+
+### `warmup_*()`
+
+`Objective` provides no-argument warmup helpers for every evaluation path:
+
+```python
+obj.warmup_value()
+obj.warmup_grad()
+obj.warmup_hessian()
+obj.warmup_value_and_grad()
+obj.warmup_value_grad_and_hessian()
+obj.warmup_vmap_value()
+obj.warmup_vmap_grad()
+obj.warmup_vmap_hessian()
+obj.warmup_vmap_value_and_grad()
+obj.warmup_vmap_value_grad_and_hessian()
+```
+
+Each helper executes the matching path **twice** on deterministic parameters and must be called before `start_logging()`. The batched variants use a deterministic batch of size 2.
 
 ### `reset()`
 
@@ -211,6 +243,7 @@ These properties return **copies** to prevent external mutation.
 |----------|------|-------------|
 | `loss_history` | `list` | All recorded losses (may contain batched arrays). |
 | `grad_history` | `list` | All recorded gradients (if saving was enabled). |
+| `hessian_history` | `list` | All recorded Hessians (if saving was enabled). |
 | `params_history` | `list` | All recorded parameter vectors (raw space, i.e. as it was given to the `Objective`). |
 | `params_history_bounded` | `list` | Params history mapped to bounded space. |
 | `time_steps` | `list[float]` | Elapsed time at each recorded evaluation. |
@@ -219,9 +252,10 @@ These properties return **copies** to prevent external mutation.
 
 **Rationale:** Batched evaluations produce `(batch, ...)` shaped entries. Downstream analysis (benchmarking, plotting) expects flat lists of scalars/vectors. The `*_reduced` properties collapse each batch to a single representative value:
 
-1. Select the entry (for loss, grad and param) with the minimum loss if available for that step.
+1. Select the entry (for loss, grad, Hessian and param) with the minimum loss if available for that step.
 2. Else select the entry with the minimum gradient norm.
-3. Else take the first element.
+3. Else select the entry with the minimum Hessian norm.
+4. Else take the first element.
 
 | Property | Type | Description |
 |----------|------|-------------|
@@ -229,6 +263,7 @@ These properties return **copies** to prevent external mutation.
 | `params_history_reduced` | `list[Array \| None]` | Params with batches reduced per the rule above. |
 | `params_history_reduced_bounded` | `list[Array \| None]` | Reduced params in bounded space. |
 | `grad_history_reduced` | `list[Array \| None]` | Grads with batches reduced. |
+| `hessian_history_reduced` | `list[Array \| None]` | Hessians with batches reduced. |
 
 ### Progress Counters
 
@@ -287,10 +322,10 @@ Every evaluation method follows the same pipeline internally:
 
 1. **Execute** the JAX function (`_func`, `_value_and_grad_func`, `_vmap_func`, etc.)
 2. **`_log_time()`** — record a `time_steps` entry; check time budget.
-3. **`_log_evals(params, loss, grad)`** — record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget.
+3. **`_log_evals(params, loss, grad, hessian)`** — record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget.
 4. **`_log_to_file()`** — if `save_to_file_every` is set, trigger a periodic checkpoint.
 
-> **Important:** These are private methods — do not call `_log_time()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad)` method instead, which wraps all three. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm.md#custom-jit-compiled-loops-with-log_evaluation) for details.
+> **Important:** These are private methods — do not call `_log_time()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad, hessian=None)` method instead, which wraps all three. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm.md#custom-jit-compiled-loops-with-log_evaluation) for details.
 
 Budget enforcement happens *after* the evaluation returns. This means the algorithm always receives a valid result, but once any budget is exceeded the history stops growing and `budget_exceeded` becomes `True`.
 

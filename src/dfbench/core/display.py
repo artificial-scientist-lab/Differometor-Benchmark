@@ -60,9 +60,17 @@ _TYPE_NAMES: dict[int, str] = {
     1: "val",
     2: "grad",
     3: "val+g",
+    8: "hess",
+    9: "val+h",
+    10: "g+h",
+    11: "val+g+h",
     5: "vmap-v",
     6: "vmap-g",
     7: "vmap+g",
+    12: "vmap-h",
+    13: "vmap-v+h",
+    14: "vmap-g+h",
+    15: "vmap+g+h",
     -1: "other",
 }
 

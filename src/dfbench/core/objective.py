@@ -25,11 +25,12 @@ class Objective:
 
     Core responsibilities
     ---------------------
-    1. **Function evaluation** – exposes ``value``, ``grad``, and
-       ``value_and_grad`` for single-point queries as well as ``vmap_value``,
-       ``vmap_grad``, and ``vmap_value_and_grad`` (aliased as ``batched_*``)
-       for batched evaluation.  The instance is also callable:
-       ``obj(params)`` is equivalent to ``obj.value(params)``.
+    1. **Function evaluation** – exposes ``value``, ``grad``, ``hessian``,
+       ``value_and_grad``, and ``value_grad_and_hessian`` for single-point
+       queries as well as ``vmap_value``, ``vmap_grad``, ``vmap_hessian``,
+       and their combined variants (aliased as ``batched_*``) for batched
+       evaluation.  The instance is also callable: ``obj(params)`` is
+       equivalent to ``obj.value(params)``.
 
     2. **Budget enforcement** – honours ``max_evals`` and ``max_time``
        constraints.  Once a budget is exhausted the ``budget_exceeded``
@@ -72,13 +73,19 @@ class Objective:
 
     - ``value(params)``            – scalar loss.
     - ``grad(params)``             – gradient vector.
+    - ``hessian(params)``          – Hessian matrix.
     - ``value_and_grad(params)``   – both in one forward+backward pass.
+    - ``value_grad_and_hessian(params)`` – loss, gradient, and Hessian.
     - ``vmap_value(params)``       – batched losses   (alias ``batched_value``).
     - ``vmap_grad(params)``        – batched gradients (alias ``batched_grad``).
-    - ``vmap_value_and_grad(params)`` – batched both  (alias ``batched_value_and_grad``).
+    - ``vmap_hessian(params)``     – batched Hessians (alias ``batched_hessian``).
+    - ``vmap_value_and_grad(params)`` – batched loss + grad.
+    - ``vmap_value_grad_and_hessian(params)`` – batched loss + grad + Hessian.
 
     **Lifecycle**
 
+    - ``warmup_*()``               – deterministic two-call JAX warmups; call
+      before ``start_logging()``.
     - ``start_logging()``          – starts the wall-clock timer; call before optimising.
     - ``reset()``                  – clears all histories / counters for a fresh run.
 
@@ -139,6 +146,8 @@ class Objective:
     +------------------------------------+---------------------------------------------------+
     | ``grad_history``                   | List of all recorded gradients (copy).            |
     +------------------------------------+---------------------------------------------------+
+    | ``hessian_history``                | List of all recorded Hessians (copy).             |
+    +------------------------------------+---------------------------------------------------+
     | ``params_history``                 | List of all recorded params (copy, raw).          |
     +------------------------------------+---------------------------------------------------+
     | ``params_history_bounded``         | Params history mapped to bounded space.           |
@@ -161,14 +170,17 @@ class Objective:
     +------------------------------------+---------------------------------------------------+
     | ``grad_history_reduced``           | Grads with batches reduced to single entry.       |
     +------------------------------------+---------------------------------------------------+
+    | ``hessian_history_reduced``        | Hessians with batches reduced to single entry.    |
+    +------------------------------------+---------------------------------------------------+
 
     Notes
     -----
     - All ``*_reduced`` properties collapse batched entries to a single
       representative value (argmin of loss, then argmin of gradient norm,
-      then first element).
-    - ``jax.grad``, ``jax.value_and_grad``, and ``jax.vmap`` variants
-      are jit-compiled. So warmup is recommended before timing-sensitive runs.
+      then argmin of Hessian norm, then first element).
+    - ``jax.grad``, ``jax.hessian``, ``jax.value_and_grad``, and ``jax.vmap``
+      variants are prepared up front, so warmup is recommended before
+      timing-sensitive runs.
     - Checkpoints are saved atomically (write to ``.tmp.npz``, then
       ``os.replace``) to prevent corruption from interrupted jobs.
     """
@@ -182,8 +194,10 @@ class Objective:
         save_time_steps: bool = True,
         save_params_history: bool = True,
         save_grad_history: bool = False,
+        save_hessian_history: bool = False,
         save_batched_losses_history: bool = False,
         save_batched_grads_history: bool = False,
+        save_batched_hessians_history: bool = False,
         save_batched_history: bool = False,
         save_eval_type_history: bool = False,
         verbose: int = 0,
@@ -202,9 +216,12 @@ class Objective:
             save_time_steps: Whether to track timestamps for each evaluation.
             save_params_history: Whether to save parameter history.
             save_grad_history: Whether to save gradient history.
+            save_hessian_history: Whether to save Hessian history.
             save_batched_losses_history: Whether to save full batched losses.
             save_batched_grads_history: Whether to save full batched gradients.
-            save_batched_history: Whether to save full batched params, grads and losses.
+            save_batched_hessians_history: Whether to save full batched Hessians.
+            save_batched_history: Whether to save full batched params, losses,
+                and any enabled derivative histories.
             save_eval_type_history: Whether to save evaluation types in a separate history.
             verbose: Verbosity level (0=silent, 1=warnings, 2=info). Defaults to 0.
             print_every: Print progress every N evaluations (if verbose >= 1). Defaults to 100.
@@ -226,6 +243,7 @@ class Objective:
         self._save_time_steps = save_time_steps
         self._save_params_history = save_params_history
         self._save_grad_history = save_grad_history
+        self._save_hessian_history = save_hessian_history
         self._save_batched_params_history = save_batched_history
         self._save_batched_losses_history = (
             save_batched_losses_history or save_batched_history
@@ -233,34 +251,36 @@ class Objective:
         self._save_batched_grads_history = (
             save_batched_grads_history or save_batched_history
         )
+        self._save_batched_hessians_history = (
+            save_batched_hessians_history or save_batched_history
+        )
         self._save_eval_type_history = save_eval_type_history
         self._save_to_file_every = save_to_file_every
         self._display_mode = display_mode
 
         self._bounds = problem.bounds
-        if not self.unbounded:
-            self._func = problem.objective_function
-            self._grad_func = jax.grad(problem.objective_function)
-            self._value_and_grad_func = jax.value_and_grad(problem.objective_function)
-            self._vmap_func = jax.vmap(problem.objective_function)
-            self._vmap_grad_func = jax.vmap(jax.grad(problem.objective_function))
-            self._vmap_value_and_grad_func = jax.vmap(
-                jax.value_and_grad(problem.objective_function)
-            )
-        else:
-            # Assume unbounded optimization is always done with sigmoid bounding
-            self._func = problem.sigmoid_objective_function
-            self._vmap_func = jax.vmap(problem.sigmoid_objective_function)
-            self._value_and_grad_func = jax.value_and_grad(
-                problem.sigmoid_objective_function
-            )
-            self._vmap_value_and_grad_func = jax.vmap(
-                jax.value_and_grad(problem.sigmoid_objective_function)
-            )
-            self._grad_func = jax.grad(problem.sigmoid_objective_function)
-            self._vmap_grad_func = jax.vmap(
-                jax.grad(problem.sigmoid_objective_function)
-            )
+        self._func = (
+            problem.sigmoid_objective_function
+            if self.unbounded
+            else problem.objective_function
+        )
+        self._grad_func = jax.grad(self._func)
+        self._hessian_func = jax.hessian(self._func)
+        self._value_and_grad_func = jax.value_and_grad(self._func)
+
+        def _value_grad_and_hessian(params):
+            value, grad = self._value_and_grad_func(params)
+            hessian = self._hessian_func(params)
+            return value, grad, hessian
+
+        self._value_grad_and_hessian_func = _value_grad_and_hessian
+        self._vmap_func = jax.vmap(self._func)
+        self._vmap_grad_func = jax.vmap(self._grad_func)
+        self._vmap_hessian_func = jax.vmap(self._hessian_func)
+        self._vmap_value_and_grad_func = jax.vmap(self._value_and_grad_func)
+        self._vmap_value_grad_and_hessian_func = jax.vmap(
+            self._value_grad_and_hessian_func
+        )
 
         self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self._time_left = self._max_time
@@ -277,6 +297,7 @@ class Objective:
         self._best_params = None
         self._loss_history = []
         self._grad_history = []
+        self._hessian_history = []
         self._params_history = []
         self._eval_type_history = []
         self._time_steps = []
@@ -433,6 +454,17 @@ class Objective:
         return self._grad_history.copy()
 
     @property
+    def hessian_history(
+        self,
+    ) -> list[
+        Float[Array, "n_params n_params"]
+        | Float[Array, "batch n_params n_params"]
+        | None
+    ]:
+        """Copy of all Hessian values computed (prevents external modification)."""
+        return self._hessian_history.copy()
+
+    @property
     def params_history(
         self,
     ) -> list[Float[Array, "n_params"] | Float[Array, "batch n_params"]]:
@@ -490,7 +522,7 @@ class Objective:
     def eval_type_counts(self) -> dict[int, int]:
         """Distribution of evaluation call types as ``{type_code: count}`` dict.
 
-        Type codes are bitmasks: ``0b{vmap}{grad}{loss}``
+        Type codes are bitmasks: ``0b{hess}{vmap}{grad}{loss}``
 
         +------+-----------------------------+
         | Code | Meaning                     |
@@ -501,11 +533,19 @@ class Objective:
         +------+-----------------------------+
         |  3   | value + grad                |
         +------+-----------------------------+
+        |  8   | hessian only                |
+        +------+-----------------------------+
+        | 11   | value + grad + hessian      |
+        +------+-----------------------------+
         |  5   | batched value               |
         +------+-----------------------------+
         |  6   | batched grad                |
         +------+-----------------------------+
         |  7   | batched value + grad        |
+        +------+-----------------------------+
+        | 12   | batched hessian             |
+        +------+-----------------------------+
+        | 15   | batched value + grad + hess |
         +------+-----------------------------+
         | -1   | unknown (params only)       |
         +------+-----------------------------+
@@ -545,7 +585,8 @@ class Objective:
         whether batched params were saved. For batched entries, selects:
         1. Params with minimum loss (if loss available for that step)
         2. Params with smallest gradient norm (if grad available)
-        3. First entry in batch (fallback)
+        3. Params with smallest Hessian norm (if Hessian available)
+        4. First entry in batch (fallback)
         """
         result = []
         for i, params in enumerate(self._params_history):
@@ -558,26 +599,18 @@ class Objective:
                 # Already scalar params
                 result.append(params_arr)
             else:
-                # Batched params - need to select one
-                # Try to use loss to select best
-                if i < len(self._loss_history):
-                    loss = jnp.asarray(self._loss_history[i])
-                    if loss.ndim > 0 and not jnp.all(jnp.isnan(loss)):
-                        idx = int(jnp.nanargmin(loss))
-                        result.append(params_arr[idx])
-                        continue
-
-                # Try to use grad norm to select (smaller = closer to optimum)
-                if i < len(self._grad_history) and self._grad_history[i] is not None:
-                    grad = jnp.asarray(self._grad_history[i])
-                    if grad.ndim > 1:
-                        grad_norms = jnp.linalg.norm(grad, axis=-1)
-                        idx = int(jnp.nanargmin(grad_norms))
-                        result.append(params_arr[idx])
-                        continue
-
-                # Fallback: first entry
-                result.append(params_arr[0])
+                idx = self._representative_index(
+                    loss=self._loss_history[i] if i < len(self._loss_history) else None,
+                    grad=(
+                        self._grad_history[i] if i < len(self._grad_history) else None
+                    ),
+                    hessian=(
+                        self._hessian_history[i]
+                        if i < len(self._hessian_history)
+                        else None
+                    ),
+                )
+                result.append(params_arr[idx])
         return result
 
     @property
@@ -619,19 +652,41 @@ class Objective:
             if grad_arr.ndim == 1:
                 result.append(grad_arr)
             else:
-                # Batched grads - select one
-                # Try to use loss to select
-                if i < len(self._loss_history):
-                    loss = jnp.asarray(self._loss_history[i])
-                    if loss.ndim > 0 and not jnp.all(jnp.isnan(loss)):
-                        idx = int(jnp.nanargmin(loss))
-                        result.append(grad_arr[idx])
-                        continue
-
-                # Use smallest grad norm
-                grad_norms = jnp.linalg.norm(grad_arr, axis=-1)
-                idx = int(jnp.nanargmin(grad_norms))
+                idx = self._representative_index(
+                    loss=self._loss_history[i] if i < len(self._loss_history) else None,
+                    grad=grad_arr,
+                    hessian=(
+                        self._hessian_history[i]
+                        if i < len(self._hessian_history)
+                        else None
+                    ),
+                )
                 result.append(grad_arr[idx])
+        return result
+
+    @property
+    def hessian_history_reduced(
+        self,
+    ) -> list[Float[Array, "n_params n_params"] | None]:
+        """Hessian history with batches reduced to a single representative."""
+        result = []
+        for i, hessian in enumerate(self._hessian_history):
+            if hessian is None:
+                result.append(None)
+                continue
+
+            hessian_arr = jnp.asarray(hessian)
+            if hessian_arr.ndim == 2:
+                result.append(hessian_arr)
+            else:
+                idx = self._representative_index(
+                    loss=self._loss_history[i] if i < len(self._loss_history) else None,
+                    grad=(
+                        self._grad_history[i] if i < len(self._grad_history) else None
+                    ),
+                    hessian=hessian_arr,
+                )
+                result.append(hessian_arr[idx])
         return result
 
     # --------- Random seed management ---------
@@ -815,6 +870,39 @@ class Objective:
 
         return unbounded
 
+    def _deterministic_warmup_params(
+        self,
+        n_samples: int = 1,
+    ) -> Float[Array, "n_params"] | Float[Array, "n_samples n_params"]:
+        """Return deterministic midpoint params in the currently active raw space."""
+        if self._bounds is None:
+            raise ValueError(
+                "Cannot create deterministic warmup params without finite bounds."
+            )
+        if n_samples < 1:
+            raise ValueError("n_samples must be at least 1.")
+
+        midpoint = (self._bounds[0] + self._bounds[1]) / 2.0
+        bounded_params = (
+            midpoint
+            if n_samples == 1
+            else jnp.repeat(midpoint[None, :], repeats=n_samples, axis=0)
+        )
+
+        if self.unbounded:
+            return self._inverse_sigmoid_bounding(bounded_params, self._bounds)
+        return bounded_params
+
+    def _warmup_twice(self, fn, params) -> None:
+        """Execute a deterministic warmup twice before logging begins."""
+        if self._start_time is not None:
+            raise RuntimeError(
+                "warmup_*() must be called before start_logging() to avoid "
+                "affecting budgets and histories."
+            )
+        fn(params)
+        fn(params)
+
     # ---------
 
     def _get_run_data_path(
@@ -908,6 +996,36 @@ class Objective:
         """Helper to get ndim attribute, returning 0 if not present."""
         return getattr(x, "ndim", 0)
 
+    @staticmethod
+    def _nanargmin_or_none(values) -> int | None:
+        """Return nanargmin index or None if the input is empty / all-NaN."""
+        arr = jnp.asarray(values)
+        if arr.size == 0 or jnp.all(jnp.isnan(arr)):
+            return None
+        return int(jnp.nanargmin(arr))
+
+    def _representative_index(self, loss=None, grad=None, hessian=None) -> int:
+        """Pick a representative batch index using loss, then grad, then Hessian."""
+        if loss is not None and self._ndim(loss) > 0:
+            idx = self._nanargmin_or_none(loss)
+            if idx is not None:
+                return idx
+
+        if grad is not None and self._ndim(grad) > 1:
+            grad_norms = jnp.linalg.norm(jnp.asarray(grad), axis=-1)
+            idx = self._nanargmin_or_none(grad_norms)
+            if idx is not None:
+                return idx
+
+        if hessian is not None and self._ndim(hessian) > 2:
+            flat_hessian = jnp.reshape(jnp.asarray(hessian), (hessian.shape[0], -1))
+            hessian_norms = jnp.linalg.norm(flat_hessian, axis=-1)
+            idx = self._nanargmin_or_none(hessian_norms)
+            if idx is not None:
+                return idx
+
+        return 0
+
     def _log_time(self) -> None:
         """Internal: Log current timestamp and check time budget."""
 
@@ -937,10 +1055,14 @@ class Objective:
         params: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
         loss: Float | Float[Array, "batch"] | None = None,
         grad: Float | Float[Array, "batch"] | None = None,
+        hessian: Float[Array, "n_params n_params"]
+        | Float[Array, "batch n_params n_params"]
+        | None = None,
     ) -> None:
         """Internal: Log evaluation results, update histories, and track best loss.
 
-        This function is defensive: `params`, `loss`, or `grad` may be None.
+        This function is defensive: `params`, `loss`, `grad`, or `hessian` may
+        be None.
         Histories are kept index-aligned by inserting NaN placeholders when a
         particular quantity is not provided. An `_eval_types` entry is appended
         describing the kind of evaluation ('value', 'grad', 'value_and_grad').
@@ -960,6 +1082,8 @@ class Objective:
             n_items = int(loss.shape[0])
         elif grad is not None and self._ndim(grad) > 1:
             n_items = int(grad.shape[0])
+        elif hessian is not None and self._ndim(hessian) > 2:
+            n_items = int(hessian.shape[0])
         else:
             n_items = 1
 
@@ -995,12 +1119,16 @@ class Objective:
             self._evals_left = max(0, self._max_evals - self._eval_count)
             self._evals_exceeded = self._evals_left <= 0
         # Decide eval type
-        # Format as bitmask: 0b{vmap}{grad}{loss}
-        eval_type = (
-            int(n_items > 1) << 2 | int(grad is not None) << 1 | int(loss is not None)
-        )
-        if eval_type == 0:
-            eval_type = -1  # unknown eval
+        # Format as bitmask: 0b{hess}{vmap}{grad}{loss}
+        if loss is None and grad is None and hessian is None:
+            eval_type = -1
+        else:
+            eval_type = (
+                int(hessian is not None) << 3
+                | int(n_items > 1) << 2
+                | int(grad is not None) << 1
+                | int(loss is not None)
+            )
         if self._save_eval_type_history:
             self._eval_type_history.append(eval_type)
         # Always track call count and type distribution (O(1), no allocation)
@@ -1031,16 +1159,21 @@ class Objective:
                 if self._ndim(grad) == 1 or self._save_batched_grads_history:
                     self._grad_history.append(grad)
                 else:
-                    # batched grads without saving batch: pick representative grad
-                    # (same index logic as params_history for consistency)
-                    if loss is not None and self._ndim(loss) > 0:
-                        idx = int(jnp.nanargmin(loss))
-                    else:
-                        grad_norms = jnp.linalg.norm(grad, axis=-1)
-                        idx = int(jnp.nanargmin(grad_norms))
+                    idx = self._representative_index(loss=loss, grad=grad, hessian=hessian)
                     self._grad_history.append(grad[idx])
             else:
                 self._grad_history.append(None)
+
+        # log Hessians (only when saving Hessians)
+        if self._save_hessian_history:
+            if hessian is not None:
+                if self._ndim(hessian) == 2 or self._save_batched_hessians_history:
+                    self._hessian_history.append(hessian)
+                else:
+                    idx = self._representative_index(loss=loss, grad=grad, hessian=hessian)
+                    self._hessian_history.append(hessian[idx])
+            else:
+                self._hessian_history.append(None)
 
         # params history (store raw params; use *_bounded properties for bounded access)
         if self._save_params_history:
@@ -1048,20 +1181,8 @@ class Objective:
                 if self._ndim(params) == 1 or self._save_batched_params_history:
                     self._params_history.append(params)
                 else:  # batched case but not saving batched history
-                    # choose representative param by argmin of loss/grad if available
-                    if loss is not None:
-                        idx = int(jnp.nanargmin(loss)) if self._ndim(loss) > 0 else 0
-                        self._params_history.append(params[idx])
-                    elif grad is not None:
-                        # Use norm of each grad to select (smaller norm = closer to optimum)
-                        if self._ndim(grad) > 1:
-                            grad_norms = jnp.linalg.norm(grad, axis=-1)
-                            idx = int(jnp.nanargmin(grad_norms))
-                        else:
-                            idx = 0
-                        self._params_history.append(params[idx])
-                    else:
-                        self._params_history.append(None)
+                    idx = self._representative_index(loss=loss, grad=grad, hessian=hessian)
+                    self._params_history.append(params[idx])
             else:
                 # No params provided; append None to keep alignment
                 self._params_history.append(None)
@@ -1139,6 +1260,64 @@ class Objective:
 
     # --------- public API for optimization ---------
 
+    def warmup_value(self) -> None:
+        """Warm up ``value()`` twice on deterministic params without logging."""
+        self._warmup_twice(self.value, self._deterministic_warmup_params())
+
+    def warmup_grad(self) -> None:
+        """Warm up ``grad()`` twice on deterministic params without logging."""
+        self._warmup_twice(self.grad, self._deterministic_warmup_params())
+
+    def warmup_hessian(self) -> None:
+        """Warm up ``hessian()`` twice on deterministic params without logging."""
+        self._warmup_twice(self.hessian, self._deterministic_warmup_params())
+
+    def warmup_value_and_grad(self) -> None:
+        """Warm up ``value_and_grad()`` twice on deterministic params."""
+        self._warmup_twice(self.value_and_grad, self._deterministic_warmup_params())
+
+    def warmup_value_grad_and_hessian(self) -> None:
+        """Warm up ``value_grad_and_hessian()`` twice on deterministic params."""
+        self._warmup_twice(
+            self.value_grad_and_hessian,
+            self._deterministic_warmup_params(),
+        )
+
+    def warmup_vmap_value(self) -> None:
+        """Warm up ``vmap_value()`` twice on a deterministic batch of size 2."""
+        self._warmup_twice(
+            self.vmap_value,
+            self._deterministic_warmup_params(n_samples=2),
+        )
+
+    def warmup_vmap_grad(self) -> None:
+        """Warm up ``vmap_grad()`` twice on a deterministic batch of size 2."""
+        self._warmup_twice(
+            self.vmap_grad,
+            self._deterministic_warmup_params(n_samples=2),
+        )
+
+    def warmup_vmap_hessian(self) -> None:
+        """Warm up ``vmap_hessian()`` twice on a deterministic batch of size 2."""
+        self._warmup_twice(
+            self.vmap_hessian,
+            self._deterministic_warmup_params(n_samples=2),
+        )
+
+    def warmup_vmap_value_and_grad(self) -> None:
+        """Warm up ``vmap_value_and_grad()`` twice on a deterministic batch."""
+        self._warmup_twice(
+            self.vmap_value_and_grad,
+            self._deterministic_warmup_params(n_samples=2),
+        )
+
+    def warmup_vmap_value_grad_and_hessian(self) -> None:
+        """Warm up ``vmap_value_grad_and_hessian()`` twice on a deterministic batch."""
+        self._warmup_twice(
+            self.vmap_value_grad_and_hessian,
+            self._deterministic_warmup_params(n_samples=2),
+        )
+
     def start_logging(self) -> None:
         """Start the optimization timer. Call this before beginning optimization."""
         self._start_time = time.time()
@@ -1148,6 +1327,9 @@ class Objective:
         params: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
         loss: Float | Float[Array, "batch"] | None = None,
         grad: Float | Float[Array, "batch"] | None = None,
+        hessian: Float[Array, "n_params n_params"]
+        | Float[Array, "batch n_params n_params"]
+        | None = None,
     ) -> None:
         """Manually log an evaluation result. Used for custom evaluation loops which
         should be jitted.
@@ -1160,9 +1342,10 @@ class Objective:
             params: Parameters evaluated (raw, possibly unbounded).
             loss: Loss value(s) computed.
             grad: Gradient value(s) computed.
+            hessian: Hessian value(s) computed.
         """
         self._log_time()
-        self._log_evals(params, loss, grad)
+        self._log_evals(params, loss, grad, hessian)
 
         self._log_to_file()
         return
@@ -1201,6 +1384,18 @@ class Objective:
         self._log_to_file()
         return grad
 
+    def hessian(
+        self, params: Float[Array, "n_params"]
+    ) -> Float[Array, "n_params n_params"]:
+        """Compute the Hessian of the objective function at given parameters."""
+        hessian = self._hessian_func(params)
+
+        self._log_time()
+        self._log_evals(params, None, None, hessian)
+
+        self._log_to_file()
+        return hessian
+
     def value_and_grad(
         self, params: Float[Array, "n_params"]
     ) -> tuple[Float, Float[Array, "n_params"]]:
@@ -1219,6 +1414,18 @@ class Objective:
 
         self._log_to_file()
         return value, grad
+
+    def value_grad_and_hessian(
+        self, params: Float[Array, "n_params"]
+    ) -> tuple[Float, Float[Array, "n_params"], Float[Array, "n_params n_params"]]:
+        """Compute value, gradient, and Hessian at a single parameter vector."""
+        value, grad, hessian = self._value_grad_and_hessian_func(params)
+
+        self._log_time()
+        self._log_evals(params, value, grad, hessian)
+
+        self._log_to_file()
+        return value, grad, hessian
 
     def vmap_value(
         self, params: Float[Array, "batch n_params"]
@@ -1258,6 +1465,18 @@ class Objective:
         self._log_to_file()
         return grads
 
+    def vmap_hessian(
+        self, params: Float[Array, "batch n_params"]
+    ) -> Float[Array, "batch n_params n_params"]:
+        """Compute Hessians for a batch of parameters."""
+        hessians = self._vmap_hessian_func(params)
+
+        self._log_time()
+        self._log_evals(params, None, None, hessians)
+
+        self._log_to_file()
+        return hessians
+
     def vmap_value_and_grad(
         self, params: Float[Array, "batch n_params"]
     ) -> tuple[Float[Array, "batch"], Float[Array, "batch n_params"]]:
@@ -1277,6 +1496,22 @@ class Objective:
         self._log_to_file()
         return values, grads
 
+    def vmap_value_grad_and_hessian(
+        self, params: Float[Array, "batch n_params"]
+    ) -> tuple[
+        Float[Array, "batch"],
+        Float[Array, "batch n_params"],
+        Float[Array, "batch n_params n_params"],
+    ]:
+        """Compute values, gradients, and Hessians for a batch of parameters."""
+        values, grads, hessians = self._vmap_value_grad_and_hessian_func(params)
+
+        self._log_time()
+        self._log_evals(params, values, grads, hessians)
+
+        self._log_to_file()
+        return values, grads, hessians
+
     def batched_value(
         self, params: Float[Array, "batch n_params"]
     ) -> Float[Array, "batch"]:
@@ -1289,11 +1524,27 @@ class Objective:
         """Alias for vmap_grad. Compute gradients for a batch of parameters."""
         return self.vmap_grad(params)
 
+    def batched_hessian(
+        self, params: Float[Array, "batch n_params"]
+    ) -> Float[Array, "batch n_params n_params"]:
+        """Alias for vmap_hessian. Compute Hessians for a batch of parameters."""
+        return self.vmap_hessian(params)
+
     def batched_value_and_grad(
         self, params: Float[Array, "batch n_params"]
     ) -> tuple[Float[Array, "batch"], Float[Array, "batch n_params"]]:
         """Alias for vmap_value_and_grad. Compute values and gradients for a batch."""
         return self.vmap_value_and_grad(params)
+
+    def batched_value_grad_and_hessian(
+        self, params: Float[Array, "batch n_params"]
+    ) -> tuple[
+        Float[Array, "batch"],
+        Float[Array, "batch n_params"],
+        Float[Array, "batch n_params n_params"],
+    ]:
+        """Alias for vmap_value_grad_and_hessian on a batch of parameters."""
+        return self.vmap_value_grad_and_hessian(params)
 
     # Redirect everythging else to jax. ...probably a bad idea
     # def __getattr__(self, name: str) -> Callable:
@@ -1342,6 +1593,7 @@ class Objective:
             temp_path,
             loss_history=np.array(self._loss_history, dtype=object),
             grad_history=np.array(self._grad_history, dtype=object),
+            hessian_history=np.array(self._hessian_history, dtype=object),
             params_history=np.array(self._params_history, dtype=object),
             eval_type_history=np.array(self._eval_type_history, dtype=object),
             time_steps=np.array(self._time_steps),
@@ -1392,6 +1644,11 @@ class Objective:
         # Restore state
         self._loss_history = data["loss_history"].tolist()
         self._grad_history = data["grad_history"].tolist()
+        self._hessian_history = (
+            data["hessian_history"].tolist()
+            if "hessian_history" in data.files
+            else []
+        )
         self._params_history = data["params_history"].tolist()
         self._time_steps = data["time_steps"].tolist()
         self._eval_count = int(data["eval_count"])
@@ -1403,7 +1660,17 @@ class Objective:
         )
         self._improvement_count = int(data["improvement_count"])
         self._evals_since_improvement = int(data["evals_since_improvement"])
-        self._eval_type_history = data["eval_type_history"].tolist()
+        self._eval_type_history = (
+            data["eval_type_history"].tolist()
+            if "eval_type_history" in data.files
+            else []
+        )
+        self._log_call_count = len(self._eval_type_history)
+        self._eval_type_counts = {}
+        for eval_type in self._eval_type_history:
+            self._eval_type_counts[eval_type] = (
+                self._eval_type_counts.get(eval_type, 0) + 1
+            )
 
         # Restore timing: set start_time so elapsed time continues correctly
         if len(self._time_steps) > 0:
@@ -1467,6 +1734,7 @@ class Objective:
 
         self._loss_history = []
         self._grad_history = []
+        self._hessian_history = []
         self._params_history = []
         self._time_steps = []
 

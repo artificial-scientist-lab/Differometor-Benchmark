@@ -56,7 +56,7 @@ problem = VoyagerProblem()
 obj = Objective(problem, unbounded=True, max_time=120)
 
 obj.set_seed(42)
-_ = obj.value_and_grad(obj.random_params_unbounded())   # JIT warmup
+obj.warmup_value_and_grad()   # JIT warmup
 obj.start_logging()
 
 params = obj.random_params_unbounded()

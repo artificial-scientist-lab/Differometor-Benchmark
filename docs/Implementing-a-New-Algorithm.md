@@ -204,12 +204,12 @@ params = obj.random_params_unbounded()             # shape: (n_params,)
 ### 4. JIT warmup
 
 ```python
-_ = obj.value(params)                    # single eval
-_ = obj.value_and_grad(params)           # when using gradients
-_ = obj.vmap_value(batch)                # for batched methods
+obj.warmup_value()                       # single eval path
+obj.warmup_value_and_grad()              # when using gradients
+obj.warmup_vmap_value()                  # for batched methods
 ```
 
-The first call compiles the JAX computation graph, which can take seconds. Do this **before** `start_logging()` so the compilation time is not counted against the time budget.
+Warmup can take seconds because it triggers JAX compilation. Do this **before** `start_logging()` so the compilation time is not counted against the time budget. The `warmup_*()` helpers use deterministic params internally and run the corresponding path twice.
 
 ### 5. Start logging
 
@@ -241,12 +241,16 @@ while not obj.budget_exceeded:
 |--------|-------------|------|
 | `obj.value(params)` | Need loss only, single point | loss, params |
 | `obj.grad(params)` | Need gradient only (rare) | grad, params (no loss!) |
+| `obj.hessian(params)` | Need exact second-order information | hessian, params (no loss!) |
 | `obj.value_and_grad(params)` | Gradient-based optimization | loss, grad, params |
+| `obj.value_grad_and_hessian(params)` | Newton-style / second-order optimization | loss, grad, hessian, params |
 | `obj.vmap_value(batch)` | Population evaluation | batch losses, batch params |
 | `obj.vmap_value_and_grad(batch)` | Batched gradient-based | batch losses, grads, params |
-| `obj.log_evaluation(…)` | Custom JIT'd loop | whatever you pass |
+| `obj.vmap_hessian(batch)` | Batched second-order optimization | batch hessians, batch params |
+| `obj.vmap_value_grad_and_hessian(batch)` | Batched second-order optimization | batch losses, grads, hessians, params |
+| `obj.log_evaluation(…)` | Custom JIT'd loop | whatever you pass, including optional Hessians |
 
-**Important:** `obj.grad()` does **not** log a loss value. If you need both, use `obj.value_and_grad()`.
+**Important:** `obj.grad()` and `obj.hessian()` do **not** log a loss value. If you need the loss too, use `obj.value_and_grad()` or `obj.value_grad_and_hessian()`.
 
 ### Custom JIT-compiled loops with `log_evaluation()`
 
@@ -254,7 +258,7 @@ Some optimizers (e.g. Optax's L-BFGS) need to call `value_and_grad` *inside* a J
 
 1. Get the raw function from `obj.problem` (e.g. `problem.sigmoid_objective_function`)
 2. Build your own JIT-compiled step
-3. After each step, call `obj.log_evaluation(params, loss, grad)` to record the results
+3. After each step, call `obj.log_evaluation(params, loss, grad, hessian=None)` to record the results
 
 ```python
 # Get the raw function for JIT compilation

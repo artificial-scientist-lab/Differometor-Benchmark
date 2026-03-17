@@ -1,0 +1,595 @@
+================================================================================
+                        dfbench — Test Behaviour Catalogue
+================================================================================
+
+This file lists every behaviour that automated tests should verify to guarantee
+correctness and stability of the dfbench code-base.  Tests are grouped by
+module / layer.  Within each group the items are roughly ordered from the most
+fundamental (pure functions, no side effects) to integration-level (requires
+setting up full objects).
+
+Priorities:
+  [P0]  Must never break — gate CI.
+  [P1]  Important invariants — run in CI; a failure is a bug.
+  [P2]  Nice to have / slow tests — nightly or manual.
+
+NOTE: Tests that require Differometor/GPU simulation (problem initialization,
+actual loss evaluation) must run via SLURM (srun). Tests that only use mocks or
+pure-Python logic can run locally.
+
+
+================================================================================
+TEST ORGANIZATION & MARKERS
+================================================================================
+
+Recommended file layout under tests/:
+
+  tests/
+    conftest.py                   # shared fixtures (mock problem, seeded obj)
+    test_api_imports.py           # Section 12 — import smoke tests
+    test_utils.py                 # Section 1 — t2j/j2t/inverse_sigmoid
+    test_config.py                # Section 2 — create_parser
+    test_problem_protocol.py      # Section 3 — abstract base
+    test_problems_smoke.py        # Section 4 — init/loss/grad (slow marker)
+    test_problem_bounds_overrides.py  # Sections 4.10–4.11, 4.15, 4.20–4.23
+    test_objective_randomness.py  # Section 5 seed & sampling items
+    test_objective_invariants.py  # Section 5 all other items
+    test_algorithm_protocol.py    # Section 6
+    test_algorithms_unit.py       # Section 7 cheap unit tests (mock problem)
+    test_metrics.py               # Section 8 — full metrics coverage
+    test_benchmark_smoke.py       # Section 9 — orchestration with mock
+    test_display.py               # Section 10
+    slow/
+      test_problems_full.py       # Section 4 full physics (needs srun)
+      test_algorithms_integration.py  # Section 7 + 13 (needs srun)
+      test_benchmark_full.py      # Section 13 (needs srun)
+
+Pytest markers (define in pyproject.toml / pytest.ini):
+  @pytest.mark.slow   — anything that calls Differometor simulation or runs
+                        a real optimizer for >5 s; requires srun on the cluster.
+  @pytest.mark.gpu    — tests that assert GPU-specific behaviour or require
+                        a CUDA device; must not block CPU-only CI.
+
+Default push suite: everything NOT marked slow or gpu.
+Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
+
+
+================================================================================
+1. UTILITIES  (dfbench.core.utils)
+================================================================================
+
+1.1  [P0] t2j: torch tensor → JAX array round-trip preserves values and shape.
+1.2  [P0] j2t: JAX array → torch tensor round-trip preserves values and shape.
+1.3  [P0] j2t produces a writable tensor (np copy, no read-only warning).
+1.4  [P0] t2j ∘ j2t and j2t ∘ t2j are identity (within float tolerance).
+1.5  [P0] inverse_sigmoid_bounding is the exact inverse of
+          differometor.utils.sigmoid_bounding (round-trip within 1e-5 for
+          points not at the boundary).
+1.6  [P0] inverse_sigmoid_bounding clips extreme values and does not produce
+          NaN or ±inf.
+
+
+================================================================================
+2. CONFIG  (dfbench.core.config)
+================================================================================
+
+2.1  [P0] create_parser generates correct argument names (snake_case →
+          --kebab-case).
+2.2  [P0] Integer, float, and string defaults produce the correct argparse
+          types.
+2.3  [P0] Boolean defaults become store_true / store_false flags.
+2.4  [P1] Parsing an empty argv returns all defaults unchanged.
+
+
+================================================================================
+3. PROBLEM PROTOCOL  (dfbench.core.problem.ContinuousProblem)
+================================================================================
+
+3.1  [P0] ContinuousProblem cannot be instantiated directly (abstract).
+3.2  [P0] A minimal concrete subclass must implement bounds,
+          optimization_pairs, objective_function, and
+          sigmoid_objective_function.
+3.3  [P0] n_params equals len(optimization_pairs).
+
+
+================================================================================
+4. PROBLEMS  (dfbench.problems)
+   These tests require Differometor → run via SLURM.
+================================================================================
+
+--- VoyagerProblem ---
+
+4.1  [P0] VoyagerProblem initializes without error.
+4.2  [P0] bounds has shape (2, n_params); lower < upper element-wise.
+4.3  [P0] optimization_pairs is non-empty; len matches bounds.shape[1].
+4.4  [P0] objective_function at a DETERMINISTIC input (bounds midpoint:
+          params = (lower + upper) / 2) returns a finite scalar (not NaN/inf).
+          Using the midpoint avoids randomness while guaranteeing a valid
+          in-bounds point. Also test once with a seeded random sample for
+          broader coverage, but the midpoint is the canonical regression point.
+4.5  [P0] sigmoid_objective_function at the inverse-sigmoid of the bounds
+          midpoint returns a finite scalar.
+4.6  [P0] jax.grad(objective_function)(midpoint) returns a finite array of
+          shape (n_params,).
+4.7  [P0] jax.grad(sigmoid_objective_function)(unbounded_midpoint) returns a
+          finite array of shape (n_params,).
+4.8  [P1] objective_function evaluated at the target setup parameters gives
+          loss ≈ 0 (by construction — sanity check).
+4.8b [P2] CONSISTENCY POINTS — decision note: testing at arbitrary random
+          parameter vectors is fragile (loss depends on random seed and
+          Differometor internals that may change).  The only safe fixed point
+          is the known target configuration (4.8 above).  For regression
+          protection, prefer saving a reference output once (golden-file
+          approach) and comparing against it with a wide tolerance rather
+          than hard-coding magic numbers.  Do NOT add tests that assert
+          specific numerical loss values at random points unless you store
+          those reference values in a committed fixture file.
+4.9  [P1] calculate_sensitivity returns shape (n_frequencies,) with all
+          positive values.
+4.10 [P1] bounds_overrides narrows bounds correctly; widening raises
+          ValueError.
+4.11 [P1] bounds_overrides with unknown property name raises ValueError.
+
+--- ConstrainedVoyagerProblem ---
+
+4.12 [P0] ConstrainedVoyagerProblem initializes without error.
+4.13 [P0] Same shape / finite-loss checks as 4.2–4.7.
+4.14 [P1] Switching power_penalty_fn (squashed_relu, relu, zero) changes loss
+          for the same params with high power values.
+4.15 [P1] bounds_overrides works identically to VoyagerProblem (4.10–4.11).
+
+--- RandomUIFOProblem ---
+
+4.16 [P0] RandomUIFOProblem(size=3, topology_seed=42) initializes without
+          error.
+4.17 [P0] Same shape / finite-loss checks as 4.2–4.7.
+4.18 [P1] Two instances with different topology_seed produce different
+          n_params / different bounds.
+4.19 [P1] Two instances with the same topology_seed produce identical n_params
+          and identical bounds.
+4.20 [P1] bounds_overrides works identically (4.10–4.11).
+
+--- Base problem helpers (OpticalSetupProblem) ---
+
+4.21 [P0] _apply_property_bounds_overrides: narrowing accepted, widening
+          rejected (unless allow_widen=True).
+4.22 [P0] _apply_property_bounds_overrides: lower >= upper raises ValueError.
+4.23 [P0] _apply_property_bounds_overrides: unknown property raises ValueError.
+4.24 [P1] squashed_relu_penalty returns 0 when value < threshold, >0 when
+          value > threshold, and is bounded in [0, 1).
+4.25 [P1] relu_penalty returns 0 when value < threshold, positive linear
+          above.
+4.26 [P1] zero_penalty always returns zero.
+
+
+================================================================================
+5. OBJECTIVE  (dfbench.core.objective.Objective)
+   Most tests can use a simple mock problem (quadratic, 2-param).
+================================================================================
+
+--- Construction & properties ---
+
+5.1  [P0] Objective(problem) initializes all counters to zero / empty.
+5.2  [P0] bounds property returns the problem's bounds.
+5.3  [P0] n_params matches problem.n_params.
+5.4  [P0] Initially: eval_count == 0, best_loss is None, budget_exceeded is
+          False.
+
+--- Warmup helpers ---
+
+5.4b [P1] warmup_*() before start_logging() does not change eval_count,
+          histories, or time_steps.
+5.4c [P1] warmup_*() executes the respective path exactly twice.
+5.4d [P1] warmup_*() after start_logging() raises to prevent accidental
+          logging into the timed run.
+
+--- Seed & random sampling ---
+
+  RANDOMNESS TESTING PRACTICES (how to write these tests correctly):
+  - Always call obj.set_seed(<fixed_int>) at the start of every test that
+    involves random sampling; never rely on module-level state.
+  - Never use np.random or Python random directly inside tests — only use
+    the Objective's set_seed + random_params_* methods so that the seeding
+    path being tested matches production code.
+  - For property-based tests (bounds, non-NaN), sample n=100 points with a
+    fixed seed and assert the property holds for all of them.
+  - For reproducibility tests (5.10), compare two independent Objective
+    instances both seeded identically — do not reuse the same instance, as
+    that would only verify the key-splitting mechanism, not the seed setter.
+  - Tests that rely on two consecutive samples being *different* (5.11)
+    should assert they are not all-equal, not that they differ element-wise
+    (occasional collisions are astronomically unlikely but not impossible).
+  - Avoid brittle value snapshots across CPU and GPU backends: JAX float32
+    arithmetic is not guaranteed bit-identical between devices.  Seed-based
+    reproducibility tests (5.10) must be run on the same device type.
+    Use allclose with a generous tolerance (rtol=1e-5) rather than ==.
+
+5.5  [P0] set_seed(42) then random_params_bounded(n=1) returns shape
+          (n_params,).
+5.6  [P0] set_seed(42) then random_params_bounded(n=10) returns shape
+          (10, n_params).
+5.7  [P0] random_params_bounded: all samples are within bounds element-wise.
+          (Test with n=100 samples, fixed seed; assert
+          jnp.all(samples >= lower) and jnp.all(samples <= upper).)
+5.8  [P0] random_params_unbounded: values are non-NaN and non-inf.
+          (Test with n=100 samples, fixed seed; assert
+          jnp.all(jnp.isfinite(samples)).)
+5.9  [P0] random_params_unbounded: applying sigmoid_bounding to the result
+          recovers a point within bounds (round-trip consistency).
+5.10 [P0] set_seed reproducibility: two *separate* Objective instances both
+          seeded with 42 produce identical outputs from random_params_bounded
+          and random_params_unbounded.
+5.11 [P0] Successive calls on the same seeded Objective (without re-seeding)
+          produce different samples (key splitting is consumed each call).
+5.11b[P0] Different seeds produce different samples: set_seed(42) and
+          set_seed(99) on otherwise identical Objectives yield non-identical
+          outputs from random_params_bounded (probabilistic sanity check;
+          assert not jnp.allclose).
+5.12 [P0] random_params_bounded with explicit rng_key overrides internal
+          state and does NOT consume the internal key (internal key produces
+          the same value before and after the explicit-key call).
+
+--- Evaluation: value, grad, value_and_grad ---
+
+5.13 [P0] value(params) returns a scalar and increments eval_count by 1.
+5.14 [P0] grad(params) returns shape (n_params,) and increments eval_count
+          by 1.
+5.14c [P0] hessian(params) returns shape (n_params, n_params) and increments
+          eval_count by 1.
+5.15 [P0] value_and_grad(params) returns (scalar, shape (n_params,)) and
+          increments eval_count by 1.
+5.15b [P0] value_grad_and_hessian(params) returns
+          (scalar, shape (n_params,), shape (n_params, n_params)) and
+          increments eval_count by 1.
+5.16 [P0] value_and_grad loss matches value(same_params).
+5.17 [P0] value_and_grad grad matches grad(same_params).
+5.18 [P0] Calling obj(params) (callable syntax) is identical to
+          obj.value(params).
+
+--- Batched evaluation: vmap_value, vmap_grad, vmap_value_and_grad ---
+
+5.19 [P0] vmap_value(batch) returns shape (batch_size,) and increments
+          eval_count by batch_size.
+5.20 [P0] vmap_grad(batch) returns shape (batch_size, n_params) and
+          increments eval_count by batch_size.
+5.20b [P0] vmap_hessian(batch) returns shape
+          (batch_size, n_params, n_params) and increments eval_count by
+          batch_size.
+5.21 [P0] vmap_value_and_grad(batch) returns correct shapes and increments
+          eval_count by batch_size.
+5.21b[P0] vmap_value_grad_and_hessian(batch) returns correct shapes and
+          increments eval_count by batch_size.
+5.22 [P0] batched_value / batched_grad / batched_value_and_grad are aliases
+          for the vmap variants.
+
+--- History tracking ---
+
+5.23 [P0] After start_logging() and several value() calls, loss_history
+          length matches eval_count.
+5.24 [P0] After value_and_grad calls, loss_history and grad_history (when
+          save_grad_history=True) are aligned in length.
+5.25 [P0] params_history (when save_params_history=True) is aligned.
+5.26 [P0] time_steps (when save_time_steps=True) are monotonically
+          non-decreasing.
+5.27 [P0] best_loss equals min(loss_history).
+5.28 [P0] best_params corresponds to the evaluation that produced best_loss.
+5.29 [P0] improvement_count counts the number of times best_loss decreased.
+5.30 [P0] evals_since_improvement resets to 0 on improvement, then
+          increments.
+
+--- Budget enforcement ---
+
+5.31 [P0] With max_evals=N: after N evaluations, budget_exceeded is True.
+5.32 [P0] With max_evals=N: evaluations after the budget do NOT append to
+          histories (fairness).
+5.33 [P0] evals_exceeded is True once eval_count >= max_evals.
+5.34 [P0] With max_time=T: budget_exceeded eventually becomes True.
+5.35 [P0] time_exceeded reflects elapsed time vs max_time correctly.
+5.36 [P1] eval budget with batches: a batch that would exceed max_evals is
+          still counted in eval_count but not logged to histories.
+5.37 [P0] evals_left returns correct remaining count.
+5.38 [P0] evals_progress_fraction returns 0 → 1 as evals increase.
+5.39 [P0] time_progress_fraction returns 0 → 1 as time elapses.
+
+--- Bounded / unbounded mode ---
+
+5.40 [P0] With unbounded=False, Objective uses problem.objective_function.
+5.41 [P0] With unbounded=True, Objective uses
+          problem.sigmoid_objective_function.
+5.42 [P0] best_params_bounded in unbounded mode: applies sigmoid_bounding and
+          result is within bounds.
+5.43 [P0] params_history_bounded in unbounded mode applies sigmoid_bounding to
+          each entry.
+
+--- Reduced history properties ---
+
+5.44 [P0] loss_history_reduced: for scalar entries, identical to
+          loss_history; for batched entries, returns nanmin.
+5.45 [P0] params_history_reduced: for scalar entries, identical; for batched,
+          selects the argmin-loss entry.
+5.46 [P0] grad_history_reduced: same selection logic as
+          params_history_reduced.
+5.47 [P0] params_history_reduced_bounded: combines reduction + sigmoid
+          bounding.
+
+--- Eval type tracking ---
+
+5.48 [P1] eval_type_counts correctly distinguishes value-only (1), grad-only
+          (2), value+grad (3), and batched variants (5, 6, 7).
+5.49 [P1] log_call_count equals the total number of _log_evals invocations.
+
+--- log_evaluation (manual logging) ---
+
+5.50 [P0] log_evaluation(params, loss, grad) updates histories the same way
+          as value_and_grad.
+5.51 [P0] log_evaluation respects budget enforcement.
+
+--- Reset ---
+
+5.52 [P0] reset() clears all histories and counters; eval_count == 0,
+          best_loss is None, budget_exceeded is False.
+
+--- Checkpointing (save / load) ---
+
+5.53 [P1] save_run_data creates a file on disk.
+5.54 [P1] load_run_data restores eval_count, loss_history, best_loss,
+          best_params to the saved state.
+5.55 [P1] After load_run_data, time_elapsed continues from where it left off.
+5.56 [P1] save_to_file_every triggers periodic checkpoints at correct
+          intervals.
+5.57 [P1] Atomic save: if the process is interrupted, no partial .npz exists
+          (uses .tmp.npz then os.replace).
+
+--- get_summary ---
+
+5.58 [P0] get_summary() returns a dict with keys: eval_count, time_elapsed,
+          best_loss, current_loss, improvement_count,
+          evals_since_improvement, budget_exceeded, time_exceeded,
+          evals_exceeded.
+
+--- __repr__ ---
+
+5.59 [P1] repr(Objective) includes eval count and best loss.
+
+
+================================================================================
+6. ALGORITHM PROTOCOL  (dfbench.core.algorithm)
+================================================================================
+
+6.1  [P0] OptimizationAlgorithm cannot be instantiated (abstract).
+6.2  [P0] AlgorithmType enum has the expected values: GRADIENT_BASED,
+          EVOLUTIONARY, SURROGATE_BASED, DIFFUSION_BASED, GENERATIVE.
+6.3  [P0] prepare() sets obj.unbounded, obj.algorithm_str, and returns
+          (seed, PRNGKey).
+6.4  [P0] prepare() with random_seed=None generates a seed and stores it in
+          self._random_seed.
+6.5  [P0] prepare() with random_seed=42 sets obj._seed to 42 and
+          np.random.seed(42).
+6.6  [P0] prepare() forwards extra kwargs as Objective attributes.
+
+
+================================================================================
+7. ALGORITHMS  (dfbench.algorithms.*)
+   Use a lightweight mock problem (e.g., sphere function) to keep tests fast.
+   Full integration with Differometor problems → SLURM.
+================================================================================
+
+--- Common checks for every algorithm class ---
+
+7.1  [P0] Each algorithm class has algorithm_str (non-empty string).
+7.2  [P0] Each algorithm class has algorithm_type (valid AlgorithmType).
+7.3  [P0] Each algorithm's optimize() mutates the Objective in-place
+          (eval_count > 0 after run).
+7.4  [P0] After optimize(), obj.best_loss is not None (at least one finite
+          evaluation).
+7.5  [P0] After optimize(), obj.loss_history is non-empty.
+7.6  [P0] After optimize(), obj.time_steps is non-empty and monotonically
+          non-decreasing.
+7.7  [P1] With random_seed set, two runs on the same problem produce
+          identical loss_history (reproducibility).
+
+--- Gradient-based algorithms (AdamGD, SAGD, NAAdamGD, LBFGSGD) ---
+
+7.8  [P0] algorithm_type is AlgorithmType.GRADIENT_BASED.
+7.9  [P0] prepare() sets obj.unbounded = True.
+7.10 [P0] After optimize(), obj.best_params_bounded is within problem bounds.
+7.11 [P1] AdamGD: patience-based early stopping works (stops before budget
+          with constant-zero-gradient problem).
+7.12 [P1] SAGD: transition probability is in [0, 1] for various inputs.
+7.13 [P1] SAGD: double-annealing mode returns valid probability.
+7.14 [P1] NAAdamGD: _anneal_sigma returns > 0 for progress in [0, 1).
+7.15 [P1] NAAdamGD: noise injection adds to params (output differs from
+          pure Adam on same seed/problem).
+7.16 [P1] LBFGSGD: eval_count accounts for linesearch probes (eval_count >
+          number of outer steps).
+
+--- Evolutionary algorithms (RandomSearch, EvoxES, EvoxPSO) ---
+
+7.17 [P0] algorithm_type is AlgorithmType.EVOLUTIONARY.
+7.18 [P0] prepare() sets obj.unbounded = False.
+7.19 [P0] RandomSearch: eval_count == batch_size * n_iterations after run.
+7.20 [P1] EvoxES: invalid variant string raises ValueError.
+7.21 [P1] EvoxPSO: invalid variant string raises ValueError.
+7.22 [P1] EvoxES/EvoxPSO: algorithm_str reflects variant name.
+
+--- Surrogate-based algorithms (BotorchBO, BotorchTuRBO, ReSTIR) ---
+
+7.23 [P0] algorithm_type is AlgorithmType.SURROGATE_BASED.
+7.24 [P0] After optimize(), best_loss < initial random sample mean (surrogate
+          guides search, on a simple problem).
+7.25 [P1] BotorchBO: handles NaN from objective gracefully (retries with
+          perturbation).
+7.26 [P1] ReSTIR: knn_predict returns correct shape (M,) for M queries.
+7.27 [P1] ReSTIR: standardize_data output has mean ≈ 0, std ≈ 1.
+7.28 [P1] ReSTIR: importance with tau=1 returns exp(-loss) correctly.
+
+--- Generative algorithms (VAESampling) ---
+
+7.29 [P0] algorithm_type is AlgorithmType.GENERATIVE.
+7.30 [P1] ResNetVAE forward pass returns (recon, mu, logvar) with correct
+          shapes.
+7.31 [P1] vae_loss_function returns (total_loss, recon_loss, kld) — all
+          finite tensors.
+7.32 [P1] train_vae does not crash on a small synthetic dataset and loss
+          decreases.
+
+
+================================================================================
+8. BENCHMARK METRICS  (dfbench.benchmark.metrics)
+================================================================================
+
+  KNOWN-ANSWER PRINCIPLE: every metric function must have at least one test
+  with hand-computed expected output on a small array (≤ 5 elements) so that
+  correctness can be verified by inspection.  Property-only tests ("result is
+  in [0,1]") are insufficient on their own — include one concrete in=out pair.
+
+--- Per-run functions ---
+
+8.1  [P0] run_min_loss: returns min of array; returns inf for empty array.
+8.2  [P0] run_has_success: True if any loss < threshold; False for empty.
+8.3  [P0] run_first_success_idx: correct index or None.
+8.4  [P0] run_first_success_time: returns time at success index; None if no
+          success.
+8.5  [P0] run_auc: correct trapezoidal integration on simple hand-crafted
+          data.
+8.6  [P1] run_auc with floor: losses are clamped to max(0, loss - floor).
+8.7  [P1] run_auc with baseline normalization: returns positive when better
+          than random, negative when worse.
+8.8  [P0] run_auc: empty arrays return 0.0.
+
+--- Aggregation functions ---
+
+8.9  [P0] agg_mean_std: correct mean and std on simple lists.
+8.10 [P0] agg_mean_std: NaN handling (nanmean / nanstd).
+8.11 [P0] agg_mean_std: empty list returns (nan, nan).
+8.12 [P0] agg_min: correct min; returns inf for empty list.
+8.13 [P0] agg_fraction_true: correct fraction; 0 for empty list.
+8.14 [P0] agg_mean_std_filtered: None values are filtered; all-None returns
+          (fallback, 0).
+
+--- Multi-run functions ---
+
+8.15 [P0] multi_solution_diversity_overall: returns (0, 0) for < 2 solutions.
+8.16 [P1] multi_solution_diversity_overall: known geometry (e.g., 4 corners of
+          unit square) gives expected mean distance.
+8.17 [P1] multi_solution_diversity_overall: with bounds normalization,
+          result is in [0, 1].
+8.18 [P0] multi_solution_diversity_nn: returns (0, 0) for < 2 solutions.
+8.19 [P1] multi_solution_diversity_nn: known geometry gives expected NN
+          distances.
+8.20 [P0] multi_auc_top_k: correct top-k selection logic; k_fraction=0.1
+          picks at least 1.
+8.21 [P1] compute_performance_profile: all losses below threshold →
+          success_rate=1.0; all above → 0.0.
+8.22 [P1] compute_performance_profile: normalized_auc is in [0, 1].
+
+--- Time-based slicing ---
+
+8.23 [P0] get_index_at_time: returns -1 for t < first time step.
+8.24 [P0] get_index_at_time: returns last valid index for intermediate t.
+8.25 [P0] get_index_at_time: returns last index for t >= final time step.
+8.26 [P0] slice_history_at_time: empty list for t before data; correct
+          sublist otherwise.
+8.27 [P0] get_value_at_time: returns default for t before data; correct
+          value otherwise.
+
+
+================================================================================
+9. BENCHMARK  (dfbench.benchmark.benchmark)
+================================================================================
+
+9.1  [P0] AlgorithmConfig stores algorithm, hyperparameters, and name
+          correctly; default name falls back to algorithm_str.
+9.2  [P0] Benchmark.__init__ computes time_samples correctly (excludes 0,
+          evenly spaced, ends at max_time).
+9.3  [P0] BenchmarkResult dataclass fields exist and types are correct
+          (SingleMetric / AggregateMetric).
+9.4  [P0] RunData.from_objective correctly extracts loss_history,
+          time_steps, best_loss, best_params, eval_count from an Objective.
+
+9.5  [P1] Benchmark.run() with a mock algorithm + mock problem executes
+          n_runs runs and returns list[BenchmarkResult] of correct length.
+9.6  [P1] _evaluate_algorithm: metrics are computed at each time sample
+          (result arrays have shape (n_time_samples,)).
+9.7  [P1] _evaluate_algorithm: fraction_of_success is in [0, 1] at every
+          time sample.
+9.8  [P1] Benchmark with random_seed: per-run seeds are deterministic.
+
+--- Save / Load ---
+
+9.9  [P1] _save_algorithm_run_data writes an NPZ file with expected keys.
+9.10 [P1] _save_metadata writes a JSON with problem_name, algorithms list,
+          etc.
+9.11 [P1] run(load_from=...) loads the saved data and produces identical
+          BenchmarkResult metrics.
+9.12 [P2] Legacy format loading (wall_time_indices) converts correctly to
+          time_steps.
+
+--- CSV output ---
+
+9.13 [P1] _save_results_to_csv creates a CSV file with correct header and
+          data rows for each (algorithm, time_sample) pair.
+
+--- print_summary ---
+
+9.14 [P2] print_summary does not raise for any result shape / content.
+
+
+================================================================================
+10. DISPLAY  (dfbench.core.display)
+================================================================================
+
+10.1  [P1] _bar(0.0) returns all-empty; _bar(1.0) returns all-full.
+10.2  [P1] _bar clamps values outside [0, 1].
+10.3  [P1] _fmt_time: formats seconds, minutes, hours correctly.
+10.4  [P1] _fmt_loss: handles None, NaN, inf, small floats, and integers.
+10.5  [P1] _sparkline: produces a string of requested width; handles empty
+          input and all-NaN.
+10.6  [P2] LiveDisplay.render does not crash when called on a fresh Objective.
+10.7  [P2] LogDisplay.render does not crash when called on a fresh Objective.
+
+
+================================================================================
+11. ENVIRONMENT INIT  (dfbench.core._init_env)
+================================================================================
+
+11.1  [P1] After import, MPLCONFIGDIR is set in os.environ.
+11.2  [P1] If MPLCONFIGDIR was already set, it is not overwritten.
+
+
+================================================================================
+12. PACKAGE-LEVEL IMPORTS  (dfbench.__init__)
+================================================================================
+
+12.1  [P0] `from dfbench import Objective` succeeds.
+12.2  [P0] `from dfbench import ContinuousProblem, OptimizationAlgorithm,
+           AlgorithmType` succeeds.
+12.3  [P0] `from dfbench.algorithms import AdamGD, SAGD, NAAdamGD, LBFGSGD,
+           EvoxES, EvoxPSO, RandomSearch, BotorchBO, BotorchTuRBO, ReSTIR,
+           VAESampling` succeeds.
+12.4  [P0] `from dfbench.problems import VoyagerProblem,
+           ConstrainedVoyagerProblem, RandomUIFOProblem` succeeds.
+12.5  [P0] `from dfbench.benchmark import Benchmark, AlgorithmConfig` succeeds.
+
+
+================================================================================
+13. END-TO-END / INTEGRATION  (slow — SLURM only)
+================================================================================
+
+13.1  [P2] For each algorithm: optimize on VoyagerProblem with small budget
+           (max_time=30), verify obj.best_loss is finite and loss decreases
+           from initial random sample.
+13.2  [P2] Full Benchmark.run() with 2 algorithms, 2 runs each, max_time=30:
+           returns list[BenchmarkResult] and CSV is written.
+13.3  [P2] Benchmark.run(save_run_data=True) then
+           Benchmark.run(load_from=...) produces consistent results.
+13.4  [P2] save_run_data / load_run_data round-trip: Objective state matches
+           after reload.
+
+
+================================================================================
+  Total items:  ~120 test behaviours
+  P0 (critical): ~65    — fast, mock-based, CI-gated
+  P1 (important): ~45   — CI, may need small fixtures
+  P2 (extended):  ~10   — nightly / SLURM
+================================================================================

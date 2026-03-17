@@ -53,6 +53,71 @@ class TestConstruction:
 
 
 # ======================================================================
+# Warmup helpers
+# ======================================================================
+
+
+class TestWarmup:
+    def test_warmup_value_does_not_log_or_count(self, mock_problem):
+        """Warmups before start_logging() should not affect tracked state."""
+        obj = Objective(mock_problem)
+        obj.warmup_value()
+        assert obj.eval_count == 0
+        assert obj.loss_history == []
+        assert obj.params_history == []
+        assert obj.time_steps == []
+
+    def test_warmup_value_and_grad_calls_underlying_twice(self, mock_problem):
+        """Warmup helpers call the respective underlying path exactly twice."""
+        obj = Objective(mock_problem)
+        call_count = 0
+
+        def fake_value_and_grad(params):
+            nonlocal call_count
+            call_count += 1
+            return jnp.float32(0.0), jnp.zeros(obj.n_params)
+
+        obj._value_and_grad_func = fake_value_and_grad
+        obj.warmup_value_and_grad()
+        assert call_count == 2
+
+    def test_warmup_vmap_hessian_calls_underlying_twice(self, mock_problem):
+        """Batched warmups also execute the underlying compiled path twice."""
+        obj = Objective(mock_problem)
+        call_count = 0
+
+        def fake_vmap_hessian(params):
+            nonlocal call_count
+            call_count += 1
+            return jnp.zeros((params.shape[0], obj.n_params, obj.n_params))
+
+        obj._vmap_hessian_func = fake_vmap_hessian
+        obj.warmup_vmap_hessian()
+        assert call_count == 2
+
+    def test_warmup_value_uses_current_raw_space(self, mock_problem):
+        """Unbounded warmup should emit deterministic raw-space midpoint params."""
+        obj = Objective(mock_problem, unbounded=True)
+        seen = []
+
+        def fake_value(params):
+            seen.append(np.array(params))
+            return jnp.float32(0.0)
+
+        obj._func = fake_value
+        obj.warmup_value()
+        assert len(seen) == 2
+        np.testing.assert_allclose(seen[0], np.zeros(obj.n_params), atol=1e-6)
+
+    def test_warmup_requires_pre_logging_state(self, mock_problem):
+        """Warmups should fail after start_logging() to avoid hidden logging."""
+        obj = Objective(mock_problem)
+        obj.start_logging()
+        with pytest.raises(RuntimeError):
+            obj.warmup_value()
+
+
+# ======================================================================
 # Evaluation: value, grad, value_and_grad  (5.13–5.18)
 # ======================================================================
 
@@ -76,16 +141,35 @@ class TestEvaluation:
         assert g.shape == (self.obj.n_params,)
         assert self.obj.eval_count == 1
 
+    def test_hessian_shape_and_count(self):
+        """5.14c hessian() returns (n_params, n_params), increments eval_count."""
+        h = self.obj.hessian(self.params)
+        assert h.shape == (self.obj.n_params, self.obj.n_params)
+        assert self.obj.eval_count == 1
+
     def test_grad_does_not_update_best_loss(self):
         """5.14b grad() must NOT update best_loss."""
         self.obj.grad(self.params)
         assert self.obj.best_loss is None, "grad-only call should not set best_loss"
+
+    def test_hessian_does_not_update_best_loss(self):
+        """5.14d hessian() must NOT update best_loss."""
+        self.obj.hessian(self.params)
+        assert self.obj.best_loss is None, "hessian-only call should not set best_loss"
 
     def test_value_and_grad_shapes_and_count(self):
         """5.15 value_and_grad() returns (scalar, (n_params,)), count+1."""
         loss, g = self.obj.value_and_grad(self.params)
         assert loss.ndim == 0
         assert g.shape == (self.obj.n_params,)
+        assert self.obj.eval_count == 1
+
+    def test_value_grad_and_hessian_shapes_and_count(self):
+        """Second-order combined call returns loss, grad, and Hessian."""
+        loss, g, h = self.obj.value_grad_and_hessian(self.params)
+        assert loss.ndim == 0
+        assert g.shape == (self.obj.n_params,)
+        assert h.shape == (self.obj.n_params, self.obj.n_params)
         assert self.obj.eval_count == 1
 
     def test_value_and_grad_loss_matches_value(self):
@@ -103,6 +187,25 @@ class TestEvaluation:
         self.obj.start_logging()
         g = self.obj.grad(self.params)
         np.testing.assert_allclose(np.array(g_vg), np.array(g), atol=1e-6)
+
+    def test_hessian_matches_problem_hessian(self):
+        """hessian() matches jax.hessian(problem.objective_function)."""
+        h_obj = self.obj.hessian(self.params)
+        self.obj.reset()
+        self.obj.start_logging()
+        expected = jax.hessian(self.obj.problem.objective_function)(self.params)
+        np.testing.assert_allclose(np.array(h_obj), np.array(expected), atol=1e-6)
+
+    def test_value_grad_and_hessian_matches_separate_calls(self):
+        """Combined second-order call matches value_and_grad() + hessian()."""
+        loss_vgh, g_vgh, h_vgh = self.obj.value_grad_and_hessian(self.params)
+        self.obj.reset()
+        self.obj.start_logging()
+        loss_vg, g_vg = self.obj.value_and_grad(self.params)
+        h = self.obj.hessian(self.params)
+        np.testing.assert_allclose(float(loss_vgh), float(loss_vg), atol=1e-6)
+        np.testing.assert_allclose(np.array(g_vgh), np.array(g_vg), atol=1e-6)
+        np.testing.assert_allclose(np.array(h_vgh), np.array(h), atol=1e-6)
 
     def test_callable_syntax(self):
         """5.18 obj(params) is identical to obj.value(params)."""
@@ -137,6 +240,12 @@ class TestBatchedEvaluation:
         assert grads.shape == (5, self.obj.n_params)
         assert self.obj.eval_count == 5
 
+    def test_vmap_hessian(self):
+        """Second-order batched evaluation returns one Hessian per point."""
+        hessians = self.obj.vmap_hessian(self.batch)
+        assert hessians.shape == (5, self.obj.n_params, self.obj.n_params)
+        assert self.obj.eval_count == 5
+
     def test_vmap_value_and_grad(self):
         """5.21 vmap_value_and_grad: correct shapes, count += batch_size."""
         losses, grads = self.obj.vmap_value_and_grad(self.batch)
@@ -144,14 +253,27 @@ class TestBatchedEvaluation:
         assert grads.shape == (5, self.obj.n_params)
         assert self.obj.eval_count == 5
 
+    def test_vmap_value_grad_and_hessian(self):
+        """Batched combined second-order call has fully aligned shapes."""
+        losses, grads, hessians = self.obj.vmap_value_grad_and_hessian(self.batch)
+        assert losses.shape == (5,)
+        assert grads.shape == (5, self.obj.n_params)
+        assert hessians.shape == (5, self.obj.n_params, self.obj.n_params)
+        assert self.obj.eval_count == 5
+
     def test_aliases(self):
         """5.22 batched_* are aliases for vmap_*."""
         assert self.obj.batched_value is not None
         assert self.obj.batched_grad is not None
+        assert self.obj.batched_hessian is not None
         assert self.obj.batched_value_and_grad is not None
+        assert self.obj.batched_value_grad_and_hessian is not None
 
         losses = self.obj.batched_value(self.batch)
         assert losses.shape == (5,)
+
+        hessians = self.obj.batched_hessian(self.batch)
+        assert hessians.shape == (5, self.obj.n_params, self.obj.n_params)
 
 
 # ======================================================================
@@ -207,6 +329,23 @@ class TestHistoryTracking:
         """5.30 evals_since_improvement resets on improvement."""
         # After 5 evals, this should be a non-negative integer
         assert self.obj.evals_since_improvement >= 0
+
+    def test_hessian_history_aligned(self, mock_problem):
+        """Second-order history aligns with loss history when enabled."""
+        obj = Objective(
+            mock_problem,
+            save_grad_history=True,
+            save_hessian_history=True,
+            save_params_history=True,
+        )
+        obj.set_seed(42)
+        obj.start_logging()
+        for _ in range(3):
+            obj.value_grad_and_hessian(obj.random_params_bounded())
+
+        assert len(obj.hessian_history) == len(obj.loss_history) == 3
+        for h in obj.hessian_history:
+            assert h.shape == (obj.n_params, obj.n_params)
 
 
 # ======================================================================
@@ -401,6 +540,23 @@ class TestReducedHistory:
             if r is not None:
                 assert r.ndim == 1
 
+    def test_hessian_history_reduced(self, mock_problem):
+        """Second-order reduced history returns one Hessian per logged batch."""
+        obj = Objective(
+            mock_problem,
+            save_grad_history=True,
+            save_hessian_history=True,
+            save_batched_losses_history=True,
+            save_batched_hessians_history=True,
+        )
+        obj.set_seed(42)
+        obj.start_logging()
+        batch = obj.random_params_bounded(n_samples=4)
+        obj.vmap_value_grad_and_hessian(batch)
+        reduced = obj.hessian_history_reduced
+        assert len(reduced) == 1
+        assert reduced[0].shape == (obj.n_params, obj.n_params)
+
     def test_params_history_reduced_bounded(self, mock_problem):
         """5.47 Combines reduction + sigmoid_bounding."""
         obj = Objective(mock_problem, unbounded=True, save_params_history=True)
@@ -436,6 +592,23 @@ class TestEvalTypeTracking:
         assert 2 in counts  # grad-only
         assert 3 in counts  # value+grad
 
+    def test_eval_type_counts_include_hessians(self, mock_problem):
+        """Eval type tracking distinguishes second-order call variants."""
+        obj = Objective(mock_problem, save_eval_type_history=True)
+        obj.set_seed(42)
+        obj.start_logging()
+        p = obj.random_params_bounded()
+        batch = obj.random_params_bounded(n_samples=3)
+        obj.hessian(p)
+        obj.value_grad_and_hessian(p)
+        obj.vmap_hessian(batch)
+        obj.vmap_value_grad_and_hessian(batch)
+        counts = obj.eval_type_counts
+        assert 8 in counts   # hessian-only
+        assert 11 in counts  # value+grad+hessian
+        assert 12 in counts  # batched hessian
+        assert 15 in counts  # batched value+grad+hessian
+
     def test_log_call_count(self, mock_problem):
         """5.49 log_call_count == total _log_evals invocations."""
         obj = Objective(mock_problem)
@@ -456,15 +629,21 @@ class TestEvalTypeTracking:
 class TestLogEvaluation:
     def test_manual_log(self, mock_problem):
         """5.50 log_evaluation updates histories like value_and_grad."""
-        obj = Objective(mock_problem, save_grad_history=True)
+        obj = Objective(
+            mock_problem,
+            save_grad_history=True,
+            save_hessian_history=True,
+        )
         obj.set_seed(42)
         obj.start_logging()
         p = obj.random_params_bounded()
         loss = jnp.sum(p**2)
         grad = 2 * p
-        obj.log_evaluation(p, loss, grad)
+        hessian = 2 * jnp.eye(obj.n_params)
+        obj.log_evaluation(p, loss, grad, hessian)
         assert obj.eval_count == 1
         assert len(obj.loss_history) == 1
+        assert len(obj.hessian_history) == 1
 
     def test_manual_log_respects_budget(self, mock_problem):
         """5.51 log_evaluation respects budget enforcement."""
@@ -495,6 +674,15 @@ class TestReset:
         assert seeded_obj.budget_exceeded is False
         assert seeded_obj.loss_history == []
         assert seeded_obj.time_steps == []
+
+    def test_reset_clears_hessian_history(self, mock_problem):
+        """Second-order history is also cleared by reset()."""
+        obj = Objective(mock_problem, save_hessian_history=True)
+        obj.set_seed(42)
+        obj.start_logging()
+        obj.hessian(obj.random_params_bounded())
+        obj.reset()
+        assert obj.hessian_history == []
 
 
 # ======================================================================
@@ -529,6 +717,24 @@ class TestCheckpointing:
         assert obj2.eval_count == saved_count
         assert float(obj2.best_loss) == pytest.approx(saved_best, abs=1e-6)
         assert len(obj2.loss_history) == saved_count
+
+    def test_load_restores_hessian_history(self, mock_problem, tmp_path):
+        """Checkpoint round-trip preserves Hessian history when enabled."""
+        obj = Objective(mock_problem, save_hessian_history=True, max_evals=100)
+        obj.set_seed(42)
+        obj.start_logging()
+        obj.hessian(obj.random_params_bounded())
+        fpath = str(tmp_path / "checkpoint_hessian.npz")
+        obj.save_run_data(filepath=fpath)
+
+        obj2 = Objective(mock_problem, save_hessian_history=True, max_evals=100)
+        obj2.load_run_data(fpath)
+        assert len(obj2.hessian_history) == 1
+        np.testing.assert_allclose(
+            np.array(obj2.hessian_history[0]),
+            np.array(obj.hessian_history[0]),
+            atol=1e-6,
+        )
 
     def test_load_continues_time(self, mock_problem, tmp_path):
         """5.55 After load, time_elapsed continues from saved state."""

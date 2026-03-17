@@ -32,7 +32,7 @@ problem = VoyagerProblem()
 obj = Objective(problem, unbounded=True, max_time=120, max_evals=1000)
 
 # JIT warmup (doesn't count against budget)
-_ = obj.value_and_grad(obj.random_params_unbounded())
+obj.warmup_value_and_grad()
 
 # Start logging loss and time
 obj.start_logging()
@@ -57,14 +57,18 @@ obj.save_run_to_file("my_run.npz")
 
 ### Evaluation Methods
 
-The problems are JAX-based and fully differentiable. Use whichever method fits your algorithm:
+The problems are JAX-based and differentiable up to second order. Use whichever method fits your algorithm:
 
 - `obj.value(params)`
 - `obj.value_and_grad(params)`
 - `obj.grad(params)`
+- `obj.hessian(params)`
+- `obj.value_grad_and_hessian(params)`
 - `obj.vmap_value(batch)`
 - `obj.vmap_value_and_grad(batch)`
 - `obj.vmap_grad(batch)`
+- `obj.vmap_hessian(batch)`
+- `obj.vmap_value_grad_and_hessian(batch)`
 
 ### PyTorch Users
 
@@ -319,7 +323,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 - **`optimize()` receives a pre-configured `Objective`**, the algorithm does not create it.
 - **`prepare()`** configures `unbounded`, `algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. For PyTorch-based algorithms, call `torch.manual_seed(random_seed)` afterwards.
 - **Choose `unbounded`:** Set to `True` if your algorithm benefits from smooth unconstrained space (via sigmoid transform). Most evolutionary and surrogate methods use `False` (bounded space).
-- **JIT warmup before `start_logging()`**, compilation time doesn't count against the budget.
+- **JIT warmup before `start_logging()`**, compilation time doesn't count against the budget. The no-arg `warmup_*()` helpers run the matching path twice on deterministic params.
 - **`budget_exceeded`** checks both time and eval limits, please use it as your loop condition.
 
 ### Evaluation Methods
@@ -329,9 +333,13 @@ class MyAlgorithm(OptimizationAlgorithm):
 | `obj.value(params)` | Loss only | loss, params |
 | `obj.value_and_grad(params)` | Gradient-based optimization | loss, grad, params |
 | `obj.grad(params)` | Gradient only (rare) | grad, params, **no loss** |
+| `obj.hessian(params)` | Exact second-order information | hessian, params, **no loss** |
+| `obj.value_grad_and_hessian(params)` | Newton-style / second-order methods | loss, grad, hessian, params |
 | `obj.vmap_value(batch)` | Population evaluation | batch losses, batch params |
 | `obj.vmap_value_and_grad(batch)` | Batched gradient methods | batch losses, grads, params |
-| `obj.log_evaluation(...)` | Custom JIT'd loop | whatever you pass |
+| `obj.vmap_hessian(batch)` | Batched second-order methods | batch hessians, batch params |
+| `obj.vmap_value_grad_and_hessian(batch)` | Batched second-order methods | batch losses, grads, hessians, params |
+| `obj.log_evaluation(...)` | Custom JIT'd loop | whatever you pass, including optional Hessians |
 
 ### Register It
 

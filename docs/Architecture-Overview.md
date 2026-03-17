@@ -50,8 +50,8 @@ A problem defines *what* is being optimised. Every problem subclasses `Continuou
 `Objective` is the **sole interface** between any algorithm and its problem. It transparently:
 
 - Dispatches to the correct objective function (bounded or sigmoid)
-- Pre-compiles `jax.grad`, `jax.value_and_grad`, and `jax.vmap` variants
-- Records every evaluation with aligned loss / gradient / params / timestamp histories
+- Prepares `jax.grad`, `jax.hessian`, `jax.value_and_grad`, and `jax.vmap` variants
+- Records every evaluation with aligned loss / gradient / Hessian / params / timestamp histories
 - Enforces wall-clock time and evaluation-count budgets
 - Provides deterministic random sampling via a splittable JAX PRNG
 
@@ -76,13 +76,13 @@ Algorithms **never** create their own `Objective`; they receive one from the cal
 ```
                       Algorithm.optimize()
                             │
-         ┌──────────────────┼──────────────────────┐
-         │                  │                       │
-   obj.value(p)    obj.value_and_grad(p)   obj.vmap_value(batch)
-         │                  │                       │
-         └──────────┬───────┘───────────────────────┘
+         ┌────────────┬───────────────┬──────────────────────┐
+         │            │               │                      │
+   obj.value(p)  obj.value_and_grad(p)  obj.hessian(p)  obj.vmap_value(batch)
+         │            │               │                      │
+         └────────────┴───────┬───────┴──────────────────────┘
                     │
-             Objective._func / _value_and_grad_func / _vmap_func
+ Objective._func / _value_and_grad_func / _hessian_func / _vmap_func
                     │
                     ▼
          ┌─────────────────────┐
@@ -104,12 +104,13 @@ Algorithms **never** create their own `Objective`; they receive one from the cal
   _time_steps  _loss_history      periodic NPZ
                _params_history    checkpoint
                _grad_history
+               _hessian_history
                _best_loss / _best_params
 ```
 
-Every call to `obj.value()`, `obj.value_and_grad()`, or any `vmap_*` variant follows this exact pipeline. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
+Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this exact pipeline. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
 
-For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.log_evaluation(params, loss, grad)` provides the same pipeline as a public API — it simulates the corresponding call internally. Do not call the private methods directly.
+For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.log_evaluation(params, loss, grad, hessian=None)` provides the same pipeline as a public API — it simulates the corresponding call internally. Do not call the private methods directly.
 
 ---
 
