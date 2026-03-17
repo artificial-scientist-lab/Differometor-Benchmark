@@ -66,6 +66,13 @@ class TestEndToEnd:
             save_csv=False, save_run_data=True, output_dir=str(tmp_path)
         )
 
+        # _prepare_save_dir creates a timestamped subdirectory inside output_dir
+        run_dirs = list(tmp_path.glob("*/metadata.json"))
+        assert len(run_dirs) == 1, (
+            f"Expected one run directory, found: {[p.parent for p in run_dirs]}"
+        )
+        run_dir = run_dirs[0].parent
+
         # Reload
         bm2 = Benchmark(
             voyager_problem,
@@ -75,7 +82,7 @@ class TestEndToEnd:
             max_time=30.0,
             n_time_samples=5,
         )
-        results_loaded = bm2.run(save_csv=False, load_from=str(tmp_path))
+        results_loaded = bm2.run(save_csv=False, load_from=str(run_dir))
         np.testing.assert_allclose(
             np.array(results_original[0].avg_loss.mean),
             np.array(results_loaded[0].avg_loss.mean),
