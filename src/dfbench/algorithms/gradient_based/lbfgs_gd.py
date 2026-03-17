@@ -129,7 +129,9 @@ class LBFGSGD(OptimizationAlgorithm):
 
         # Warm-up JIT
         warmup_optimizer_state = optimizer.init(obj.random_params_unbounded())
-        _, warmup_optimizer_state, _, _ = _step(obj.random_params_unbounded(), warmup_optimizer_state)
+        _, warmup_optimizer_state, _, _ = _step(
+            obj.random_params_unbounded(), warmup_optimizer_state
+        )
         _ = _step(obj.random_params_unbounded(), warmup_optimizer_state)
 
         obj.start_logging()

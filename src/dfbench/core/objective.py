@@ -1159,7 +1159,9 @@ class Objective:
                 if self._ndim(grad) == 1 or self._save_batched_grads_history:
                     self._grad_history.append(grad)
                 else:
-                    idx = self._representative_index(loss=loss, grad=grad, hessian=hessian)
+                    idx = self._representative_index(
+                        loss=loss, grad=grad, hessian=hessian
+                    )
                     self._grad_history.append(grad[idx])
             else:
                 self._grad_history.append(None)
@@ -1170,7 +1172,9 @@ class Objective:
                 if self._ndim(hessian) == 2 or self._save_batched_hessians_history:
                     self._hessian_history.append(hessian)
                 else:
-                    idx = self._representative_index(loss=loss, grad=grad, hessian=hessian)
+                    idx = self._representative_index(
+                        loss=loss, grad=grad, hessian=hessian
+                    )
                     self._hessian_history.append(hessian[idx])
             else:
                 self._hessian_history.append(None)
@@ -1181,7 +1185,9 @@ class Objective:
                 if self._ndim(params) == 1 or self._save_batched_params_history:
                     self._params_history.append(params)
                 else:  # batched case but not saving batched history
-                    idx = self._representative_index(loss=loss, grad=grad, hessian=hessian)
+                    idx = self._representative_index(
+                        loss=loss, grad=grad, hessian=hessian
+                    )
                     self._params_history.append(params[idx])
             else:
                 # No params provided; append None to keep alignment
@@ -1645,9 +1651,7 @@ class Objective:
         self._loss_history = data["loss_history"].tolist()
         self._grad_history = data["grad_history"].tolist()
         self._hessian_history = (
-            data["hessian_history"].tolist()
-            if "hessian_history" in data.files
-            else []
+            data["hessian_history"].tolist() if "hessian_history" in data.files else []
         )
         self._params_history = data["params_history"].tolist()
         self._time_steps = data["time_steps"].tolist()
