@@ -1332,7 +1332,7 @@ class Objective:
         self,
         params: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
         loss: Float | Float[Array, "batch"] | None = None,
-        grad: Float | Float[Array, "batch"] | None = None,
+        grad: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
         hessian: Float[Array, "n_params n_params"]
         | Float[Array, "batch n_params n_params"]
         | None = None,
