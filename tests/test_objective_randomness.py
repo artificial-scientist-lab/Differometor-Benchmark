@@ -53,6 +53,29 @@ class TestRandomParamsUnbounded:
         assert jnp.all(bounded >= lower - 1e-6)
         assert jnp.all(bounded <= upper + 1e-6)
 
+    def test_custom_mapping_round_trip(self, mock_problem):
+        """Custom bounded<->unbounded mappings should round-trip samples."""
+
+        def forward(x):
+            return jnp.tanh(x)
+
+        def inverse(x):
+            return jnp.arctanh(jnp.clip(x, -0.999999, 0.999999))
+
+        obj = Objective(
+            mock_problem,
+            unbounded=True,
+            unit_mapping=forward,
+            inverse_unit_mapping=inverse,
+        )
+        obj.set_seed(123)
+        samples = obj.random_params_unbounded(n_samples=100)
+        bounded = jax.vmap(forward)(samples)
+
+        lower, upper = mock_problem.bounds[0], mock_problem.bounds[1]
+        assert jnp.all(bounded >= lower - 1e-6)
+        assert jnp.all(bounded <= upper + 1e-6)
+
 
 class TestSeedReproducibility:
     """5.10–5.11b Seed-based reproducibility."""

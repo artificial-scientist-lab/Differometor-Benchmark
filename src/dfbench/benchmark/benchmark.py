@@ -346,11 +346,7 @@ class Benchmark:
             save_dir = self._prepare_save_dir(output_dir)
             print(f"\nRun data will be saved to: {save_dir}")
 
-        # Generate per-run seeds if master seed provided
-        run_seeds = None
-        if self._random_seed is not None:
-            rng = np.random.RandomState(self._random_seed)
-            run_seeds = [int(rng.randint(0, 2**31)) for _ in range(self._n_runs)]
+        run_seeds = self._generate_run_seeds()
 
         all_run_data = []
 
@@ -372,6 +368,14 @@ class Benchmark:
             self._save_metadata(all_run_data, save_dir)
 
         return all_run_data
+
+    def _generate_run_seeds(self) -> list[int] | None:
+        """Derive deterministic per-run seeds from the benchmark master seed."""
+        if self._random_seed is None:
+            return None
+
+        rng = np.random.RandomState(self._random_seed)
+        return [int(rng.randint(0, 2**31)) for _ in range(self._n_runs)]
 
     def _collect_algorithm_runs(
         self,

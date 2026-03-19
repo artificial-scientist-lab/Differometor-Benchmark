@@ -33,6 +33,8 @@ Objective(
     print_every: int = 100,
     algorithm_str: str | None = None,
     save_to_file_every: int | None = None,
+    unit_mapping: Callable | None = None,
+    inverse_unit_mapping: Callable | None = None,
 )
 ```
 
@@ -57,6 +59,8 @@ Objective(
 | `print_every` | `int` | `100` | When `verbose ≥ 1`, print a progress summary every N evaluations. |
 | `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
 | `save_to_file_every` | `int \| None` | `None` | Automatically checkpoint to an NPZ-file every N evaluations. `None` disables auto-saving. The time spent saving is excluded from the elapsed-time clock. |
+| `unit_mapping` | `Callable \| None` | `None` | Optional function mapping unbounded params to the **[0, 1] range**. Can be scalar (e.g. `jax.nn.sigmoid`) or element-wise vector. The Objective handles scaling to actual bounds: `bounded = lb + (ub - lb) * f(x)`. If omitted, the default sigmoid is used. |
+| `inverse_unit_mapping` | `Callable \| None` | `None` | Inverse of the forward mapping, mapping [0, 1] → unbounded space. The Objective normalises bounded params to [0, 1] before calling this: `unbounded = f_inv((bounded - lb) / (ub - lb))`. Must be provided whenever `unit_mapping` is provided. |
 
 ### Choosing `unbounded`
 
@@ -64,6 +68,63 @@ Objective(
 |-------------|-------------------------|--------------------|
 | `False` | `problem.objective_function` | Random Search, PSO, CMA-ES, Bayesian Optimization |
 | `True` | `problem.sigmoid_objective_function` | Some gradient-based methods (Adam, L-BFGS, SA-GD, NA-Adam in their current implementations) |
+
+### Choosing a bounded/unbounded mapping (important)
+
+If you are new, use the defaults first:
+
+- Leave both mapping arguments as `None`
+- Set `unbounded=True` only if your optimizer expects unconstrained search space
+- The default pair is sigmoid + inverse-sigmoid (logit)
+
+Use a custom mapping only if you know exactly why you need it.
+
+Rules:
+
+- If you pass `unit_mapping`, you must also pass `inverse_unit_mapping`
+- The forward mapping must produce values in **[0, 1]**; the Objective scales to actual bounds via `bounded = lb + (ub - lb) * f(x)`
+- The inverse mapping receives values already normalised to [0, 1] by the Objective: `unbounded = f_inv((bounded - lb) / (ub - lb))`
+- The inverse should satisfy approximately: `inverse(forward(x)) ≈ x` in the range you optimize over
+- Both callables can be **scalar** functions (e.g. `jax.nn.sigmoid`) or **element-wise vector** functions — JAX broadcasts element-wise operations, so both work. The Objective uses `jax.vmap` for batching regardless
+
+Minimal custom example (scalar function):
+
+```python
+import jax
+from dfbench import Objective
+
+# sigmoid maps (-inf, +inf) -> (0, 1) — perfect for the [0,1] contract
+obj = Objective(
+    problem,
+    unbounded=True,
+    unit_mapping=jax.nn.sigmoid,
+    inverse_unit_mapping=lambda x: jax.numpy.log(x / (1.0 - x)),
+)
+```
+
+Element-wise vector example (different mapping per dimension):
+
+```python
+import jax.numpy as jnp
+
+def forward(x):
+    # Per-dimension [0,1] mapping; x is shape (n_params,)
+    return jnp.where(x > 0, 1 - jnp.exp(-x), jnp.exp(x)) * 0.5 + 0.5
+
+def inverse(x):
+    x = jnp.clip(x, 1e-7, 1.0 - 1e-7)
+    centered = 2.0 * (x - 0.5)
+    return jnp.where(centered > 0, -jnp.log(1 - centered), jnp.log(centered + 1))
+
+obj = Objective(
+    problem,
+    unbounded=True,
+    unit_mapping=forward,
+    inverse_unit_mapping=inverse,
+)
+```
+
+You do **not** need to handle bounds scaling — the Objective does that automatically.
 
 ---
 
@@ -177,6 +238,28 @@ obj.set_seed(42)
 p3 = obj.random_params_bounded(100)   # identical to p1
 ```
 
+### `set_space_mode(unbounded, unit_mapping=None, inverse_unit_mapping=None)`
+
+Switches between bounded and unbounded mode before optimization starts.
+
+- Must be called before `start_logging()`
+- Re-binds all internal JAX evaluation paths (`value`, `grad`, `hessian`, all `vmap_*`)
+- Can optionally replace the mapping pair at the same time
+- Custom mappings follow the same [0, 1] contract as the constructor: the forward function maps to [0, 1], the Objective handles bounds scaling
+
+```python
+# default sigmoid mapping
+obj.set_space_mode(True)
+
+# custom mapping pair (scalar functions work)
+import jax
+obj.set_space_mode(
+    True,
+    unit_mapping=jax.nn.sigmoid,
+    inverse_unit_mapping=lambda x: jax.numpy.log(x / (1.0 - x)),
+)
+```
+
 ---
 
 ## Random Sampling
@@ -192,7 +275,16 @@ Returns uniform random samples inside `problem.bounds`.
 
 ### `random_params_unbounded(n_samples=1, rng_key=None)`
 
-Generates samples uniform in the bounded space then maps them through the inverse sigmoid (logit) transform to unbounded $(-\infty, +\infty)$ space. This ensures that `sigmoid_bounding(result, bounds)` recovers the original bounded distribution.
+Generates samples uniform in the bounded space then maps them to unbounded space using:
+
+- your custom `inverse_unit_mapping` if provided — the Objective normalises bounded samples to [0, 1] first, then calls your inverse
+- otherwise the default inverse sigmoid (logit)
+
+With the matching forward mapping, this round-trip holds:
+
+```python
+bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
+```
 
 ---
 
@@ -226,7 +318,7 @@ Generates samples uniform in the bounded space then maps them through the invers
 |----------|------|-------------|
 | `best_loss` | `float \| None` | Lowest loss observed. `None` before the first evaluation. |
 | `best_params` | `Array \| None` | Raw parameters at `best_loss` (may be in unbounded space). |
-| `best_params_bounded` | `Array \| None` | Best parameters mapped to bounded space via sigmoid. **Use this for final output.** |
+| `best_params_bounded` | `Array \| None` | Best parameters mapped to bounded space via the active mapping (custom mapping if configured, otherwise sigmoid). **Use this for final output.** |
 
 ### Current State
 

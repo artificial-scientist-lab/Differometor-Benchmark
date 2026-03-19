@@ -3,6 +3,7 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -40,10 +41,12 @@ class Objective:
        gradients, evaluation types, and elapsed time.  Configurable flags
        control what is stored (see constructor args).
 
-    4. **Bounded / unbounded mode** – when ``unbounded=True`` the objective
-       is evaluated through a sigmoid transform so that algorithms can
-       optimise in unconstrained $(-\\infty, +\\infty)$ space while the
-       underlying problem remains bounded.
+        4. **Bounded / unbounded mode** – when ``unbounded=True`` the objective
+             is evaluated through a configurable mapping from unbounded to bounded
+             space (default: sigmoid transform) so that algorithms can optimise in
+             unconstrained $(-\\infty, +\\infty)$ space while the underlying
+             problem remains bounded.  Custom mappings map to the [0, 1] range;
+             the Objective scales to actual bounds automatically.
 
     5. **Reproducible random sampling** – ``set_seed`` initialises a JAX
        PRNG key that is consumed by ``random_params_bounded`` and
@@ -91,10 +94,11 @@ class Objective:
 
     **Random sampling**
 
-    - ``set_seed(seed)``           – set JAX PRNG seed for reproducibility.
-    - ``random_params_bounded(n)`` – uniform samples inside parameter bounds.
-    - ``random_params_unbounded(n)`` – samples mapped to unbounded space via
-      inverse-sigmoid.
+        - ``set_seed(seed)``             – set JAX PRNG seed for reproducibility.
+        - ``random_params_bounded(n)``   – uniform samples inside parameter bounds.
+        - ``random_params_unbounded(n)`` – samples mapped to unbounded space via
+            inverse mapping (default: inverse-sigmoid).  For custom mappings
+            the Objective normalises to [0, 1] before calling the inverse.
 
     **I/O**
 
@@ -205,12 +209,15 @@ class Objective:
         algorithm_str: str | None = None,
         save_to_file_every: int | None = None,
         display_mode: str = "live",
+        unit_mapping: Callable | None = None,
+        inverse_unit_mapping: Callable | None = None,
     ):
         """Initialize the Objective wrapper for optimization problems.
 
         Args:
             problem: The continuous optimization problem to wrap.
-            unbounded: If True, use sigmoid-transformed objective. Defaults to False.
+            unbounded: If True, use unbounded objective mode with the active
+                mapping (default: sigmoid). Defaults to False.
             max_evals: Maximum number of evaluations allowed. None for unlimited.
             max_time: Maximum wall-clock time in seconds. None for unlimited.
             save_time_steps: Whether to track timestamps for each evaluation.
@@ -231,6 +238,20 @@ class Objective:
                 ``"live"`` (default) shows a continuously-refreshing in-place
                 dashboard with progress bars.  ``"log"`` prints traditional
                 multi-line log blocks that scroll the terminal.
+            unit_mapping: Optional function that maps unbounded
+                parameters to the **[0, 1] range** (unit interval).  Can be a
+                scalar function (e.g. ``jax.nn.sigmoid``) or a vector function
+                operating element-wise on arrays — both work because JAX
+                broadcasts element-wise operations.  The Objective handles
+                scaling from [0, 1] to the actual problem bounds:
+                ``bounded = lower + (upper - lower) * f(unbounded)``.
+                Must be provided together with ``inverse_unit_mapping``.
+            inverse_unit_mapping: Inverse of
+                ``unit_mapping``, mapping from [0, 1] back to
+                unbounded space.  The Objective normalises bounded parameters
+                to [0, 1] before calling this function:
+                ``unbounded = f_inv((bounded - lower) / (upper - lower))``.
+                Must be provided together with ``unit_mapping``.
         """
 
         self.unbounded = unbounded
@@ -258,29 +279,13 @@ class Objective:
         self._save_to_file_every = save_to_file_every
         self._display_mode = display_mode
 
+        self._set_space_mappings(
+            unit_mapping,
+            inverse_unit_mapping,
+        )
+
         self._bounds = problem.bounds
-        self._func = (
-            problem.sigmoid_objective_function
-            if self.unbounded
-            else problem.objective_function
-        )
-        self._grad_func = jax.grad(self._func)
-        self._hessian_func = jax.hessian(self._func)
-        self._value_and_grad_func = jax.value_and_grad(self._func)
-
-        def _value_grad_and_hessian(params):
-            value, grad = self._value_and_grad_func(params)
-            hessian = self._hessian_func(params)
-            return value, grad, hessian
-
-        self._value_grad_and_hessian_func = _value_grad_and_hessian
-        self._vmap_func = jax.vmap(self._func)
-        self._vmap_grad_func = jax.vmap(self._grad_func)
-        self._vmap_hessian_func = jax.vmap(self._hessian_func)
-        self._vmap_value_and_grad_func = jax.vmap(self._value_and_grad_func)
-        self._vmap_value_grad_and_hessian_func = jax.vmap(
-            self._value_grad_and_hessian_func
-        )
+        self._bind_evaluation_functions()
 
         self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self._time_left = self._max_time
@@ -313,6 +318,162 @@ class Objective:
 
         # Display renderer (lazy-initialised on first use)
         self._display: LiveDisplay | LogDisplay | None = None
+
+    def _set_space_mappings(
+        self,
+        unit_mapping: Callable | None,
+        inverse_unit_mapping: Callable | None,
+    ) -> None:
+        """Set or clear custom [0,1]-space mappings.
+
+        The forward mapping must produce values in [0, 1]; the Objective
+        handles scaling to actual bounds.  The inverse mapping receives
+        values already normalised to [0, 1] by the Objective.
+        """
+        if (unit_mapping is None) != (
+            inverse_unit_mapping is None
+        ):
+            raise ValueError(
+                "Custom unbounded mapping requires both "
+                "unit_mapping and inverse_unit_mapping."
+            )
+
+        self._unit_mapping = unit_mapping
+        self._inverse_unit_mapping = inverse_unit_mapping
+        self._unit_mapping_vmap = (
+            jax.vmap(unit_mapping)
+            if unit_mapping is not None
+            else None
+        )
+        self._inverse_unit_mapping_vmap = (
+            jax.vmap(inverse_unit_mapping)
+            if inverse_unit_mapping is not None
+            else None
+        )
+
+    def _map_unbounded_to_bounded(
+        self,
+        params: Float[Array, "n_params"],
+    ) -> Float[Array, "n_params"]:
+        """Map a single parameter vector from unbounded to bounded space.
+
+        Custom mappings produce [0, 1] values; this method scales to bounds.
+        """
+        if self._unit_mapping is not None:
+            lower, upper = self._problem.bounds
+            return lower + (upper - lower) * self._unit_mapping(params)
+        return sigmoid_bounding(params, self._problem.bounds)
+
+    def _map_unbounded_to_bounded_batched(
+        self,
+        params: Float[Array, "batch n_params"],
+    ) -> Float[Array, "batch n_params"]:
+        """Map a parameter batch from unbounded to bounded space."""
+        if self._unit_mapping_vmap is not None:
+            lower, upper = self._problem.bounds
+            return lower + (upper - lower) * self._unit_mapping_vmap(
+                params
+            )
+        return jax.vmap(lambda x: sigmoid_bounding(x, self._problem.bounds))(params)
+
+    def _map_bounded_to_unbounded(
+        self,
+        params: Float[Array, "... n_params"],
+    ) -> Float[Array, "... n_params"]:
+        """Map params from bounded to unbounded space using configured inverse.
+
+        For custom mappings, normalises to [0, 1] first, then calls the
+        user-provided inverse which maps [0, 1] → (-∞, +∞).
+        """
+        if self._inverse_unit_mapping is not None:
+            arr = jnp.asarray(params)
+            lower, upper = self._problem.bounds
+            normalized = (arr - lower) / (upper - lower)
+            if arr.ndim == 1:
+                return self._inverse_unit_mapping(normalized)
+            assert self._inverse_unit_mapping_vmap is not None
+            return self._inverse_unit_mapping_vmap(normalized)
+        return self._inverse_sigmoid_bounding(params, self._problem.bounds)
+
+    def _bind_evaluation_functions(self) -> None:
+        """Bind evaluation callables for the currently active search space."""
+        problem = self._problem
+        if self.unbounded:
+            if self._unit_mapping is None:
+                self._func = problem.sigmoid_objective_function
+            else:
+
+                def _mapped_unbounded_objective(params):
+                    bounded = self._map_unbounded_to_bounded(params)
+                    return problem.objective_function(bounded)
+
+                self._func = _mapped_unbounded_objective
+        else:
+            self._func = problem.objective_function
+        self._grad_func = jax.grad(self._func)
+        self._hessian_func = jax.hessian(self._func)
+        self._value_and_grad_func = jax.value_and_grad(self._func)
+
+        def _value_grad_and_hessian(params):
+            value, grad = self._value_and_grad_func(params)
+            hessian = self._hessian_func(params)
+            return value, grad, hessian
+
+        self._value_grad_and_hessian_func = _value_grad_and_hessian
+        self._vmap_func = jax.vmap(self._func)
+        self._vmap_grad_func = jax.vmap(self._grad_func)
+        self._vmap_hessian_func = jax.vmap(self._hessian_func)
+        self._vmap_value_and_grad_func = jax.vmap(self._value_and_grad_func)
+        self._vmap_value_grad_and_hessian_func = jax.vmap(
+            self._value_grad_and_hessian_func
+        )
+
+    def set_space_mode(
+        self,
+        unbounded: bool,
+        unit_mapping: Callable | None = None,
+        inverse_unit_mapping: Callable | None = None,
+    ) -> None:
+        """Switch between bounded and unbounded evaluation mode.
+
+        This rebinds all internal JAX callables so subsequent ``value*`` /
+        ``grad*`` / ``hessian*`` evaluations use the requested objective.
+
+        Args:
+            unbounded: If True, evaluate in unbounded mode using the active
+                mapping. If False, use ``problem.objective_function`` directly.
+            unit_mapping: Optional function mapping unbounded
+                parameters to the [0, 1] range.  Can be scalar (e.g.
+                ``jax.nn.sigmoid``) or element-wise vector.  The Objective
+                scales to actual bounds: ``lb + (ub - lb) * f(x)``.
+                Must be passed together with ``inverse_unit_mapping``.
+            inverse_unit_mapping: Inverse of the forward mapping,
+                mapping [0, 1] → (-∞, +∞).  The Objective normalises bounded
+                params to [0, 1] before calling this.  Must be passed together
+                with ``unit_mapping``.
+
+        Raises:
+            RuntimeError: If logging already started for the current run.
+        """
+        if self._start_time is not None:
+            raise RuntimeError(
+                "set_space_mode() must be called before start_logging() so "
+                "evaluation histories stay consistent."
+            )
+        if (unit_mapping is None) != (
+            inverse_unit_mapping is None
+        ):
+            raise ValueError(
+                "set_space_mode() custom mapping requires both "
+                "unit_mapping and inverse_unit_mapping."
+            )
+        if unit_mapping is not None:
+            self._set_space_mappings(
+                unit_mapping,
+                inverse_unit_mapping,
+            )
+        self.unbounded = unbounded
+        self._bind_evaluation_functions()
 
     def __call__(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate the objective function at given parameters.
@@ -418,7 +579,7 @@ class Objective:
         if self._best_params is None:
             return None
         if self.unbounded:
-            return sigmoid_bounding(self._best_params, self._problem.bounds)
+            return self._map_unbounded_to_bounded(self._best_params)
         return self._best_params
 
     @property
@@ -483,12 +644,9 @@ class Objective:
             if p is None:
                 result.append(None)
             elif p.ndim == 1:
-                result.append(sigmoid_bounding(p, self._problem.bounds))
+                result.append(self._map_unbounded_to_bounded(p))
             else:
-                sigmoid_bounding_v = jax.vmap(
-                    lambda x: sigmoid_bounding(x, self._problem.bounds)
-                )
-                result.append(sigmoid_bounding_v(p))
+                result.append(self._map_unbounded_to_bounded_batched(p))
         return result
 
     @property
@@ -630,7 +788,7 @@ class Objective:
             if p is None:
                 result.append(None)
             else:
-                result.append(sigmoid_bounding(p, self._problem.bounds))
+                result.append(self._map_unbounded_to_bounded(p))
         return result
 
     @property
@@ -794,12 +952,13 @@ class Objective:
     ) -> Float[Array, "n_samples n_params"] | Float[Array, "n_params"]:
         """Generate random parameters in unbounded space.
 
-        Samples uniformly in bounded space, then applies inverse sigmoid
-        transform to map to unbounded space (-∞, +∞).
+        Samples uniformly in bounded space, then applies the configured
+        inverse mapping (default: inverse sigmoid / logit) to map to
+        unbounded space (-∞, +∞).
 
-        The inverse sigmoid transform ensures that when these unbounded params
-        are passed through sigmoid_bounding, they recover the original bounded
-        samples.
+        The inverse mapping ensures that when these unbounded params are
+        passed through the matching forward mapping, they recover the
+        original bounded samples.
 
         Reproducibility:
             - If rng_key is provided: Uses that specific key (manual control)
@@ -823,10 +982,8 @@ class Objective:
         # Generate bounded samples (will use internal key if set)
         bounded_samples = self.random_params_bounded(n_samples, rng_key=rng_key)
 
-        # Apply inverse sigmoid bounding
-        unbounded = self._inverse_sigmoid_bounding(
-            bounded_samples, self._problem.bounds
-        )
+        # Apply configured inverse mapping (default: inverse sigmoid)
+        unbounded = self._map_bounded_to_unbounded(bounded_samples)
 
         return unbounded
 
@@ -890,7 +1047,7 @@ class Objective:
         )
 
         if self.unbounded:
-            return self._inverse_sigmoid_bounding(bounded_params, self._bounds)
+            return self._map_bounded_to_unbounded(bounded_params)
         return bounded_params
 
     def _warmup_twice(self, fn, params) -> None:
@@ -1332,7 +1489,7 @@ class Objective:
         self,
         params: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
         loss: Float | Float[Array, "batch"] | None = None,
-        grad: Float | Float[Array, "batch"] | None = None,
+        grad: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
         hessian: Float[Array, "n_params n_params"]
         | Float[Array, "batch n_params n_params"]
         | None = None,
