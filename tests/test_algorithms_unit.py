@@ -25,6 +25,10 @@ from dfbench.algorithms import (
     BotorchTuRBO,
     ReSTIR,
     VAESampling,
+    PDFOUOBYQA,
+    PDFONEWUOA,
+    PDFOLINCOA,
+    PyBOBYQA,
 )
 
 # ── Parametrised list of all algorithms ───────────────────────────────
@@ -41,10 +45,14 @@ ALL_ALGORITHMS = [
     BotorchTuRBO,
     ReSTIR,
     VAESampling,
+    PDFOUOBYQA,
+    PDFONEWUOA,
+    PDFOLINCOA,
+    PyBOBYQA,
 ]
 
 GRADIENT_ALGORITHMS = [AdamGD, SAGD, NAAdamGD, LBFGSGD]
-EVOLUTIONARY_ALGORITHMS = [RandomSearch, EvoxES, EvoxPSO]
+EVOLUTIONARY_ALGORITHMS = [RandomSearch, EvoxES, EvoxPSO, PDFOUOBYQA, PDFONEWUOA, PDFOLINCOA, PyBOBYQA]
 SURROGATE_ALGORITHMS = [BotorchBO, BotorchTuRBO, ReSTIR]
 GENERATIVE_ALGORITHMS = [VAESampling]
 
