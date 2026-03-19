@@ -19,6 +19,8 @@ dependencies = [
     "torchaudio>=2.9.1",
     "torchvision>=0.24.1",
     "ruff>=0.14.8",
+    "OMADS>=2408.0",
+    "samplersLib>=2602.1",
 ]
 
 [tool.hatch.build.targets.wheel]

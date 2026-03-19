@@ -20,6 +20,8 @@ class AlgorithmType(Enum):
         EVOLUTIONARY: Population-based algorithms (e.g., PSO, Random Search).
         SURROGATE_BASED: Algorithms using surrogate models (e.g., Bayesian Optimization).
         DIFFUSION_BASED: Generative diffusion-based optimization (experimental).
+        GENERATIVE: Generative model-based optimization (e.g., VAE sampling).
+        DIRECT_SEARCH: Derivative-free direct-search methods (e.g., MADS, OrthoMADS).
     """
 
     GRADIENT_BASED = "gradient_based"
@@ -27,6 +29,7 @@ class AlgorithmType(Enum):
     SURROGATE_BASED = "surrogate_based"
     DIFFUSION_BASED = "diffusion_based"
     GENERATIVE = "generative"
+    DIRECT_SEARCH = "direct_search"
 
 
 class OptimizationAlgorithm(ABC):
