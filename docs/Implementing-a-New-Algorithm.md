@@ -317,6 +317,26 @@ params = obj.random_params_unbounded()
 loss, grad = obj.value_and_grad(params)
 ```
 
+If you need a different transform than sigmoid, configure it explicitly before logging starts. Custom mappings must map to the [0, 1] range; the Objective handles scaling to actual bounds (`bounded = lb + (ub - lb) * f(x)`):
+
+```python
+import jax
+
+# Scalar function — works on floats and arrays alike
+obj.set_space_mode(
+    True,
+    unit_mapping=jax.nn.sigmoid,
+    inverse_unit_mapping=lambda x: jnp.log(x / (1.0 - x)),
+)
+```
+
+Important:
+
+- Always pass both functions together (forward and inverse)
+- The forward maps to [0, 1]; the inverse maps [0, 1] → unbounded. Bounds scaling is handled by `Objective`
+- Functions can be scalar (e.g. `jax.nn.sigmoid`) or element-wise vector; both work because JAX broadcasts element-wise operations. Batching is handled by `Objective` via `jax.vmap`
+- `obj.best_params_bounded` and `obj.random_params_unbounded()` then follow your custom mapping pair
+
 ---
 
 ## Using External Libraries

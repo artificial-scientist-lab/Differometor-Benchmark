@@ -14,9 +14,6 @@ class RandomSearch(OptimizationAlgorithm):
     Samples random parameters uniformly within the problem's bounds and evaluates them.
     Useful as a baseline for comparing more sophisticated optimization algorithms.
 
-    All history tracking, printing, and checkpointing is handled by the
-    `Objective` wrapper. The algorithm loop is minimal.
-
     Attributes:
         algorithm_str (str): Identifier string for this algorithm ("random_search").
         algorithm_type (AlgorithmType): Type classification (EVOLUTIONARY).
