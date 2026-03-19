@@ -380,6 +380,9 @@ See [Objective API Reference](docs/Objective-API-Reference.md) for the complete 
 | `SAGD` | Gradient | Escapes local minima via stochastic ascent |
 | `NAAdamGD` | Gradient | Noise-based exploration with annealing |
 | `LBFGSGD` | Gradient | Second-order curvature information |
+| `BFGS`, `LBFGSB`, `NonlinearCG`, `NewtonCG` | Gradient | Classical SciPy gradient and quasi-Newton methods |
+| `TrustNCG`, `TrustKrylov`, `TrustConstr`, `Dogleg`, `SR1` | Gradient | Trust-region and constrained SciPy methods |
+| `TNC`, `SLSQP`, `COBYQA`, `COBYLA` | Gradient | Bounded physical-space SciPy solvers |
 | `RandomSearch` | Evolutionary | Unbiased baseline, no hyperparameters |
 | `EvoxPSO` | Evolutionary | Swarm intelligence, many variants (CLPSO, CSO, ...) |
 | `EvoxES` | Evolutionary | CMA-ES, OpenES, XNES, and more |
@@ -397,9 +400,11 @@ See [Algorithms](docs/Algorithms.md) for hyperparameter details and usage exampl
 Execution scripts in `./scripts/`:
 - `voyager_adam_gd.py`: single-algorithm run
 - `voyager_benchmark.py`: full benchmark with multiple algorithms
+- `voyager_scipy_benchmark.py`: SciPy gradient / trust / constrained batch
 
 Reference implementations worth reading:
 - `adam_gd.py`: gradient-based pattern
+- `_scipy_common.py`: shared SciPy wrapper, caching, and budget handling
 - `random_search.py`: simplest batched example
 - `evox_es.py`: wrapping an external library (EvoX/PyTorch)
 - `botorch_bo.py`: surrogate-based with BoTorch

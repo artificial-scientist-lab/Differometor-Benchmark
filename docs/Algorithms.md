@@ -6,7 +6,10 @@ All built-in algorithms subclass `OptimizationAlgorithm` and follow a common con
 
 ```python
 from dfbench.algorithms import (
-    AdamGD, SAGD, NAAdamGD, LBFGSGD,       # gradient-based
+    AdamGD, SAGD, NAAdamGD, LBFGSGD,       # Optax gradient-based
+    BFGS, LBFGSB, NonlinearCG, NewtonCG,   # SciPy gradient / quasi-Newton
+    TrustNCG, TrustKrylov, TrustConstr,    # SciPy trust-region / constrained
+    TNC, SLSQP, COBYQA, COBYLA, Dogleg, SR1,
     RandomSearch, EvoxPSO, EvoxES,           # evolutionary
     BotorchBO, BotorchTuRBO,                 # surrogate-based
     VAESampling,                              # generative
@@ -132,6 +135,21 @@ optimizer.optimize(
     random_seed=42,
 )
 ```
+
+### SciPy Gradient / Trust / Constrained Family
+
+The SciPy-backed optimizers follow the same `Objective` contract as the Optax-based ones while using `scipy.optimize.minimize` under the hood. Public classes include:
+
+- `BFGS`, `LBFGSB`, `NonlinearCG`, `NewtonCG`
+- `TrustNCG`, `TrustKrylov`, `TrustConstr`, `Dogleg`, `SR1`
+- `TNC`, `SLSQP`, `COBYQA`, `COBYLA`
+
+Bounded-vs-unbounded behavior is explicit in each class:
+
+- Unbounded sigmoid-space defaults: `BFGS`, `NonlinearCG`, `NewtonCG`, `TrustNCG`, `TrustKrylov`, `Dogleg`
+- Bounded physical-space defaults: `LBFGSB`, `TrustConstr`, `TNC`, `SLSQP`, `COBYQA`, `COBYLA`, `SR1`
+
+See `src/dfbench/algorithms/gradient_based/_scipy_common.py` and `scripts/voyager_scipy_benchmark.py` for the shared wrapper and a benchmark example.
 
 ---
 
