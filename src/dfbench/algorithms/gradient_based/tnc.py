@@ -12,10 +12,10 @@ from dfbench.core.objective import Objective
 
 
 class TNC(ScipyMinimizeAlgorithm):
-    """SciPy TNC in bounded physical space."""
+    """SciPy TNC in unbounded sigmoid space."""
 
     algorithm_str = "tnc"
-    scipy_config = SciPyConfig(method="TNC", unbounded=False, use_bounds=True)
+    scipy_config = SciPyConfig(method="TNC", unbounded=True, use_bounds=False)
 
     def optimize(
         self,
@@ -29,15 +29,15 @@ class TNC(ScipyMinimizeAlgorithm):
         tol: float | None = None,
         **scipy_kwargs,
     ) -> None:
-        """Run SciPy ``method="TNC"`` with bound constraints.
+        """Run SciPy ``method="TNC"`` in unbounded sigmoid space.
 
-        TNC operates directly in the Objective's bounded physical space and
-        forwards the problem's box bounds to SciPy's truncated-Newton solver.
+        This wrapper optimizes the Objective's sigmoid-space parameterization,
+        so box bounds from the underlying problem are not passed to SciPy.
 
         Args:
             problem_objective: Objective to mutate in place with evaluation logs.
-            init_params: Initial point in bounded space. If None, sampled via
-                :meth:`Objective.random_params_bounded`.
+            init_params: Initial point in unbounded space. If None, sampled via
+                :meth:`Objective.random_params_unbounded`.
             random_seed: Seed used when sampling ``init_params``.
             gtol: Precision goal for the projected gradient.
             ftol: Precision goal for the objective value.

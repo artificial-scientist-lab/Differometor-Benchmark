@@ -12,10 +12,10 @@ from dfbench.core.objective import Objective
 
 
 class LBFGSB(ScipyMinimizeAlgorithm):
-    """SciPy L-BFGS-B in bounded physical space."""
+    """SciPy L-BFGS-B in unbounded sigmoid space."""
 
     algorithm_str = "lbfgsb"
-    scipy_config = SciPyConfig(method="L-BFGS-B", unbounded=False, use_bounds=True)
+    scipy_config = SciPyConfig(method="L-BFGS-B", unbounded=True, use_bounds=False)
 
     def optimize(
         self,
@@ -29,15 +29,15 @@ class LBFGSB(ScipyMinimizeAlgorithm):
         tol: float | None = None,
         **scipy_kwargs,
     ) -> None:
-        """Run SciPy ``method="L-BFGS-B"`` with the problem's box bounds.
+        """Run SciPy ``method="L-BFGS-B"`` in unbounded sigmoid space.
 
-        Unlike the unconstrained wrappers, this method operates directly in the
-        Objective's bounded physical space and forwards box bounds to SciPy.
+        This wrapper optimizes the Objective's sigmoid-space parameterization,
+        so box bounds from the underlying problem are not passed to SciPy.
 
         Args:
             problem_objective: Objective to mutate in place with evaluation logs.
-            init_params: Initial point in bounded space. If None, sampled via
-                :meth:`Objective.random_params_bounded`.
+            init_params: Initial point in unbounded space. If None, sampled via
+                :meth:`Objective.random_params_unbounded`.
             random_seed: Seed used when sampling ``init_params``.
             gtol: Stop when the projected gradient norm reaches this tolerance.
             maxiter: Maximum number of L-BFGS-B iterations.

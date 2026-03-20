@@ -25,6 +25,7 @@ periodically (same behaviour as the legacy ``verbose >= 1`` path).
 
 from __future__ import annotations
 
+import math
 import sys
 import shutil
 import time
@@ -395,6 +396,9 @@ class LiveDisplay:
             losses = obj.loss_history_reduced
         except Exception:
             losses = []
+
+        # Filter out non-finite values before building the sparkline.
+        losses = [v for v in losses if isinstance(v, (int, float)) and math.isfinite(v)]
 
         # Deduplicate consecutive equal values (running-minimum trajectory)
         running_min: list[float] = []

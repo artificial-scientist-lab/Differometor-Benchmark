@@ -88,7 +88,7 @@ class SciPyObjectiveAdapter:
         if not self.config.use_bounds:
             return None
         problem_bounds = np.asarray(self.obj.problem.bounds, dtype=float)
-        return Bounds(problem_bounds[0], problem_bounds[1], keep_feasible=False)
+        return Bounds(problem_bounds[0], problem_bounds[1], keep_feasible=True)
 
     @property
     def constraints(self) -> tuple:
@@ -141,6 +141,9 @@ class SciPyObjectiveAdapter:
         if self.obj.budget_exceeded:
             raise SciPyBudgetExceeded("Objective budget exhausted inside SciPy.")
 
+    # Penalty returned to SciPy when the objective produces non-finite values.
+    _NAN_PENALTY: float = 1e10
+
     def _cache_value_grad(
         self,
         x: np.ndarray,
@@ -155,17 +158,31 @@ class SciPyObjectiveAdapter:
         self._latest_hessp_key = None
         self._latest_hessp = None
 
+    @staticmethod
+    def _sanitize_loss(loss: float) -> float:
+        """Replace non-finite loss with a large penalty so SciPy retreats."""
+        if not np.isfinite(loss):
+            return SciPyObjectiveAdapter._NAN_PENALTY
+        return loss
+
+    @staticmethod
+    def _sanitize_grad(grad: np.ndarray) -> np.ndarray:
+        """Replace non-finite gradient entries with zeros."""
+        if not np.all(np.isfinite(grad)):
+            return np.where(np.isfinite(grad), grad, 0.0)
+        return grad
+
     def evaluate_value(self, x: np.ndarray) -> float:
         """Return loss only and log exactly once for this point."""
         x_np = self._to_numpy_vector(x)
         if self._same_point(x_np):
-            return float(self._latest_loss)
+            return self._sanitize_loss(float(self._latest_loss))
 
         loss = self._value_fn(jnp.asarray(x_np))
         self.obj.log_evaluation(jnp.asarray(x_np), loss, None)
         self._cache_value_grad(x_np, loss, None)
         self._check_budget()
-        return float(loss)
+        return self._sanitize_loss(float(loss))
 
     def evaluate_value_and_grad(self, x: np.ndarray) -> tuple[float, np.ndarray]:
         """Return loss/grad and log exactly once for this point."""
@@ -175,13 +192,19 @@ class SciPyObjectiveAdapter:
             )
         x_np = self._to_numpy_vector(x)
         if self._same_point(x_np):
-            return float(self._latest_loss), np.asarray(self._latest_grad, dtype=float)
+            return (
+                self._sanitize_loss(float(self._latest_loss)),
+                self._sanitize_grad(np.asarray(self._latest_grad, dtype=float)),
+            )
 
         loss, grad = self._value_and_grad_fn(jnp.asarray(x_np))
         self.obj.log_evaluation(jnp.asarray(x_np), loss, grad)
         self._cache_value_grad(x_np, loss, grad)
         self._check_budget()
-        return float(loss), np.asarray(grad, dtype=float)
+        return (
+            self._sanitize_loss(float(loss)),
+            self._sanitize_grad(np.asarray(grad, dtype=float)),
+        )
 
     def fun(self, x: np.ndarray) -> float:
         """SciPy ``fun`` callback."""
@@ -263,6 +286,27 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
             return obj.random_params_unbounded()
         return obj.random_params_bounded()
 
+    def _perturbed_best_params(
+        self,
+        obj: Objective,
+        scale: float = 0.1,
+    ) -> Float[Array, "n_params"] | None:
+        """Return the best-known point with Gaussian perturbation.
+
+        Returns None if no best params are available yet.
+        """
+        best = obj.best_params
+        if best is None:
+            return None
+        best_np = np.asarray(best, dtype=float)
+        noise = scale * np.random.randn(*best_np.shape)
+        perturbed = best_np + noise
+        if not self.scipy_config.unbounded and obj.bounds is not None:
+            lb = np.asarray(obj.bounds[0], dtype=float)
+            ub = np.asarray(obj.bounds[1], dtype=float)
+            perturbed = np.clip(perturbed, lb, ub)
+        return jnp.asarray(perturbed)
+
     def _run_scipy_minimize(
         self,
         problem_objective: Objective,
@@ -317,22 +361,28 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
 
         obj.start_logging()
 
-        try:
-            self._last_result = minimize(**minimize_kwargs)
-        except SciPyBudgetExceeded:
-            self._last_result = None
-            return
+        restart_count = 0
+        while not obj.budget_exceeded:
+            try:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    self._last_result = minimize(**minimize_kwargs)
+            except SciPyBudgetExceeded:
+                self._last_result = None
+                return
 
-        result = self._last_result
-        if result is None or result.success:
-            return
-
-        warnings.warn(
-            f"{self.algorithm_str} exited with SciPy status {result.status}: "
-            f"{result.message}",
-            RuntimeWarning,
-            stacklevel=2,
-        )
+            # Budget not yet exhausted — restart with alternating strategy:
+            #   even restarts → perturb best-known point (exploit basin)
+            #   odd restarts  → fresh random point (explore new basin)
+            if not obj.budget_exceeded:
+                restart_count += 1
+                if restart_count % 2 == 0:
+                    x0_new = self._perturbed_best_params(obj)
+                    if x0_new is None:
+                        x0_new = self._resolve_init_params(obj, None)
+                else:
+                    x0_new = self._resolve_init_params(obj, None)
+                minimize_kwargs["x0"] = np.asarray(x0_new, dtype=float)
 
 
 def bfgs_hessian_update_strategy(**kwargs) -> ScipyBFGS:
