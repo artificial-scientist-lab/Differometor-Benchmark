@@ -154,7 +154,7 @@ src/dfbench/
 │   ├── objective.py       # Objective wrapper (central piece)
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
-│   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES
+│   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES, Nevergrad baselines
 │   ├── gradient_based/    # AdamGD, SAGD, NAAdamGD, LBFGSGD
 │   ├── surrogate_based/   # BotorchBO, BotorchTuRBO, ReSTIR
 │   └── generative/        # VAESampling

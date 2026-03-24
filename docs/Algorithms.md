@@ -8,6 +8,8 @@ All built-in algorithms subclass `OptimizationAlgorithm` and follow a common con
 from dfbench.algorithms import (
     AdamGD, SAGD, NAAdamGD, LBFGSGD,       # gradient-based
     RandomSearch, EvoxPSO, EvoxES,           # evolutionary
+    NevergradOnePlusOne, NevergradTBPSA,     # nevergrad baselines
+    NevergradNGOpt,                          # nevergrad meta-optimizer
     BotorchBO, BotorchTuRBO,                 # surrogate-based
     VAESampling,                              # generative
 )
@@ -233,6 +235,76 @@ optimizer.optimize(
 
 ---
 
+### Nevergrad Baselines (Rugged-Landscape Controls)
+
+A small batch of [Nevergrad](https://github.com/facebookresearch/nevergrad) wrappers intended as rugged-landscape controls. All operate in **bounded physical space** and evaluate candidates through the `Objective` for fair benchmark accounting.
+
+#### NevergradOnePlusOne
+
+Lightweight (1+1)-ES: maintains a single candidate, perturbs it with Gaussian noise, and accepts only improvements. Minimal overhead, useful as a sanity-check baseline.
+
+```python
+optimizer = NevergradOnePlusOne()
+optimizer.optimize(
+    problem_objective=obj,
+    n_restarts=3,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `n_restarts` | `1` | Independent restarts (budget split evenly). |
+| `max_iterations` | `None` | Total ask/tell cap across restarts. |
+
+---
+
+#### NevergradTBPSA
+
+Test-Based Population-Size Adaptation. A noise-robust baseline that dynamically adapts its population size. Supports repeated evaluations per candidate for noise averaging.
+
+```python
+optimizer = NevergradTBPSA()
+optimizer.optimize(
+    problem_objective=obj,
+    n_restarts=1,
+    num_evaluations=3,    # average 3 evaluations per candidate
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `n_restarts` | `1` | Independent restarts. |
+| `num_evaluations` | `1` | Repeated evals per candidate (averaged). Each counts against budget. |
+| `max_iterations` | `None` | Total ask/tell cap across restarts. |
+
+**Rationale — repeated evaluations:** On noisy landscapes, averaging multiple evaluations per candidate gives the optimizer a more stable signal. Set `num_evaluations > 1` when evaluation noise is suspected.
+
+---
+
+#### NevergradNGOpt
+
+Nevergrad's automatic algorithm-selection meta-optimizer. Internally chooses and configures an algorithm based on problem characteristics (budget, dimensionality). Serves as a strong library-default baseline without manual tuning.
+
+```python
+optimizer = NevergradNGOpt()
+optimizer.optimize(
+    problem_objective=obj,
+    n_restarts=1,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `n_restarts` | `1` | Independent restarts. |
+| `max_iterations` | `None` | Total ask/tell cap across restarts. |
+
+**Rationale — why include NGOpt?** It represents Nevergrad's best automatic guess for a given problem. Comparing it against hand-tuned algorithms reveals whether manual algorithm selection adds value.
+
+---
+
 ## Surrogate-Based Algorithms
 
 These algorithms build a surrogate model of the loss landscape and use it to select promising evaluation points.
@@ -365,6 +437,9 @@ optimizer.optimize(
 | `RandomSearch` | Evolutionary | No hyperparameters, unbiased baseline | Baseline comparison |
 | `EvoxPSO` | Evolutionary | Swarm intelligence, many variants | Moderate-dimensional problems |
 | `EvoxES` | Evolutionary | Covariance adaptation (CMA-ES) | General black-box optimization |
+| `NevergradOnePlusOne` | Evolutionary | Minimal (1+1)-ES, very lightweight | Sanity-check baseline |
+| `NevergradTBPSA` | Evolutionary | Noise-robust, adaptive population | Noisy / rugged landscapes |
+| `NevergradNGOpt` | Evolutionary | Auto algorithm selection | Library-default baseline |
 | `BotorchBO` | Surrogate | Sample-efficient, uncertainty-aware | Low evaluation budgets |
 | `BotorchTuRBO` | Surrogate | Local trust region, high-dim friendly | High-dimensional, expensive evals |
 | `ReSTIR` | Surrogate | Scalable kNN surrogate, GPU-native | Large candidate pools |
