@@ -13,6 +13,16 @@ from dfbench.algorithms import (
 )
 ```
 
+Native-JAX custom/hybrid algorithms are also available:
+
+```python
+from dfbench.algorithms import (
+    SGLDJAX, ASAMJAX, AdamToLBFGSJAX, EntropySGDJAX, SGHMCJAX,
+    OGDJAX, OAdamJAX, PerturbedGDJAX, NoisyAdamJAX,
+    GDRestartsJAX, GaussianSmoothingGDJAX, ARCJAX,
+)
+```
+
 ---
 
 ## Algorithm Types
@@ -132,6 +142,29 @@ optimizer.optimize(
     random_seed=42,
 )
 ```
+
+---
+
+### Native-JAX Custom/Hybrid Batch
+
+These classes are implemented as lightweight, benchmark-oriented methods that
+stay fully in JAX and use Objective logging directly:
+
+- `SGLDJAX`: optimizer-style SGLD (not full Bayesian posterior sampling)
+- `ASAMJAX`: adaptive-SAM style adversarial smoothing
+- `AdamToLBFGSJAX`: Adam exploration then Optax L-BFGS refinement
+- `EntropySGDJAX`: minimal local-entropy inner loop
+- `SGHMCJAX`: momentum + friction + noise stochastic dynamics
+- `OGDJAX`, `OAdamJAX`: optimistic gradient and optimistic Adam variants
+- `PerturbedGDJAX`, `NoisyAdamJAX`: simple ruggedness controls
+- `GDRestartsJAX`: GD with first-class periodic restarts
+- `GaussianSmoothingGDJAX`: antithetic Gaussian smoothing + GD
+
+All methods above default to unbounded optimization coordinates (`unbounded=True`).
+Restart controls are exposed as conservative hyperparameters where applicable.
+
+`ARCJAX` is currently intentionally disabled and raises `NotImplementedError`
+to fail loudly until a stable and benchmark-fair implementation is ready.
 
 ---
 
