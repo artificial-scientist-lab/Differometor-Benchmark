@@ -21,6 +21,9 @@ from dfbench.algorithms import (
     RandomSearch,
     EvoxES,
     EvoxPSO,
+    NevergradNGOpt,
+    NevergradOnePlusOne,
+    NevergradTBPSA,
     BotorchBO,
     BotorchTuRBO,
     ReSTIR,
@@ -37,6 +40,9 @@ ALL_ALGORITHMS = [
     RandomSearch,
     EvoxES,
     EvoxPSO,
+    NevergradNGOpt,
+    NevergradOnePlusOne,
+    NevergradTBPSA,
     BotorchBO,
     BotorchTuRBO,
     ReSTIR,
@@ -44,7 +50,8 @@ ALL_ALGORITHMS = [
 ]
 
 GRADIENT_ALGORITHMS = [AdamGD, SAGD, NAAdamGD, LBFGSGD]
-EVOLUTIONARY_ALGORITHMS = [RandomSearch, EvoxES, EvoxPSO]
+EVOLUTIONARY_ALGORITHMS = [RandomSearch, EvoxES, EvoxPSO, NevergradOnePlusOne, NevergradTBPSA, NevergradNGOpt]
+NEVERGRAD_ALGORITHMS = [NevergradOnePlusOne, NevergradTBPSA, NevergradNGOpt]
 SURROGATE_ALGORITHMS = [BotorchBO, BotorchTuRBO, ReSTIR]
 GENERATIVE_ALGORITHMS = [VAESampling]
 
@@ -249,6 +256,65 @@ class TestEvolutionary:
         with pytest.raises((ValueError, KeyError)):
             algo = EvoxPSO(variant="nonexistent_variant")
             obj = Objective.__new__(Objective)
+
+
+# ======================================================================
+# Nevergrad batch (7.22a–7.22g)
+# ======================================================================
+
+
+class TestNevergrad:
+    @pytest.mark.parametrize("cls", NEVERGRAD_ALGORITHMS, ids=lambda c: c.__name__)
+    def test_algorithm_type(self, cls):
+        """7.22a algorithm_type is EVOLUTIONARY."""
+        assert cls.algorithm_type == AlgorithmType.EVOLUTIONARY
+
+    @pytest.mark.parametrize("cls", NEVERGRAD_ALGORITHMS, ids=lambda c: c.__name__)
+    def test_bounded_mode(self, cls, mock_problem):
+        """7.22b prepare() sets obj.unbounded = False."""
+        algo = cls()
+        obj = Objective(mock_problem, max_evals=30, max_time=60)
+        algo.optimize(obj, random_seed=42)
+        assert obj.unbounded is False
+
+    @pytest.mark.parametrize("cls", NEVERGRAD_ALGORITHMS, ids=lambda c: c.__name__)
+    def test_produces_evals(self, cls, mock_problem):
+        """7.22c After optimize(), eval_count > 0."""
+        algo = cls()
+        obj = Objective(mock_problem, max_evals=30, max_time=60)
+        algo.optimize(obj, random_seed=42)
+        assert obj.eval_count > 0
+
+    @pytest.mark.parametrize("cls", NEVERGRAD_ALGORITHMS, ids=lambda c: c.__name__)
+    def test_best_loss_not_none(self, cls, mock_problem):
+        """7.22d After optimize(), best_loss is recorded."""
+        algo = cls()
+        obj = Objective(mock_problem, max_evals=30, max_time=60)
+        algo.optimize(obj, random_seed=42)
+        assert obj.best_loss is not None
+
+    @pytest.mark.parametrize("cls", NEVERGRAD_ALGORITHMS, ids=lambda c: c.__name__)
+    def test_multistart(self, cls, mock_problem):
+        """7.22e Multistart with n_restarts=2 produces evals."""
+        algo = cls()
+        obj = Objective(mock_problem, max_evals=30, max_time=60)
+        algo.optimize(obj, random_seed=42, n_restarts=2)
+        assert obj.eval_count > 0
+
+    def test_tbpsa_repeated_evaluations(self, mock_problem):
+        """7.22f TBPSA with num_evaluations=3 uses more budget per candidate."""
+        algo = NevergradTBPSA()
+        obj = Objective(mock_problem, max_evals=30, max_time=60)
+        algo.optimize(obj, random_seed=42, num_evaluations=3)
+        assert obj.eval_count > 0
+
+    def test_oneplusone_lightweight(self, mock_problem):
+        """7.22g OnePlusOne runs within tight budget."""
+        algo = NevergradOnePlusOne()
+        obj = Objective(mock_problem, max_evals=10, max_time=60)
+        algo.optimize(obj, random_seed=42)
+        assert obj.eval_count > 0
+        assert obj.eval_count <= 11  # 1 warmup + up to 10 logged
 
 
 # ======================================================================
