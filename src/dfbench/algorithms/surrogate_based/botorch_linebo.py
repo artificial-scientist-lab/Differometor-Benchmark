@@ -131,10 +131,14 @@ class LineBO(OptimizationAlgorithm):
         obj.start_logging()
 
         # Initial Sobol in full ambient space
-        X_train = sobol_initial_samples(D, n_initial, random_seed, device=self.device, dtype=self.dtype)
+        X_train = sobol_initial_samples(
+            D, n_initial, random_seed, device=self.device, dtype=self.dtype
+        )
         if init_params is not None:
             x0 = torch.tensor(
-                np.asarray(init_params).reshape(1, -1), device=self.device, dtype=self.dtype
+                np.asarray(init_params).reshape(1, -1),
+                device=self.device,
+                dtype=self.dtype,
             )
             X_train = torch.cat([normalize(x0, bounds), X_train])
 
@@ -166,7 +170,9 @@ class LineBO(OptimizationAlgorithm):
                 continue
 
             # Sample along the line
-            sobol_1d = torch.quasirandom.SobolEngine(1, scramble=True, seed=random_seed + iteration)
+            sobol_1d = torch.quasirandom.SobolEngine(
+                1, scramble=True, seed=random_seed + iteration
+            )
             T = sobol_1d.draw(line_samples).to(self.device, self.dtype).squeeze(-1)
             T = T * (t_hi - t_lo) + t_lo  # map [0,1]→[t_lo, t_hi]
 

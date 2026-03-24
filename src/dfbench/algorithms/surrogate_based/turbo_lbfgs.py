@@ -141,8 +141,11 @@ class TuRBOLBFGS(OptimizationAlgorithm):
 
         if init_params is not None:
             from botorch.utils.transforms import normalize
+
             x0 = torch.tensor(
-                np.asarray(init_params).reshape(1, -1), device=self.device, dtype=self.dtype
+                np.asarray(init_params).reshape(1, -1),
+                device=self.device,
+                dtype=self.dtype,
             )
             train_X = torch.cat([normalize(x0, bounds_torch), train_X])
 
@@ -232,8 +235,12 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         def _step(params, opt_state):
             loss, grads = value_and_grad_fn(params)
             updates, new_state = optimizer.update(
-                grads, opt_state, params,
-                value=loss, grad=grads, value_fn=value_fn,
+                grads,
+                opt_state,
+                params,
+                value=loss,
+                grad=grads,
+                value_fn=value_fn,
             )
             new_params = optax.apply_updates(params, updates)
             return jnp.asarray(new_params), new_state, loss, grads
@@ -263,5 +270,8 @@ class TuRBOLBFGS(OptimizationAlgorithm):
                     break
                 obj.log_evaluation(bounded_params, loss)
 
-            if lbfgs_patience is not None and obj.evals_since_improvement > lbfgs_patience:
+            if (
+                lbfgs_patience is not None
+                and obj.evals_since_improvement > lbfgs_patience
+            ):
                 break

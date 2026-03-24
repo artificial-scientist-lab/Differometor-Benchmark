@@ -96,7 +96,9 @@ class GEBO(OptimizationAlgorithm):
             try:
                 loss_jax, grad_jax = obj.value_and_grad(x_jax)
                 loss_t = torch.tensor(float(loss_jax), device=device, dtype=dtype)
-                grad_t = torch.from_numpy(np.array(grad_jax)).to(device=device, dtype=dtype)
+                grad_t = torch.from_numpy(np.array(grad_jax)).to(
+                    device=device, dtype=dtype
+                )
 
                 if torch.isfinite(loss_t) and torch.all(torch.isfinite(grad_t)):
                     Y_list.append(-loss_t)
@@ -165,10 +167,14 @@ class GEBO(OptimizationAlgorithm):
         obj.start_logging()
 
         # Initial Sobol
-        X_train = sobol_initial_samples(D, n_initial, random_seed, device=self.device, dtype=self.dtype)
+        X_train = sobol_initial_samples(
+            D, n_initial, random_seed, device=self.device, dtype=self.dtype
+        )
         if init_params is not None:
             x0 = torch.tensor(
-                np.asarray(init_params).reshape(1, -1), device=self.device, dtype=self.dtype
+                np.asarray(init_params).reshape(1, -1),
+                device=self.device,
+                dtype=self.dtype,
             )
             X_train = torch.cat([normalize(x0, bounds), X_train])
 

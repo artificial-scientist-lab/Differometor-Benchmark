@@ -48,9 +48,7 @@ class SMAC(OptimizationAlgorithm):
 
     def __init__(self) -> None:
         if not _SMAC_AVAILABLE:
-            raise ImportError(
-                "SMAC3 is required. Install with: uv pip install smac"
-            )
+            raise ImportError("SMAC3 is required. Install with: uv pip install smac")
 
     def optimize(
         self,
@@ -105,7 +103,11 @@ class SMAC(OptimizationAlgorithm):
             deterministic=True,
             n_trials=n_initial + max_iterations,
             seed=random_seed,
-            **{k: v for k, v in smac_kwargs.items() if k not in ("cs", "deterministic", "n_trials", "seed")},
+            **{
+                k: v
+                for k, v in smac_kwargs.items()
+                if k not in ("cs", "deterministic", "n_trials", "seed")
+            },
         )
 
         smac = HyperparameterOptimizationFacade(

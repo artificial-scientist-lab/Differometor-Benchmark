@@ -121,7 +121,9 @@ class AxSAASBO(OptimizationAlgorithm):
             ]
         )
 
-        ax_client = AxClient(generation_strategy=gs, random_seed=random_seed, verbose_logging=False)
+        ax_client = AxClient(
+            generation_strategy=gs, random_seed=random_seed, verbose_logging=False
+        )
 
         parameters = [
             {

@@ -115,10 +115,14 @@ class BotorchqKG(OptimizationAlgorithm):
         obj.start_logging()
 
         # Initial Sobol
-        train_X = sobol_initial_samples(dim, n_initial, random_seed, device=self.device, dtype=self.dtype)
+        train_X = sobol_initial_samples(
+            dim, n_initial, random_seed, device=self.device, dtype=self.dtype
+        )
         if init_params is not None:
             x0 = torch.tensor(
-                np.asarray(init_params).reshape(1, -1), device=self.device, dtype=self.dtype
+                np.asarray(init_params).reshape(1, -1),
+                device=self.device,
+                dtype=self.dtype,
             )
             train_X = torch.cat([normalize(x0, bounds), train_X])
 

@@ -67,8 +67,7 @@ class BAxUS(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for BAxUS. Install with: "
-                "uv pip install botorch"
+                "BoTorch is required for BAxUS. Install with: uv pip install botorch"
             )
         self.device = DEVICE
         self.dtype = DTYPE
@@ -178,7 +177,9 @@ class BAxUS(OptimizationAlgorithm):
                 center = torch.full((D,), 0.5, device=self.device, dtype=self.dtype)
 
             # Sobol initialisation in embedding space [-1, 1]^d_e
-            sobol = torch.quasirandom.SobolEngine(d_e, scramble=True, seed=random_seed + d_e)
+            sobol = torch.quasirandom.SobolEngine(
+                d_e, scramble=True, seed=random_seed + d_e
+            )
             Z_init = sobol.draw(n_initial).to(self.device, self.dtype) * 2.0 - 1.0
             X_init = torch.stack([self._project_up(z, A, center) for z in Z_init])
 
