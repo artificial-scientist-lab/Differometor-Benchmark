@@ -25,6 +25,8 @@ from dfbench.algorithms import (
     BotorchTuRBO,
     ReSTIR,
     VAESampling,
+    OmadsMADS,
+    OmadsOrthoMADS,
 )
 
 # ── Parametrised list of all algorithms ───────────────────────────────
@@ -41,10 +43,12 @@ ALL_ALGORITHMS = [
     BotorchTuRBO,
     ReSTIR,
     VAESampling,
+    OmadsMADS,
+    OmadsOrthoMADS,
 ]
 
 GRADIENT_ALGORITHMS = [AdamGD, SAGD, NAAdamGD, LBFGSGD]
-EVOLUTIONARY_ALGORITHMS = [RandomSearch, EvoxES, EvoxPSO]
+EVOLUTIONARY_ALGORITHMS = [RandomSearch, EvoxES, EvoxPSO, OmadsMADS, OmadsOrthoMADS]
 SURROGATE_ALGORITHMS = [BotorchBO, BotorchTuRBO, ReSTIR]
 GENERATIVE_ALGORITHMS = [VAESampling]
 
