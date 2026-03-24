@@ -200,9 +200,9 @@ optimizer.optimize(
 
 ---
 
-### EvoxES (Evolution Strategies)
+### EvoxES (Evolution Strategies — EvoX backend)
 
-Uses EvoX's evolution strategy implementations. Similar structure to EvoxPSO but with different algorithmic families.
+Uses EvoX's evolution strategy implementations. Similar structure to EvoxPSO but with different algorithmic families.  Note: the EvoX backend is distinct from the pycma / cmaes / evosax backends added in the CMA-family batch.
 
 ```python
 optimizer = EvoxES(batch_size=5, variant="CMAES")
@@ -230,6 +230,132 @@ optimizer.optimize(
 | `NoiseReuseES` | Noise Reuse Evolution Strategy |
 | `GuidedES` | Guided Evolution Strategy |
 | `ESMC` | Evolution Strategy with Monte Carlo |
+
+---
+
+## CMA-Family Algorithms (pycma / cmaes / evosax / native JAX)
+
+Nine additional CMA-family algorithms added alongside the EvoX backend.  Each class names its backend explicitly in `algorithm_str` so benchmark runs can be distinguished.
+
+**Required packages** (install with `uv add cma cmaes evosax`):
+- `pycma` ≥ 3.3 — for `PyCMA*` classes
+- `cmaes` ≥ 0.10 — for `CMAESSepCMA`
+- `evosax` ≥ 0.1.6 — for `Evosax*` classes
+- `jax` (already a dependency) — for `JAX*` classes
+
+```python
+from dfbench.algorithms import (
+    PyCMACMAES, PyCMAActiveCMAES, PyCMAIPOP, PyCMABIPOP,  # pycma
+    CMAESSepCMA,                                            # cmaes
+    EvosaxMAES, EvosaxLMMAES,                               # evosax
+    JAXOnePlusOneES, JAXMuLambdaES,                         # native JAX
+)
+```
+
+### PyCMACMAES (pycma — vanilla CMA-ES)
+
+```python
+optimizer = PyCMACMAES(batch_size=50)
+optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_iterations=500, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | `4+floor(3·ln n)` | Population size λ (optimize). |
+| `sigma0` | `0.3·mean(ub−lb)` | Initial step size (optimize). |
+| `max_iterations` | `None` | Generation cap (optimize). |
+
+### PyCMAActiveCMAES (pycma — aCMA-ES)
+
+Identical to `PyCMACMAES` with `CMA_active=True`.  Uses negative weight updates for unsuccessful directions.
+
+```python
+optimizer = PyCMAActiveCMAES(batch_size=50)
+optimizer.optimize(obj, pop_size=50, random_seed=0)
+```
+
+### PyCMAIPOP (pycma — IPOP-CMA-ES)
+
+Restarts CMA-ES up to `max_restarts` times, doubling λ each time.
+
+```python
+optimizer = PyCMAIPOP(batch_size=20)
+optimizer.optimize(obj, pop_size=20, max_restarts=5, random_seed=0, max_iterations_per_restart=200)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | `4+floor(3·ln n)` | Base λ (doubles each restart) (optimize). |
+| `max_restarts` | `9` | Maximum restarts (optimize). |
+| `max_iterations_per_restart` | `None` | Per-restart generation cap (optimize). |
+
+### PyCMABIPOP (pycma — BIPOP-CMA-ES)
+
+Alternates between large-population (doubled λ) and small-population (random λ, random σ) restarts following Hansen 2009.
+
+```python
+optimizer = PyCMABIPOP(batch_size=20)
+optimizer.optimize(obj, pop_size=20, max_restarts=10, random_seed=0)
+```
+
+### CMAESSepCMA (cmaes package — sep-CMA-ES)
+
+Diagonal covariance matrix; O(n²) instead of O(n³) per update.
+
+```python
+optimizer = CMAESSepCMA(batch_size=50)
+optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_no_improvement=100, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | library default | Population λ (optimize). |
+| `max_no_improvement` | `None` | Stop on stagnation after N generations (optimize). |
+
+### EvosaxMAES (evosax — MA-ES)
+
+Matrix Adaptation ES via the evosax JAX library.
+
+```python
+optimizer = EvosaxMAES(batch_size=64)
+optimizer.optimize(obj, pop_size=64, sigma0=0.3, max_iterations=1000, random_seed=0)
+```
+
+### EvosaxLMMAES (evosax — LM-MA-ES)
+
+Limited-memory MA-ES; O(n·m) storage where m is `memory_size`.
+
+```python
+optimizer = EvosaxLMMAES(batch_size=64)
+optimizer.optimize(obj, pop_size=64, memory_size=10, random_seed=0)
+```
+
+### JAXOnePlusOneES (native JAX — (1+1)-ES)
+
+Single-parent ES with the 1/5 success rule.  No optional dependencies.
+
+```python
+optimizer = JAXOnePlusOneES()
+optimizer.optimize(obj, sigma0=0.3, sigma_min=1e-10, success_window=20, max_iterations=5000, random_seed=0)
+```
+
+### JAXMuLambdaES (native JAX — (μ,λ)-ES)
+
+Comma-selection ES with isotropic Gaussian mutations and cumulative step-size adaptation.  No optional dependencies.
+
+```python
+optimizer = JAXMuLambdaES(batch_size=50)
+optimizer.optimize(obj, mu=10, lam=50, sigma0=0.3, sigma_min=1e-10, max_iterations=500, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `mu` | `10` | Number of survivors (must be < lam) (optimize). |
+| `lam` | `50` | Number of offspring per generation (optimize). |
 
 ---
 
