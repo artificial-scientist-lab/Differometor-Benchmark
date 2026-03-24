@@ -10,9 +10,9 @@ problem = VoyagerProblem()
 # Create Objective wrapper with configuration
 obj = Objective(
     problem,
-    max_evals=10_000,
+    max_time=60,
     verbose=1,
-    print_every=100,
+    print_every=5,
     save_params_history=True,
 )
 
@@ -22,7 +22,7 @@ optimizer = LBFGSGD()
 # Run optimization
 optimizer.optimize(
     obj,
-    random_seed=42,
+    random_seed=420,
 )
 
 print(f"\nBest loss: {obj.best_loss:.6f}")
