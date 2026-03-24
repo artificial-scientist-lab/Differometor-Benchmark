@@ -157,6 +157,9 @@ src/dfbench/
 │   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES
 │   ├── gradient_based/    # AdamGD, SAGD, NAAdamGD, LBFGSGD
 │   ├── surrogate_based/   # BotorchBO, BotorchTuRBO, ReSTIR
+│   │                      # + BO batch: AxSAASBO, BAxUS, BotorchqNEI,
+│   │                      #   BotorchqKG, REMBO, GEBO, LineBO,
+│   │                      #   HEBO, SMAC, TuRBOLBFGS
 │   └── generative/        # VAESampling
 ├── problems/
 │   ├── voyager/           # VoyagerProblem, ConstrainedVoyagerProblem

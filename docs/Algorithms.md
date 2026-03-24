@@ -11,7 +11,10 @@ from dfbench.algorithms import (
     TrustNCG, TrustKrylov, TrustConstr,    # SciPy trust-region / constrained
     TNC, SLSQP, COBYQA, COBYLA, Dogleg, SR1,
     RandomSearch, EvoxPSO, EvoxES,           # evolutionary
-    BotorchBO, BotorchTuRBO,                 # surrogate-based
+    BotorchBO, BotorchTuRBO,                 # surrogate-based (standard)
+    AxSAASBO, BAxUS, BotorchqNEI, BotorchqKG,  # structured BO
+    REMBO, GEBO, LineBO, TuRBOLBFGS,            # geometry / hybrid BO
+    HEBO, SMAC,                                  # external BO packages
     VAESampling,                              # generative
 )
 ```
@@ -337,6 +340,257 @@ optimizer.optimize(
 
 ---
 
+### AxSAASBO (Sparse Axis-Aligned Subspace BO)
+
+Fully Bayesian GP with a sparsity-inducing half-Cauchy prior on lengthscales. Effective when only a few dimensions matter. Requires the `ax-platform` package.
+
+Reference: Eriksson & Jankowiak, *High-Dimensional Bayesian Optimization with Sparse Axis-Aligned Subspaces*, UAI 2021.
+
+```python
+optimizer = AxSAASBO()
+optimizer.optimize(
+    problem_objective=obj,
+    max_iterations=50,
+    n_initial=10,
+    num_warmup=256,
+    num_samples=128,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `max_iterations` | *required* | BO iterations after initialisation. |
+| `n_initial` | `10` | Sobol initialisation budget. |
+| `num_warmup` | `256` | NUTS warm-up samples. |
+| `num_samples` | `128` | NUTS posterior samples. |
+
+---
+
+### BAxUS (Adaptive Expanding Subspaces BO)
+
+Starts in a low-dimensional random embedding and adaptively increases dimensionality when the current subspace is exhausted. Built on BoTorch building blocks.
+
+Reference: Papenmeier et al., *Increasing the Scope as You Learn*, NeurIPS 2022.
+
+```python
+optimizer = BAxUS()
+optimizer.optimize(
+    problem_objective=obj,
+    max_iterations=50,
+    n_initial=10,
+    d_init=5,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `max_iterations` | *required* | Total BO iterations across all subspaces. |
+| `n_initial` | `10` | Sobol samples per subspace. |
+| `d_init` | `min(5, dim)` | Initial embedding dimensionality. |
+| `failure_tolerance` | `max(dim//2, 5)` | Failures before expanding subspace. |
+
+---
+
+### BotorchqNEI (Noisy Expected Improvement)
+
+Uses `qNoisyExpectedImprovement` which accounts for observation noise in the acquisition function.
+
+Reference: Letham et al., *Noisy Expected Improvement*, NeurIPS 2019.
+
+```python
+optimizer = BotorchqNEI()
+optimizer.optimize(
+    problem_objective=obj,
+    max_iterations=50,
+    n_initial=10,
+    batch_size=1,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `max_iterations` | *required* | BO iterations. |
+| `n_initial` | `10` | Sobol initialisation. |
+| `batch_size` | `1` | Candidates per iteration. |
+| `prune_baseline` | `True` | Prune baseline set. |
+
+---
+
+### BotorchqKG (Knowledge Gradient)
+
+Maximises the expected increase in posterior best after one more observation — a one-step Bayes-optimal lookahead.
+
+Reference: Wu & Frazier, *The Parallel Knowledge Gradient Method*, NeurIPS 2016.
+
+```python
+optimizer = BotorchqKG()
+optimizer.optimize(
+    problem_objective=obj,
+    max_iterations=50,
+    n_initial=10,
+    num_fantasies=16,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `max_iterations` | *required* | BO iterations. |
+| `n_initial` | `10` | Sobol initialisation. |
+| `num_fantasies` | `16` | Fantasy models for KG estimation. |
+
+---
+
+### REMBO (Random Embedding BO)
+
+Fixed Gaussian random projection from ambient to low-dimensional space. GP-BO runs entirely in the embedding.
+
+Reference: Wang et al., *Bayesian Optimization in a Billion Dimensions via Random Embeddings*, JAIR 2016.
+
+```python
+optimizer = REMBO()
+optimizer.optimize(
+    problem_objective=obj,
+    max_iterations=50,
+    n_initial=10,
+    d_embedding=10,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `max_iterations` | *required* | BO iterations. |
+| `n_initial` | `10` | Sobol initialisation in embedding space. |
+| `d_embedding` | `min(10, dim)` | Embedding dimensionality. |
+
+---
+
+### GEBO (Gradient-Enhanced BO)
+
+Exploits gradient observations to enrich the surrogate, plus applies a local gradient-refinement step on acquired candidates before evaluation.
+
+Reference: Wu et al., *Bayesian Optimization with Gradients*, NeurIPS 2017.
+
+```python
+optimizer = GEBO()
+optimizer.optimize(
+    problem_objective=obj,
+    max_iterations=50,
+    n_initial=10,
+    grad_refine_steps=3,
+    grad_refine_lr=0.01,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `max_iterations` | *required* | BO iterations. |
+| `n_initial` | `10` | Sobol initialisation. |
+| `grad_refine_steps` | `3` | Local gradient steps per candidate. |
+| `grad_refine_lr` | `0.01` | Gradient refinement step size. |
+
+---
+
+### LineBO (Line Bayesian Optimization)
+
+Restricts each iteration to a 1-D line through the incumbent, alternating between random and coordinate directions.
+
+Reference: Kirschner et al., *Adaptive and Safe Bayesian Optimization in High Dimensions via One-Dimensional Subspaces*, ICML 2019.
+
+```python
+optimizer = LineBO()
+optimizer.optimize(
+    problem_objective=obj,
+    max_iterations=50,
+    n_initial=10,
+    line_samples=20,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `max_iterations` | *required* | BO iterations (one line each). |
+| `n_initial` | `10` | Initial full-space Sobol samples. |
+| `line_samples` | `20` | Points sampled per 1-D line. |
+
+---
+
+### TuRBOLBFGS (TuRBO → L-BFGS)
+
+Two-phase hybrid: Phase 1 runs TuRBO in bounded space to locate a basin; Phase 2 runs Optax L-BFGS on the sigmoid objective internally for fast local convergence. The Objective stays in bounded mode throughout — Phase 2 results are logged via `log_evaluation` with bounded params.
+
+```python
+optimizer = TuRBOLBFGS()
+optimizer.optimize(
+    problem_objective=obj,
+    turbo_iterations=50,
+    n_initial=20,
+    lbfgs_patience=200,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `turbo_iterations` | *required* | TuRBO phase iterations. |
+| `n_initial` | `2 * dim` | Sobol initialisation for TuRBO. |
+| `turbo_batch_size` | `1` | Candidates per TuRBO iteration. |
+| `lbfgs_patience` | `200` | L-BFGS early-stopping patience. |
+
+---
+
+### HEBO (Heteroscedastic Evolutionary BO)
+
+Winner of the NeurIPS 2020 BBO challenge. Uses a heteroscedastic GP, input warping, and multi-objective acquisition. Requires the `HEBO` package.
+
+Reference: Cowen-Rivers et al., *An Empirical Study of Assumptions in Bayesian Optimisation*, 2020.
+
+```python
+optimizer = HEBO()
+optimizer.optimize(
+    problem_objective=obj,
+    max_iterations=60,
+    batch_size=1,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `max_iterations` | *required* | Suggestion rounds. |
+| `batch_size` | `1` | Candidates per suggestion. |
+
+---
+
+### SMAC (Sequential Model-based Algorithm Configuration)
+
+Random-forest-based surrogate with racing. The de-facto standard for hyperparameter optimisation. Requires the `smac` package.
+
+Reference: Lindauer et al., *SMAC3*, JMLR 2022.
+
+```python
+optimizer = SMAC()
+optimizer.optimize(
+    problem_objective=obj,
+    max_iterations=50,
+    n_initial=10,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `max_iterations` | *required* | BO iterations. |
+| `n_initial` | `10` | Initial random configurations. |
+
+---
+
 ## Generative Algorithms
 
 ### VAESampling
@@ -386,4 +640,14 @@ optimizer.optimize(
 | `BotorchBO` | Surrogate | Sample-efficient, uncertainty-aware | Low evaluation budgets |
 | `BotorchTuRBO` | Surrogate | Local trust region, high-dim friendly | High-dimensional, expensive evals |
 | `ReSTIR` | Surrogate | Scalable kNN surrogate, GPU-native | Large candidate pools |
+| `AxSAASBO` | Surrogate | Sparse-axis subspace, fully Bayesian | High-dim with few active dims |
+| `BAxUS` | Surrogate | Adaptive expanding subspace | High-dim with unknown effective dim |
+| `BotorchqNEI` | Surrogate | Noise-aware acquisition | Noisy objectives |
+| `BotorchqKG` | Surrogate | One-step Bayes-optimal lookahead | Small budgets, expensive evals |
+| `REMBO` | Surrogate | Fixed random embedding | Very high-dim, low effective dim |
+| `GEBO` | Surrogate | Gradient-enriched surrogate | Differentiable objectives |
+| `LineBO` | Surrogate | 1-D subspace per iteration | High-dim, safe exploration |
+| `TuRBOLBFGS` | Surrogate+Gradient | TuRBO basin-finding + L-BFGS refinement | Expensive evals, smooth basins |
+| `HEBO` | Surrogate | Competition-winning, heteroscedastic GP | General black-box, noisy |
+| `SMAC` | Surrogate | Random-forest surrogate, racing | Algorithm configuration |
 | `VAESampling` | Generative | Latent-space compression | Very high-dimensional problems |
