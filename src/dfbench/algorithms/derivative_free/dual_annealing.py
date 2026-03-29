@@ -43,7 +43,6 @@ class DualAnnealing(OptimizationAlgorithm):
         problem_objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
-        maxiter: int = 100,
         initial_temp: float = 5230.0,
         restart_temp_ratio: float = 2e-5,
         visit: float = 2.62,
@@ -57,7 +56,6 @@ class DualAnnealing(OptimizationAlgorithm):
             problem_objective: Pre-configured Objective instance.
             init_params: Starting point (``x0``). If *None*, sampled uniformly.
             random_seed: Seed for reproducibility.
-            maxiter: Maximum number of global annealing iterations.
             initial_temp: Initial temperature for generalised simulated
                 annealing (must be > 0).
             restart_temp_ratio: Ratio of restart temperature to *initial_temp*.
@@ -87,7 +85,6 @@ class DualAnnealing(OptimizationAlgorithm):
         fun = make_scipy_fun(obj)
         bounds_list = scipy_bounds_list(obj)
         x0 = np.asarray(params, dtype=np.float64)
-        maxfun = obj.evals_left if obj.evals_left is not None else 10_000
 
         def da_callback(x, f, context):
             """Return *True* to stop dual annealing early."""
@@ -98,8 +95,8 @@ class DualAnnealing(OptimizationAlgorithm):
                 fun,
                 bounds=bounds_list,
                 x0=x0,
-                maxiter=maxiter,
-                maxfun=maxfun,
+                maxiter=int(1e9),
+                maxfun=int(1e9),
                 initial_temp=initial_temp,
                 restart_temp_ratio=restart_temp_ratio,
                 visit=visit,

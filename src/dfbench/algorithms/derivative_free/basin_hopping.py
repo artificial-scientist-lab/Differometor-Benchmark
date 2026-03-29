@@ -68,7 +68,6 @@ class BasinHopping(OptimizationAlgorithm):
         problem_objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
-        n_iter: int = 50,
         T: float = 1.0,
         stepsize: float = 0.5,
     ) -> None:
@@ -78,8 +77,6 @@ class BasinHopping(OptimizationAlgorithm):
             problem_objective: Pre-configured Objective instance.
             init_params: Starting point. If *None*, sampled uniformly in bounds.
             random_seed: Seed for reproducibility.
-            n_iter: Number of basin-hopping iterations (global perturbation
-                + local minimisation cycles).
             T: Temperature parameter for the Metropolis acceptance criterion.
             stepsize: Relative step size for the random perturbation (fraction
                 of the bound range per dimension).
@@ -134,7 +131,7 @@ class BasinHopping(OptimizationAlgorithm):
             basinhopping(
                 fun,
                 x0,
-                niter=n_iter,
+                niter=int(1e9),
                 T=T,
                 minimizer_kwargs=minimizer_kwargs,
                 take_step=take_step,

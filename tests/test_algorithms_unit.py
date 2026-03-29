@@ -25,6 +25,10 @@ from dfbench.algorithms import (
     BotorchTuRBO,
     ReSTIR,
     VAESampling,
+    NelderMead,
+    Powell,
+    BasinHopping,
+    DualAnnealing,
 )
 
 # ── Parametrised list of all algorithms ───────────────────────────────
@@ -41,10 +45,15 @@ ALL_ALGORITHMS = [
     BotorchTuRBO,
     ReSTIR,
     VAESampling,
+    NelderMead,
+    Powell,
+    BasinHopping,
+    DualAnnealing,
 ]
 
 GRADIENT_ALGORITHMS = [AdamGD, SAGD, NAAdamGD, LBFGSGD]
 EVOLUTIONARY_ALGORITHMS = [RandomSearch, EvoxES, EvoxPSO]
+DERIVATIVE_FREE_ALGORITHMS = [NelderMead, Powell, BasinHopping, DualAnnealing]
 SURROGATE_ALGORITHMS = [BotorchBO, BotorchTuRBO, ReSTIR]
 GENERATIVE_ALGORITHMS = [VAESampling]
 
@@ -356,3 +365,117 @@ class TestVAEHelpers:
         with torch.no_grad():
             recon, mu, logvar = model(data)
         assert torch.isfinite(recon).all()
+
+
+# ======================================================================
+# Derivative-free / SciPy classics (7.33–7.44)
+# ======================================================================
+
+
+class TestDerivativeFree:
+    @pytest.mark.parametrize(
+        "cls", DERIVATIVE_FREE_ALGORITHMS, ids=lambda c: c.__name__
+    )
+    def test_algorithm_type(self, cls):
+        """7.33 algorithm_type is EVOLUTIONARY."""
+        assert cls.algorithm_type == AlgorithmType.EVOLUTIONARY
+
+    @pytest.mark.parametrize(
+        "cls", DERIVATIVE_FREE_ALGORITHMS, ids=lambda c: c.__name__
+    )
+    def test_bounded_mode(self, cls, mock_problem):
+        """7.34 prepare() sets obj.unbounded = False."""
+        algo = cls()
+        obj = Objective(mock_problem, max_evals=30, max_time=60)
+        algo.optimize(obj, random_seed=42)
+        assert obj.unbounded is False
+
+    @pytest.mark.parametrize(
+        "cls", DERIVATIVE_FREE_ALGORITHMS, ids=lambda c: c.__name__
+    )
+    def test_best_params_in_bounds(self, cls, mock_problem):
+        """7.35 best_params are within problem bounds."""
+        algo = cls()
+        obj = Objective(mock_problem, max_evals=30, max_time=60)
+        algo.optimize(obj, random_seed=42)
+        bp = obj.best_params
+        bounds = mock_problem.bounds
+        assert np.all(np.array(bp) >= np.array(bounds[0]) - 1e-6)
+        assert np.all(np.array(bp) <= np.array(bounds[1]) + 1e-6)
+
+
+class TestNelderMeadSpecific:
+    def test_adaptive_flag(self, mock_problem):
+        """7.36 NelderMead: adaptive mode runs without error."""
+        algo = NelderMead()
+        obj = Objective(mock_problem, max_evals=50, max_time=60)
+        algo.optimize(obj, random_seed=42, adaptive=True)
+        assert obj.eval_count > 0
+
+    def test_convergence_tolerances(self, mock_problem):
+        """7.37 NelderMead: tight tolerances still produce results."""
+        algo = NelderMead()
+        obj = Objective(mock_problem, max_evals=100, max_time=60)
+        algo.optimize(obj, random_seed=42, xatol=1e-12, fatol=1e-12)
+        assert obj.eval_count > 0
+
+
+class TestPowellSpecific:
+    def test_convergence_tolerances(self, mock_problem):
+        """7.38 Powell: tight tolerances still produce results."""
+        algo = Powell()
+        obj = Objective(mock_problem, max_evals=100, max_time=60)
+        algo.optimize(obj, random_seed=42, xtol=1e-12, ftol=1e-12)
+        assert obj.eval_count > 0
+
+
+class TestBasinHoppingSpecific:
+    def test_default_local_method(self):
+        """7.39 BasinHopping: default local_method is L-BFGS-B."""
+        algo = BasinHopping()
+        assert algo.local_method == "L-BFGS-B"
+
+    def test_custom_local_method(self, mock_problem):
+        """7.40 BasinHopping: Nelder-Mead as local solver runs correctly."""
+        algo = BasinHopping(local_method="Nelder-Mead")
+        obj = Objective(mock_problem, max_evals=50, max_time=60)
+        algo.optimize(obj, random_seed=42, n_iter=3)
+        assert obj.eval_count > 0
+
+    def test_hyperparameters(self, mock_problem):
+        """7.41 BasinHopping: custom T and stepsize are accepted."""
+        algo = BasinHopping()
+        obj = Objective(mock_problem, max_evals=50, max_time=60)
+        algo.optimize(obj, random_seed=42, n_iter=3, T=2.0, stepsize=0.3)
+        assert obj.eval_count > 0
+
+
+class TestDualAnnealingSpecific:
+    def test_no_local_search(self, mock_problem):
+        """7.42 DualAnnealing: no_local_search mode runs without error."""
+        algo = DualAnnealing()
+        obj = Objective(mock_problem, max_evals=50, max_time=60)
+        algo.optimize(obj, random_seed=42, local_search=False)
+        assert obj.eval_count > 0
+
+    def test_local_refinement(self, mock_problem):
+        """7.43 DualAnnealing: local_refinement polishes the best incumbent."""
+        algo = DualAnnealing()
+        obj = Objective(mock_problem, max_evals=80, max_time=60)
+        algo.optimize(
+            obj, random_seed=42, maxiter=5, local_refinement=True
+        )
+        assert obj.eval_count > 0
+
+    def test_temperature_params(self, mock_problem):
+        """7.44 DualAnnealing: custom temperature parameters accepted."""
+        algo = DualAnnealing()
+        obj = Objective(mock_problem, max_evals=50, max_time=60)
+        algo.optimize(
+            obj,
+            random_seed=42,
+            maxiter=5,
+            initial_temp=1000.0,
+            restart_temp_ratio=1e-4,
+        )
+        assert obj.eval_count > 0
