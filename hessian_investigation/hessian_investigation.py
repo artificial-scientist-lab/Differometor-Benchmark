@@ -240,7 +240,7 @@ from matplotlib.colors import SymLogNorm
 
 
 def plot_hessian(hess, labels, name, title_suffix="", save=False):
-    """Plot Hessian analysis: linear, symlog, and eigendecomposition.
+    """Plot Hessian analysis: linear, log, and eigendecomposition.
 
     Args:
         hess: Hessian matrix (n x n).
@@ -298,8 +298,8 @@ def plot_hessian(hess, labels, name, title_suffix="", save=False):
     fig, (ax_u, ax_d) = plt.subplots(
         2,
         1,
-        figsize=(14, 12),
-        gridspec_kw={"height_ratios": [4, 1]},
+        figsize=(14, 14),
+        gridspec_kw={"height_ratios": [4, 1.8]},
         sharex=True,
     )
 
@@ -327,6 +327,7 @@ def plot_hessian(hess, labels, name, title_suffix="", save=False):
     colors = ["tab:red" if d > 0 else "tab:blue" for d in D]
     ax_d.bar(range(n), D, color=colors, width=0.8)
     ax_d.set_yscale("symlog", linthresh=1e-6)
+    ax_d.set_ylim(min(1.5 * D.min(), 0.0), max(1.5 * D.max(), 0.0))
     ax_d.set_ylabel("Eigenvalue")
     ax_d.set_xlabel("Eigenvector index")
     ax_d.axhline(0, color="k", linewidth=0.5)
@@ -360,25 +361,33 @@ lower, upper = vp.bounds[0], vp.bounds[1]
 rand_points = lower + (upper - lower) * jr.uniform(jr.PRNGKey(42), (3, 48))
 
 # %%
+adam_params_zero = jnp.load(
+    "adam_constrained_voyager_seed_73_lr_0.1_max_evals_20000_arcsinh_transform.npz"
+)["best_constrained_params"]  # Params found with Adam with loss of 0.0066302
+print(f"Loss at Adam params: {obj.value(adam_params_zero):.6e}")
+
+# %%
 voyager_hess = obj_hessian(voyager_params).block_until_ready()
 rand_zero_hess = obj_hessian(rand_points[0]).block_until_ready()
 rand_one_hess = obj_hessian(rand_points[1]).block_until_ready()
 rand_two_hess = obj_hessian(rand_points[2]).block_until_ready()
+adam_zero_hess = obj_hessian(adam_params_zero).block_until_ready()
 
 # %%
 print(f"Objective value at Voyager params: {obj.value(voyager_params):.6e}")
 print(f"Objective value at rand_0 params: {obj.value(rand_points[0]):.6e}")
 print(f"Objective value at rand_1 params: {obj.value(rand_points[1]):.6e}")
 print(f"Objective value at rand_2 params: {obj.value(rand_points[2]):.6e}")
+print(f"Objective value at Adam params: {obj.value(adam_params_zero):.6e}")
 
 # %%
 labels = [f"{c}.{p}" for c, p in vp.optimization_pairs]
 D, U = plot_hessian(
-    rand_two_hess,
+    adam_zero_hess,
     labels,
-    name="rand_2",
-    title_suffix="at rand_2 parameters",
-    save=False,
+    name="adam_0",
+    title_suffix="at adam_0 params",
+    save=True,
 )
 
 # %% [markdown]
@@ -460,8 +469,10 @@ labels = [f"{c}.{p}" for c, p in vp.optimization_pairs]
 n = len(labels)
 y = np.arange(n)
 
+
 def cos_sim(a, b):
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-18))
+
 
 fig, (ax_raw, ax_clamp, ax_safe) = plt.subplots(1, 3, figsize=(18, 12), sharey=True)
 
