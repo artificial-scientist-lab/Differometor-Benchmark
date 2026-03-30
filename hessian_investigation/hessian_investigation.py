@@ -26,6 +26,7 @@ import jax
 import matplotlib.pyplot as plt
 from jax import config
 import jax.random as jr
+import numpy as np
 
 config.update("jax_enable_x64", True)
 
@@ -230,7 +231,7 @@ plt.show()
 # ### Hessian Exploration
 
 # %%
-obj_fn = vp.objective_function
+obj_fn = jax.jit(vp.objective_function)
 obj_grad = jax.jit(jax.grad(obj_fn))
 obj_hessian = jax.jit(jax.hessian(obj_fn))
 
@@ -383,12 +384,102 @@ print(f"Objective value at Adam params: {obj.value(adam_params_zero):.6e}")
 # %%
 labels = [f"{c}.{p}" for c, p in vp.optimization_pairs]
 D, U = plot_hessian(
-    adam_zero_hess,
+    voyager_hess,
     labels,
-    name="adam_0",
-    title_suffix="at adam_0 params",
-    save=True,
+    name="voyager",
+    title_suffix="at voyager params",
+    save=False,
 )
+
+# %% [markdown]
+# ### Whitening Transformation
+
+# %%
+# Eigendecomposition of the Voyager Hessian
+D, U = jnp.linalg.eigh(voyager_hess)
+grad_at_voyager = obj_grad(voyager_params)
+
+# Index of smallest absolute eigenvalue (flattest direction)
+flat_idx = int(jnp.argmin(jnp.abs(D)))
+print(f"Flattest eigenvector: index {flat_idx}, λ = {float(D[flat_idx]):.4e}")
+
+# %%
+# 1D slices of the objective along selected eigenvectors
+x0 = jnp.array(voyager_params)
+g = jnp.array(grad_at_voyager)
+L0 = obj_fn(x0)
+lower, upper = vp.bounds[0], vp.bounds[1]
+
+eigvec_indices = [0, flat_idx, -1]  # most negative, flattest, largest positive
+zoom_levels = [3, 0.1, 0.01]
+
+for idx in eigvec_indices:
+    direction = U[:, idx]
+    lam = float(D[idx])
+    scale = 1.0 / jnp.sqrt(jnp.abs(D[idx]))
+
+    # Compute alpha where bounds are first hit in each direction
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratios_upper = np.where(
+            direction > 0, (upper - x0) / direction, (lower - x0) / direction
+        )
+        ratios_lower = np.where(
+            direction > 0, (lower - x0) / direction, (upper - x0) / direction
+        )
+    alpha_max = float(
+        jnp.min(jnp.where(jnp.isfinite(ratios_upper), ratios_upper, jnp.inf))
+    )
+    alpha_min = float(
+        jnp.max(jnp.where(jnp.isfinite(ratios_lower), ratios_lower, -jnp.inf))
+    )
+    print(
+        f"Eigvec {idx}: λ={lam:.4e}, scale={scale:.4e}, "
+        f"bounds at [{alpha_min / scale:.15f}, {alpha_max / scale:.15f}] char. lengths"
+    )
+
+    fig, axes = plt.subplots(len(zoom_levels), 1, figsize=(12, 4 * len(zoom_levels)))
+
+    for ax, z in zip(axes, zoom_levels):
+        alphas = jnp.linspace(-z * scale, z * scale, 200)
+        losses = jnp.array([obj_fn(x0 + alpha * direction) for alpha in alphas])
+        quad = L0 + alphas * (g @ direction) + 0.5 * alphas**2 * lam
+
+        ax.plot(alphas / scale, losses, label="Objective", linewidth=2)
+        ax.plot(
+            alphas / scale,
+            quad,
+            "--",
+            label="Quadratic approx",
+            linewidth=1.5,
+            alpha=0.7,
+        )
+        ax.axvline(0, color="k", linewidth=0.5, alpha=0.5)
+
+        # Mark bound limits
+        for a_bound, label in [(alpha_min, "lower bound"), (alpha_max, "upper bound")]:
+            a_scaled = a_bound / scale
+            if -z <= a_scaled <= z:
+                ax.axvline(
+                    a_scaled,
+                    color="red",
+                    linewidth=1,
+                    linestyle="--",
+                    alpha=0.7,
+                    label=label,
+                )
+
+        ax.set_xlabel(
+            r"$\alpha \cdot \sqrt{|\lambda|}$  (units of characteristic length)"
+        )
+        ax.set_ylabel("Objective value")
+        ax.set_title(f"±{z} char. lengths")
+        ax.legend()
+        ax.grid(alpha=0.25, linestyle="--")
+
+    fig.suptitle(f"Objective along eigenvector {idx} (λ = {lam:.4e})", fontsize=13)
+    plt.tight_layout()
+    fig.savefig(f"voyager_1d_slice_eigvec_{idx}.pdf", dpi=300)
+    plt.show()
 
 # %% [markdown]
 # ### Preconditioning the Gradient Visualisation
