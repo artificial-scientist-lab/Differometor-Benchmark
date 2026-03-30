@@ -34,7 +34,7 @@ OptimizationAlgorithm
    └─────┬─────┘      bounded ↔ unbounded sigmoid transform
          │
          ▼
-  ContinuousProblem        (VoyagerProblem, RandomUIFOProblem, …)
+  ContinuousProblem        (VoyagerProblem, UIFOProblem, …)
          │
          ▼
   Differometor Simulator   (JAX-based interferometer physics)

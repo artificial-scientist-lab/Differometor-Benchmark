@@ -87,7 +87,7 @@ This adds negligible overhead compared to the objective function itself.
 |---------|-------|-------|
 | `VoyagerProblem` | ~12 ms/eval (A100) | Lightweight optimization of the Voyager Setup, good for prototyping, not physics-constrained. Loss < 0 achievable. |
 | `ConstrainedVoyagerProblem` | ~25 ms/eval (A100) | The same setup but physically constrained. Loss < 0 very difficult. |
-| `RandomUIFOProblem` | ~500 ms/eval (A100) | Full 3x3 UIFO setup (constrained). Loss < 0 hard but doable. |
+| `UIFOProblem` | ~500 ms/eval (A100) | Full 3x3 UIFO setup (constrained). Loss < 0 hard but doable. |
 
 Both constrained problems accept a `power_penalty_fn(value, threshold)` callable to control how power-constraint violations are penalized.  Built-in presets: `squashed_relu_penalty` (default), `relu_penalty`, `zero_penalty`. Feel free to try own ones.
 
@@ -132,7 +132,7 @@ OptimizationAlgorithm.optimize()
    └─────┬─────┘      bounded ↔ unbounded sigmoid transform
          │
          ▼
-  ContinuousProblem        (VoyagerProblem, ConstrainedVoyagerProblem, RandomUIFOProblem)
+  ContinuousProblem        (VoyagerProblem, ConstrainedVoyagerProblem, UIFOProblem)
          │
          ▼
   Differometor Simulator   (JAX-based interferometer physics)
@@ -160,7 +160,7 @@ src/dfbench/
 │   └── generative/        # VAESampling
 ├── problems/
 │   ├── voyager/           # VoyagerProblem, ConstrainedVoyagerProblem
-│   └── uifo/             # RandomUIFOProblem
+    └── uifo/             # UIFOProblem
 └── benchmark/
     ├── benchmark.py       # Benchmark orchestrator
     └── metrics.py         # Metric computation functions

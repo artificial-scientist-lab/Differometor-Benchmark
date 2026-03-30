@@ -20,7 +20,7 @@ src/dfbench/
 ├── problems/
 │   ├── base_problem.py       # OpticalSetupProblem (shared optics logic)
 │   ├── voyager/              # VoyagerProblem, ConstrainedVoyagerProblem
-│   └── uifo/                 # RandomUIFOProblem
+    └── uifo/                 # UIFOProblem
 └── benchmark/
     ├── benchmark.py          # Benchmark orchestrator, AlgorithmConfig
     └── metrics.py            # Per-run, aggregation, and multi-run metrics

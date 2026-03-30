@@ -5,7 +5,7 @@ All optimization problems in dfbench represent gravitational-wave detector desig
 **Import:**
 
 ```python
-from dfbench.problems import VoyagerProblem, ConstrainedVoyagerProblem, RandomUIFOProblem
+from dfbench.problems import VoyagerProblem, ConstrainedVoyagerProblem, UIFOProblem
 ```
 
 ---
@@ -17,7 +17,7 @@ ContinuousProblem          (ABC — core/problem.py)
   └── OpticalSetupProblem  (ABC — problems/base_problem.py)
         ├── VoyagerProblem
         ├── ConstrainedVoyagerProblem
-        └── RandomUIFOProblem
+        └── UIFOProblem
 ```
 
 ### `ContinuousProblem` (Abstract Base)
@@ -152,11 +152,11 @@ It could very well be that other penalty functions work better for certain algor
 
 ---
 
-### `RandomUIFOProblem`
+### `UIFOProblem`
 
 | Property | Value |
 |----------|-------|
-| Setup | Quasi-Universal Interferometer (UIFO) with random topology |
+| Setup | Quasi-Universal Interferometer (UIFO) |
 | Parameters | 50–250+ depending on grid size |
 | Noise model | Three sources (same as constrained Voyager) |
 | Constraints | Power thresholds (same as constrained Voyager) |
@@ -164,15 +164,51 @@ It could very well be that other penalty functions work better for certain algor
 | Difficulty | Hard but achievable — the UIFO is overparameterized |
 
 ```python
-problem = RandomUIFOProblem(size=3, n_frequencies=100, topology_seed=42)
+# From a topology seed (random topology, deterministic from seed)
+problem = UIFOProblem(size=3, n_frequencies=100, topology_seed=42)
+
+# From a compact topology string
+problem = UIFOProblem(size=3, topology="AECGCCHEG-SLLSSHLLLLS")
+
+# From explicit dicts
+problem = UIFOProblem(
+    size=3,
+    centers={"11": ("beamsplitter", "left"), ...},
+    boundaries={"01": "squeezer", ...},
+)
 ```
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `size` | `3` | Grid dimensions (3 = 3×3). Larger grids have more components and parameters. |
 | `n_frequencies` | `100` | Frequency points for sensitivity calculation. |
-| `topology_seed` | `42` | Seed for the random graph structure. The same seed always produces the same interferometer topology. |
+| `topology_seed` | `None` | Seed for random topology generation. Mutually exclusive with `topology` and `centers`/`boundaries`. If nothing is specified, defaults to `42` for backwards compatibility. |
+| `topology` | `None` | Compact topology string (see below). Mutually exclusive with `topology_seed`. |
+| `centers` | `None` | Interior cell dict. Must be paired with `boundaries`. Mutually exclusive with `topology_seed` and `topology`. |
+| `boundaries` | `None` | Boundary cell dict. Must be paired with `centers`. Mutually exclusive with `topology_seed` and `topology`. |
 | `power_penalty_fn` | `squashed_relu_penalty` | Per-element penalty function `fn(value, threshold)`. See presets above. |
+
+> **Backwards compatibility:** `RandomUIFOProblem` is an alias for `UIFOProblem`.
+
+#### Topology specification
+
+There are three mutually exclusive ways to specify a UIFO topology:
+
+1. **`topology_seed`** — The simplest option. A random topology is generated deterministically from the seed.
+2. **`topology` string** — A compact encoding ideal for configs, papers, and sharing. Uses single-character codes:
+   - **Interior cells:** `A`–`D` = beamsplitter (left/right/top/bottom), `E`–`H` = directional\_beamsplitter (left/right/top/bottom)
+   - **Boundary cells:** `L` = laser, `S` = squeezer, `D` = detector, `H` = balanced\_homodyne
+   - Format: `"<interior_chars>-<boundary_chars>"` in row-major order.
+3. **`centers` + `boundaries` dicts** — Explicit component placement, matching Differometor’s native format.
+
+Conversion helpers are available:
+
+```python
+from dfbench.problems.uifo import topology_to_string, topology_from_string
+
+topology_str = topology_to_string(centers, boundaries, size=3)
+centers, boundaries = topology_from_string(topology_str, size=3)
+```
 
 #### What is a UIFO?
 
