@@ -19,7 +19,7 @@ src/dfbench/
 │   └── generative/           # VAESampling
 ├── problems/
 │   ├── base_problem.py       # OpticalSetupProblem (shared optics logic)
-│   ├── voyager/              # VoyagerProblem, ConstrainedVoyagerProblem
+│   ├── voyager/              # VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem
     └── uifo/                 # UIFOProblem
 └── benchmark/
     ├── benchmark.py          # Benchmark orchestrator, AlgorithmConfig

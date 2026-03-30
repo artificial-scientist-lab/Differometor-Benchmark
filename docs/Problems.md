@@ -5,7 +5,7 @@ All optimization problems in dfbench represent gravitational-wave detector desig
 **Import:**
 
 ```python
-from dfbench.problems import VoyagerProblem, ConstrainedVoyagerProblem, UIFOProblem
+from dfbench.problems import VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem, UIFOProblem
 ```
 
 ---
@@ -16,6 +16,7 @@ from dfbench.problems import VoyagerProblem, ConstrainedVoyagerProblem, UIFOProb
 ContinuousProblem          (ABC — core/problem.py)
   └── OpticalSetupProblem  (ABC — problems/base_problem.py)
         ├── VoyagerProblem
+        ├── VoyagerTuningProblem
         ├── ConstrainedVoyagerProblem
         └── UIFOProblem
 ```
@@ -100,6 +101,49 @@ Each parameter corresponds to a `(component, property)` pair from the Voyager se
 #### Caveat
 
 `VoyagerProblem` does **not** enforce physical constraints (e.g. maximum mirror power absorption). A solution with loss < 0 may be physically unrealizable. For constrained optimization, use `ConstrainedVoyagerProblem`.
+
+---
+
+### `VoyagerTuningProblem`
+
+| Property | Value |
+|----------|-------|
+| Setup | LIGO Voyager with balanced homodyne detection |
+| Parameters | 6 (tuning only: `prm`, `itmy`, `etmy`, `itmx`, `etmx`, `srm`) |
+| Noise model | Single quantum noise source |
+| Speed | ~12 ms/eval on A100 GPU |
+| Difficulty | Moderate — lower-dimensional than `VoyagerProblem`, useful for quick prototyping |
+
+```python
+problem = VoyagerTuningProblem(n_frequencies=100)
+```
+
+```python
+problem = VoyagerTuningProblem(
+   n_frequencies=100,
+   bounds_overrides={"tuning": (0, 45)},
+)
+problem.print_bounds()
+```
+
+#### How the loss works
+
+1. The Voyager reference setup is simulated to get a target sensitivity curve.
+2. For a candidate parameter set, the loss is:
+   $$\text{loss} = \mathrm{mean}\left(\log_{10}\left(\frac{\text{sensitivity}_{\text{candidate}}}{\text{sensitivity}_{\text{target}}}\right)\right)$$
+3. **Loss < 0** means the candidate has better average sensitivity than the reference design.
+
+#### What the parameters represent
+
+All optimized parameters are mirror tuning angles in degrees:
+
+| Property | Bounds | Physical meaning |
+|----------|--------|-----------------|
+| `tuning` | [-180, 180] | Phase tuning of selected Voyager optics (`prm`, `itmy`, `etmy`, `itmx`, `etmx`, `srm`) |
+
+#### Caveat
+
+`VoyagerTuningProblem` does **not** enforce physical constraints (e.g. maximum mirror power absorption). For constrained optimization, use `ConstrainedVoyagerProblem`.
 
 ---
 
