@@ -211,6 +211,7 @@ class Objective:
         display_mode: str = "live",
         unit_mapping: Callable | None = None,
         inverse_unit_mapping: Callable | None = None,
+        hessian_batch_size: int = 1,
     ):
         """Initialize the Objective wrapper for optimization problems.
 
@@ -252,6 +253,12 @@ class Objective:
                 to [0, 1] before calling this function:
                 ``unbounded = f_inv((bounded - lower) / (upper - lower))``.
                 Must be provided together with ``unit_mapping``.
+            hessian_batch_size: Number of Hessian columns to compute
+                simultaneously via ``vmap``.  Higher values trade GPU memory
+                for speed.  ``1`` (default) is the most memory-efficient
+                (sequential ``lax.map``); set to ``n_params`` to recover
+                full ``jax.hessian`` parallelism.  Values between 1 and
+                ``n_params`` compute columns in chunks.
         """
 
         self.unbounded = unbounded
@@ -278,6 +285,7 @@ class Objective:
         self._save_eval_type_history = save_eval_type_history
         self._save_to_file_every = save_to_file_every
         self._display_mode = display_mode
+        self._hessian_batch_size = hessian_batch_size
 
         self._set_space_mappings(
             unit_mapping,
@@ -411,8 +419,42 @@ class Objective:
         else:
             self._func = problem.objective_function
         self._grad_func = jax.grad(self._func)
-        self._hessian_func = jax.hessian(self._func)
         self._value_and_grad_func = jax.value_and_grad(self._func)
+
+        # Memory-efficient Hessian: compute columns in chunks via
+        # forward-over-reverse (jvp of grad).  hessian_batch_size controls
+        # how many columns are computed in parallel (1 = fully sequential,
+        # n_params = fully parallel like jax.hessian).
+        _grad_for_hessian = jax.grad(self._func)
+        _hbs = self._hessian_batch_size
+
+        def _batched_hessian(params):
+            n = params.shape[0]
+
+            def _cols_chunk(basis_chunk):
+                """Compute multiple Hessian columns in parallel."""
+                def _single_col(e_i):
+                    _, col = jax.jvp(_grad_for_hessian, (params,), (e_i,))
+                    return col
+                return jax.vmap(_single_col)(basis_chunk)
+
+            # Build full identity and split into chunks
+            basis = jnp.eye(n)
+            # Pad to multiple of batch size for lax.map
+            remainder = n % _hbs
+            if remainder != 0:
+                pad_size = _hbs - remainder
+                basis = jnp.concatenate(
+                    [basis, jnp.zeros((pad_size, n))], axis=0
+                )
+            chunks = basis.reshape(-1, _hbs, n)
+            # lax.map iterates sequentially over chunks
+            result = jax.lax.map(_cols_chunk, chunks)
+            # Reshape back: (n_chunks, batch_size, n_params) -> (total, n_params)
+            result = result.reshape(-1, n)
+            return result[:n]  # Remove padding rows
+
+        self._hessian_func = _batched_hessian
 
         def _value_grad_and_hessian(params):
             value, grad = self._value_and_grad_func(params)
