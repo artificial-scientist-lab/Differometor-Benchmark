@@ -35,6 +35,7 @@ class TestCoreImports:
     def test_import_problems(self):
         from dfbench.problems import (
             VoyagerProblem,
+            VoyagerTuningProblem,
             ConstrainedVoyagerProblem,
             UIFOProblem,
         )  # noqa: F401
