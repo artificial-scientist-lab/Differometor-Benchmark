@@ -78,7 +78,7 @@ problem.print_bounds()
 1. The Voyager reference setup is simulated to get a target sensitivity curve.
 2. The target loss is $\sum \log_{10}(\text{sensitivity}_{\text{target}})$.
 3. For a candidate parameter set, the loss is:
-   $$\text{loss} = \sum \log_{10}(\text{sensitivity}_{\text{candidate}}) - \text{target\_loss}$$
+   $$\text{loss} = \sum \log_{10}(\text{sensitivity}_{\text{candidate}}) - \text{target loss}$$
 4. **Loss < 0** means the candidate has better sensitivity than the reference design.
 
 **Rationale for log-scale loss:** Strain sensitivities span many orders of magnitude ($10^{-20}$ to $10^{-24}$). Summing log-sensitivities treats improvements at all frequencies equally rather than being dominated by the worst band.
@@ -130,7 +130,7 @@ problem.print_bounds()
 
 1. The Voyager reference setup is simulated to get a target sensitivity curve.
 2. For a candidate parameter set, the loss is:
-   $$\text{loss} = \mathrm{mean}\left(\log_{10}\left(\frac{\text{sensitivity}_{\text{candidate}}}{\text{sensitivity}_{\text{target}}}\right)\right)$$
+   $$\text{loss} = \mathrm{mean}\left(\log_{10}\left(\frac{\text{sensitivity}_{\text{candidate}}}{\text{sensitivity}_{\text{target}}}\right)\right) $$
 3. **Loss < 0** means the candidate has better average sensitivity than the reference design.
 
 #### What the parameters represent
