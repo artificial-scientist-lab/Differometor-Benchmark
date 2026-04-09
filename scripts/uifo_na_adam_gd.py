@@ -2,7 +2,7 @@
 
 import argparse
 
-from dfbench.problems import UIFOProblem, VoyagerProblem
+from dfbench.problems import UIFOProblem
 from dfbench.algorithms import NAAdamGD
 from dfbench import Objective
 
