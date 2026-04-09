@@ -155,6 +155,7 @@ class NAAdamGD(OptimizationAlgorithm):
         noise_injection: NoiseInjection = "update",
         noise_clip_norm: float | None = None,
         noise_anneal_iters: int = 5000,
+        noise_anneal_budget_fraction: float | None = None,
         noise_cap_relative_to_update: float | None = 0.25,
         noise_cap_start_iter: int = 500,
         **adam_kwargs,
@@ -186,6 +187,11 @@ class NAAdamGD(OptimizationAlgorithm):
                 Defaults to None (no clipping).
             noise_anneal_iters: Number of iterations over which noise decays from
                 start to end value. Defaults to 5,000.
+            noise_anneal_budget_fraction: If set, noise decays over this fraction
+                of the total budget (using ``budget_progress_fraction``), e.g.
+                0.5 means noise reaches ``noise_std_end`` at 50% of the budget.
+                Takes priority over ``noise_anneal_iters`` when set.
+                Defaults to None.
             noise_cap_relative_to_update: If set, caps noise norm to this fraction
                 of the Adam update norm. Defaults to 0.25.
             noise_cap_start_iter: Iteration at which relative noise capping
@@ -216,7 +222,10 @@ class NAAdamGD(OptimizationAlgorithm):
 
         iteration = 0
         while not obj.budget_exceeded:
-            progress = iteration / max(1, noise_anneal_iters)
+            if noise_anneal_budget_fraction is not None:
+                progress = obj.budget_progress_fraction / noise_anneal_budget_fraction
+            else:
+                progress = iteration / max(1, noise_anneal_iters)
             sigma_t = _anneal_sigma(
                 progress=progress,
                 sigma_start=noise_std_start,
