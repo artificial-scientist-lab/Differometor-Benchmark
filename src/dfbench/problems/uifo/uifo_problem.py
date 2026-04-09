@@ -204,7 +204,7 @@ class UIFOProblem(OpticalSetupProblem):
         self,
         size: int = 3,
         n_frequencies: int = 100,
-        topology_seed: int | None = None,
+        topology_seed: int | None = 42,
         topology: str | None = None,
         centers: dict[str, tuple[str, str]] | None = None,
         boundaries: dict[str, str] | None = None,
@@ -216,7 +216,9 @@ class UIFOProblem(OpticalSetupProblem):
         Args:
             size: Grid size (e.g., 3 for 3×3, 5 for 5×5). Defaults to 3.
             n_frequencies: Number of frequency points. Defaults to 100.
-            topology_seed: Seed for random topology generation. Mutually exclusive
+            topology_seed: Seed for random topology generation. Defaults to 42.
+                Pass ``None`` (with no ``topology`` or ``centers``/``boundaries``)
+                to generate a random topology.  Mutually exclusive
                 with ``topology`` and ``centers``/``boundaries``.
             topology: Compact topology string (see class docstring for format).
                 Mutually exclusive with ``topology_seed`` and ``centers``/``boundaries``.
@@ -240,8 +242,8 @@ class UIFOProblem(OpticalSetupProblem):
 
         n_specified = sum([has_seed, has_string, has_dicts])
         if n_specified == 0:
-            # Default: use topology_seed=42 for backwards compatibility
-            topology_seed = 42
+            # No topology specified — generate a truly random one
+            topology_seed = int(np.random.randint(0, 2**31))
             has_seed = True
         elif n_specified > 1:
             raise ValueError(
@@ -262,6 +264,9 @@ class UIFOProblem(OpticalSetupProblem):
             name = f"uifo_{size}x{size}_{topology}"
         else:
             name = f"uifo_{size}x{size}_custom"
+
+        if has_seed:
+            print(f"UIFOProblem topology seed: {topology_seed}")
 
         super().__init__(name=name, n_frequencies=n_frequencies)
         if power_penalty_fn is not None:

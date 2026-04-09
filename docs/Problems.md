@@ -226,7 +226,7 @@ problem = UIFOProblem(
 |-----------|---------|-------------|
 | `size` | `3` | Grid dimensions (3 = 3×3). Larger grids have more components and parameters. |
 | `n_frequencies` | `100` | Frequency points for sensitivity calculation. |
-| `topology_seed` | `None` | Seed for random topology generation. Mutually exclusive with `topology` and `centers`/`boundaries`. If nothing is specified, defaults to `42` for backwards compatibility. |
+| `topology_seed` | `42` | Seed for random topology generation. Set to `None` (with no other topology args) to generate a truly random topology. The seed is always printed to the console. Mutually exclusive with `topology` and `centers`/`boundaries`. |
 | `topology` | `None` | Compact topology string (see below). Mutually exclusive with `topology_seed`. |
 | `centers` | `None` | Interior cell dict. Must be paired with `boundaries`. Mutually exclusive with `topology_seed` and `topology`. |
 | `boundaries` | `None` | Boundary cell dict. Must be paired with `centers`. Mutually exclusive with `topology_seed` and `topology`. |
@@ -238,7 +238,7 @@ problem = UIFOProblem(
 
 There are three mutually exclusive ways to specify a UIFO topology:
 
-1. **`topology_seed`** — The simplest option. A random topology is generated deterministically from the seed.
+1. **`topology_seed`** — The simplest option. A random topology is generated deterministically from the seed (default: `42`). Pass `topology_seed=None` with no other topology arguments to generate a truly random topology — the seed is printed so you can reproduce it.
 2. **`topology` string** — A compact encoding ideal for configs, papers, and sharing. Uses single-character codes:
    - **Interior cells:** `A`–`D` = beamsplitter (left/right/top/bottom), `E`–`H` = directional\_beamsplitter (left/right/top/bottom)
    - **Boundary cells:** `L` = laser, `S` = squeezer, `D` = detector, `H` = balanced\_homodyne
@@ -256,7 +256,7 @@ centers, boundaries = topology_from_string(topology_str, size=3)
 
 #### What is a UIFO?
 
-A Quasi-Universal Interferometer Field Optimization (UIFO) is a grid-based interferometer where beamsplitters, mirrors, lasers, and squeezers are placed on a grid and connected by spaces. The topology (which components are placed where and how they connect) is generated randomly from `topology_seed`. Once the topology is fixed, only the continuous parameters (reflectivities, tunings, lengths, etc.) are optimized.
+A Quasi-Universal Interferometer Field Optimization (UIFO) is a grid-based interferometer where beamsplitters, mirrors, lasers, and squeezers are placed on a grid and connected by spaces. The topology (which components are placed where and how they connect) is generated randomly from `topology_seed` (printed on initialization for reproducibility). Once the topology is fixed, only the continuous parameters (reflectivities, tunings, lengths, etc.) are optimized.
 
 **Rationale — coupled grid-cell spaces:** Horizontal and vertical spaces at the same grid positions are constrained to have equal lengths via `constrain_inter_grid_cell_spaces()`. This preserves the physical grid structure and prevents the optimizer from "folding" the interferometer into a degenerate geometry.
 
