@@ -296,7 +296,6 @@ class Objective:
         self._bind_evaluation_functions()
 
         self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self._time_left = self._max_time
         self._start_time = None
         self._time_offset = 0.0
 
@@ -575,16 +574,11 @@ class Objective:
     @property
     def time_left(self) -> float | None:
         """Time remaining in seconds before budget is exceeded. None if no limit."""
-        if self._start_time is None:
-            if self._max_time is not None:
-                return max(0.0, self._max_time - self._time_offset)  # Time left before starting, accounting for any offset from loaded checkpoints
+        if self._max_time is None:
             return None
-        self._time_left = (
-            max(0, self._max_time - self.time_elapsed)
-            if self._max_time is not None
-            else None
-        )
-        return self._time_left
+        if self._start_time is None:
+            return max(0.0, self._max_time - self._time_offset)
+        return max(0.0, self._max_time - self.time_elapsed)
 
     @property
     def time_elapsed(self) -> float:
