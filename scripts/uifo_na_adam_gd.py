@@ -1,29 +1,28 @@
-"""Test script for AdamGD optimizer."""
+"""Test script for NAAdamGD optimizer."""
 
 import argparse
 
-from dfbench.problems import UIFOProblem
-from dfbench.algorithms import AdamGD
+from dfbench.problems import UIFOProblem, VoyagerProblem
+from dfbench.algorithms import NAAdamGD
 from dfbench import Objective
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-s", "--seed", type=int, default=None)
 seed = parser.parse_args().seed
 
-# Optimization workflow with Adam
+# Optimization workflow with NA-Adam
 problem = UIFOProblem(topology_seed=seed)
 obj = Objective(
     problem,
     verbose=1,
-    max_time= 60*60*24,
+    max_time=60*60*24,
     print_every=1000,
     save_params_history=True,
     save_to_file_every=1000,
     display_mode="log",
 )
 
-optimizer = AdamGD()
-
+optimizer = NAAdamGD()
 
 # Run optimization - returns Objective instance
 optimizer.optimize(
@@ -31,6 +30,8 @@ optimizer.optimize(
     learning_rate=0.1,
     patience=None,
     random_seed=seed,
+    noise_schedule="linear",
+    noise_anneal_budget_fraction=0.5,
 )
 
 obj.save_run_data()
