@@ -166,6 +166,10 @@ class Objective:
     +------------------------------------+---------------------------------------------------+
     | ``time_progress_fraction``         | Fraction of time budget consumed (0–1).           |
     +------------------------------------+---------------------------------------------------+
+    | ``budget_left_fraction``           | Fraction of tightest budget remaining (1->0).     |
+    +------------------------------------+---------------------------------------------------+
+    | ``budget_progress_fraction``       | Fraction of tightest budget consumed (0->1).      |
+    +------------------------------------+---------------------------------------------------+
     | ``loss_history_reduced``           | Losses with batches reduced to min.               |
     +------------------------------------+---------------------------------------------------+
     | ``params_history_reduced``         | Params with batches reduced to single entry.      |
@@ -600,6 +604,32 @@ class Objective:
         if self._max_time is not None:
             return min(1.0, self.time_elapsed / self._max_time)
         return 0.0
+
+    @property
+    def budget_progress_fraction(self) -> float:
+        """Fraction of the tightest budget consumed (0.0 -> 1.0).
+
+        Computed as ``max(evals_progress_fraction, time_progress_fraction)``
+        considering only the budgets that are actually set.
+        Returns 0.0 when no budget is configured.
+        """
+        fracs: list[float] = []
+        if self._max_evals is not None:
+            fracs.append(self.evals_progress_fraction)
+        if self._max_time is not None:
+            fracs.append(self.time_progress_fraction)
+        if not fracs:
+            return 0.0
+        return min(1.0, max(fracs))
+
+    @property
+    def budget_left_fraction(self) -> float:
+        """Fraction of the tightest budget remaining (1.0 -> 0.0).
+
+        Equivalent to ``1 - budget_progress_fraction``.
+        Returns 1.0 when no budget is configured.
+        """
+        return 1.0 - self.budget_progress_fraction
 
     @property
     def budget_exceeded(self) -> bool:
