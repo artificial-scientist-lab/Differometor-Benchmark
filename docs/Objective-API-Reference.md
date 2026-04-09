@@ -211,14 +211,14 @@ obj.warmup_grad()
 obj.warmup_hessian()
 obj.warmup_value_and_grad()
 obj.warmup_value_grad_and_hessian()
-obj.warmup_vmap_value()
-obj.warmup_vmap_grad()
-obj.warmup_vmap_hessian()
-obj.warmup_vmap_value_and_grad()
-obj.warmup_vmap_value_grad_and_hessian()
+obj.warmup_vmap_value(batch_size=10)
+obj.warmup_vmap_grad(batch_size=10)
+obj.warmup_vmap_hessian(batch_size=10)
+obj.warmup_vmap_value_and_grad(batch_size=10)
+obj.warmup_vmap_value_grad_and_hessian(batch_size=10)
 ```
 
-Each helper executes the matching path **twice** on deterministic parameters and must be called before `start_logging()`. The batched variants use a deterministic batch of size 2.
+Each helper executes the matching path **twice** on deterministic parameters and must be called before `start_logging()`. The batched variants accept a `batch_size` argument to match the batch size used during optimisation.
 
 ### `reset()`
 

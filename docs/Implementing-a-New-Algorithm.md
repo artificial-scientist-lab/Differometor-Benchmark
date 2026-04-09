@@ -206,7 +206,7 @@ params = obj.random_params_unbounded()             # shape: (n_params,)
 ```python
 obj.warmup_value()                       # single eval path
 obj.warmup_value_and_grad()              # when using gradients
-obj.warmup_vmap_value()                  # for batched methods
+obj.warmup_vmap_value(batch_size=100)    # for batched methods (match your batch size)
 ```
 
 Warmup can take seconds because it triggers JAX compilation. Do this **before** `start_logging()` so the compilation time is not counted against the time budget. The `warmup_*()` helpers use deterministic params internally and run the corresponding path twice.

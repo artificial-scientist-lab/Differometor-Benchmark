@@ -1509,39 +1509,59 @@ class Objective:
             self._deterministic_warmup_params(),
         )
 
-    def warmup_vmap_value(self) -> None:
-        """Warm up ``vmap_value()`` twice on a deterministic batch of size 2."""
+    def warmup_vmap_value(self, batch_size: int) -> None:
+        """Warm up ``vmap_value()`` twice on a deterministic batch.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
         self._warmup_twice(
             self.vmap_value,
-            self._deterministic_warmup_params(n_samples=2),
+            self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_grad(self) -> None:
-        """Warm up ``vmap_grad()`` twice on a deterministic batch of size 2."""
+    def warmup_vmap_grad(self, batch_size: int) -> None:
+        """Warm up ``vmap_grad()`` twice on a deterministic batch.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
         self._warmup_twice(
             self.vmap_grad,
-            self._deterministic_warmup_params(n_samples=2),
+            self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_hessian(self) -> None:
-        """Warm up ``vmap_hessian()`` twice on a deterministic batch of size 2."""
+    def warmup_vmap_hessian(self, batch_size: int) -> None:
+        """Warm up ``vmap_hessian()`` twice on a deterministic batch.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
         self._warmup_twice(
             self.vmap_hessian,
-            self._deterministic_warmup_params(n_samples=2),
+            self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_value_and_grad(self) -> None:
-        """Warm up ``vmap_value_and_grad()`` twice on a deterministic batch."""
+    def warmup_vmap_value_and_grad(self, batch_size: int) -> None:
+        """Warm up ``vmap_value_and_grad()`` twice on a deterministic batch.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
         self._warmup_twice(
             self.vmap_value_and_grad,
-            self._deterministic_warmup_params(n_samples=2),
+            self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_value_grad_and_hessian(self) -> None:
-        """Warm up ``vmap_value_grad_and_hessian()`` twice on a deterministic batch."""
+    def warmup_vmap_value_grad_and_hessian(self, batch_size: int) -> None:
+        """Warm up ``vmap_value_grad_and_hessian()`` twice on a deterministic batch.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
         self._warmup_twice(
             self.vmap_value_grad_and_hessian,
-            self._deterministic_warmup_params(n_samples=2),
+            self._deterministic_warmup_params(n_samples=batch_size),
         )
 
     def start_logging(self) -> None:
