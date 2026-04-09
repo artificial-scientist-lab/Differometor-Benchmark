@@ -368,9 +368,9 @@ These properties return **copies** to prevent external mutation.
 
 ## I/O Methods
 
-### `save_run_data(algorithm_name, filepath=None, hyper_param_str=None) → Path`
+### `save_run_data(algorithm_name=None, filepath=None, hyper_param_str=None) → Path`
 
-Saves the full optimization state to a compressed NPZ file. Writes atomically (to `.tmp.npz` first, then `os.replace`) to prevent corruption from interrupted HPC jobs.
+Saves the full optimization state to a compressed NPZ file. Writes atomically (to `.tmp.npz` first, then `os.replace`) to prevent corruption from interrupted HPC jobs. If `algorithm_name` is not provided it defaults to `self.algorithm_str` (or `"unknown"` when that is also unset).
 
 Default path: `data/objective_run_data/{budget_dir}/{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`
 

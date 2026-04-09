@@ -1442,7 +1442,7 @@ class Objective:
         # TODO consider checking if multithreaded
         t0 = time.time() if self._start_time is not None else None
         try:
-            self.save_run_data(algorithm_name=self.algorithm_str or "unknown")
+            self.save_run_data()
         except Exception:
             # propagate after optionally logging, dont adjust start_time on failure
             raise
@@ -1725,7 +1725,7 @@ class Objective:
 
     def save_run_data(
         self,
-        algorithm_name: str = "unknown",
+        algorithm_name: str | None = None,
         filepath: str | None = None,
         hyper_param_str: str | None = None,
     ) -> Path:
@@ -1737,7 +1737,8 @@ class Objective:
         If hyper_param_str is provided, adds an additional subdirectory level for organization.
 
         Args:
-            algorithm_name: Name of the algorithm for file naming.
+            algorithm_name: Name of the algorithm for file naming.  Defaults to
+                ``self.algorithm_str`` if set, otherwise ``"unknown"``.
             filepath: Custom file path. If None, uses standard naming convention.
             hyper_param_str: Optional hyperparameter string for subdirectory organization
                 (e.g., "lr0.1_patience500").
@@ -1751,6 +1752,8 @@ class Objective:
             >>> obj.save_run_data(algorithm_name="adam_gd", hyper_param_str="lr0.1")
             Path('data/objective_run_data/time100s_evals1000/lr0.1/voyager_adam_gd_2026-01-26_15-30-45.npz')
         """
+        if algorithm_name is None:
+            algorithm_name = self.algorithm_str or "unknown"
         save_path = self._get_run_data_path(algorithm_name, filepath, hyper_param_str)
 
         # Convert histories to numpy arrays for efficient storage
