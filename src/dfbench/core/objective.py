@@ -298,7 +298,7 @@ class Objective:
         self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self._time_left = self._max_time
         self._start_time = None
-        self._time_exceeded = False
+        self._time_offset = 0.0
 
         self._eval_count = 0
         self._evals_left = self._max_evals
@@ -576,9 +576,11 @@ class Objective:
     def time_left(self) -> float | None:
         """Time remaining in seconds before budget is exceeded. None if no limit."""
         if self._start_time is None:
-            return self._max_time
+            if self._max_time is not None:
+                return max(0.0, self._max_time - self._time_offset)  # Time left before starting, accounting for any offset from loaded checkpoints
+            return None
         self._time_left = (
-            max(0, self._max_time - (time.time() - self._start_time))
+            max(0, self._max_time - self.time_elapsed)
             if self._max_time is not None
             else None
         )
@@ -586,17 +588,17 @@ class Objective:
 
     @property
     def time_elapsed(self) -> float:
-        """Total time elapsed since start_logging() was called."""
+        """Total time elapsed (including any previously loaded offset)."""
         if self._start_time is None:
-            return 0.0
+            return self._time_offset
         return time.time() - self._start_time
 
     @property
     def time_exceeded(self) -> bool:
         """Whether the time budget has been exceeded."""
-        if self._max_time is not None:
-            self._time_exceeded = self.time_elapsed >= self._max_time
-        return self._time_exceeded
+        if self._max_time is None:
+            return False
+        return self.time_elapsed >= self._max_time
 
     @property
     def time_progress_fraction(self) -> float:
@@ -1225,29 +1227,23 @@ class Objective:
 
         return 0
 
-    def _log_time(self) -> None:
-        """Internal: Log current timestamp and check time budget."""
-
+    def _log(
+        self,
+        params: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
+        loss: Float | Float[Array, "batch"] | None = None,
+        grad: Float | Float[Array, "batch"] | None = None,
+        hessian: Float[Array, "n_params n_params"]
+        | Float[Array, "batch n_params n_params"]
+        | None = None,
+    ) -> None:
+        """Internal: Log timestamp, evaluation results, and optionally save to file."""
         if self._start_time is None:
             return
-
-        time_elapsed = (
-            time.time() - self._start_time if self._start_time is not None else 0.0
-        )
-
-        # Update time_exceeded flag if time budget is set
-        if self._max_time is not None:
-            self._time_exceeded = time_elapsed >= self._max_time
-
-        # Record timestamp if saving time steps and budget not exceeded
-        if (
-            self._save_time_steps
-            and not self._time_exceeded
-            and not self._evals_exceeded
-        ):
-            self._time_steps.append(time_elapsed)
-
-        return
+        time_exceeded = self.time_exceeded
+        if self._save_time_steps and not time_exceeded and not self._evals_exceeded:
+            self._time_steps.append(self.time_elapsed)
+        self._log_evals(params, loss, grad, hessian, time_exceeded=time_exceeded)
+        self._log_to_file()
 
     def _log_evals(
         self,
@@ -1257,6 +1253,7 @@ class Objective:
         hessian: Float[Array, "n_params n_params"]
         | Float[Array, "batch n_params n_params"]
         | None = None,
+        time_exceeded: bool = False,
     ) -> None:
         """Internal: Log evaluation results, update histories, and track best loss.
 
@@ -1271,7 +1268,7 @@ class Objective:
             return
 
         # Stop logging if budget exceeded
-        if self._time_exceeded or self._evals_exceeded:
+        if time_exceeded or self._evals_exceeded:
             return
 
         # Determine how many items this call represents
@@ -1524,8 +1521,14 @@ class Objective:
         )
 
     def start_logging(self) -> None:
-        """Start the optimization timer. Call this before beginning optimization."""
-        self._start_time = time.time()
+        """Start the optimization timer. Call this before beginning optimization.
+
+        If a checkpoint was loaded via ``load_run_data()``, the previously
+        elapsed time (stored in ``_time_offset``) is absorbed into
+        ``_start_time`` so that ``time_elapsed`` remains the single source of truth.
+        """
+        self._start_time = time.time() - self._time_offset
+        self._time_offset = 0.0
 
     def log_evaluation(
         self,
@@ -1549,10 +1552,7 @@ class Objective:
             grad: Gradient value(s) computed.
             hessian: Hessian value(s) computed.
         """
-        self._log_time()
-        self._log_evals(params, loss, grad, hessian)
-
-        self._log_to_file()
+        self._log(params, loss, grad, hessian)
         return
 
     def value(self, params: Float[Array, "n_params"]) -> Float:
@@ -1566,10 +1566,7 @@ class Objective:
         """
         loss = self._func(params)
 
-        self._log_time()
-        self._log_evals(params, loss, None)
-
-        self._log_to_file()
+        self._log(params, loss)
         return loss
 
     def grad(self, params: Float[Array, "n_params"]) -> Float[Array, "n_params"]:
@@ -1583,10 +1580,7 @@ class Objective:
         """
         grad = self._grad_func(params)
 
-        self._log_time()
-        self._log_evals(params, None, grad)
-
-        self._log_to_file()
+        self._log(params, grad=grad)
         return grad
 
     def hessian(
@@ -1595,10 +1589,7 @@ class Objective:
         """Compute the Hessian of the objective function at given parameters."""
         hessian = self._hessian_func(params)
 
-        self._log_time()
-        self._log_evals(params, None, None, hessian)
-
-        self._log_to_file()
+        self._log(params, hessian=hessian)
         return hessian
 
     def value_and_grad(
@@ -1614,10 +1605,7 @@ class Objective:
         """
         value, grad = self._value_and_grad_func(params)
 
-        self._log_time()
-        self._log_evals(params, value, grad)
-
-        self._log_to_file()
+        self._log(params, value, grad)
         return value, grad
 
     def value_grad_and_hessian(
@@ -1626,10 +1614,7 @@ class Objective:
         """Compute value, gradient, and Hessian at a single parameter vector."""
         value, grad, hessian = self._value_grad_and_hessian_func(params)
 
-        self._log_time()
-        self._log_evals(params, value, grad, hessian)
-
-        self._log_to_file()
+        self._log(params, value, grad, hessian)
         return value, grad, hessian
 
     def vmap_value(
@@ -1645,10 +1630,7 @@ class Objective:
         """
         losses = self._vmap_func(params)
 
-        self._log_time()
-        self._log_evals(params, losses, None)
-
-        self._log_to_file()
+        self._log(params, losses)
         return losses
 
     def vmap_grad(
@@ -1664,10 +1646,7 @@ class Objective:
         """
         grads = self._vmap_grad_func(params)
 
-        self._log_time()
-        self._log_evals(params, None, grads)
-
-        self._log_to_file()
+        self._log(params, grad=grads)
         return grads
 
     def vmap_hessian(
@@ -1676,10 +1655,7 @@ class Objective:
         """Compute Hessians for a batch of parameters."""
         hessians = self._vmap_hessian_func(params)
 
-        self._log_time()
-        self._log_evals(params, None, None, hessians)
-
-        self._log_to_file()
+        self._log(params, hessian=hessians)
         return hessians
 
     def vmap_value_and_grad(
@@ -1695,10 +1671,7 @@ class Objective:
         """
         values, grads = self._vmap_value_and_grad_func(params)
 
-        self._log_time()
-        self._log_evals(params, values, grads)
-
-        self._log_to_file()
+        self._log(params, values, grads)
         return values, grads
 
     def vmap_value_grad_and_hessian(
@@ -1711,10 +1684,7 @@ class Objective:
         """Compute values, gradients, and Hessians for a batch of parameters."""
         values, grads, hessians = self._vmap_value_grad_and_hessian_func(params)
 
-        self._log_time()
-        self._log_evals(params, values, grads, hessians)
-
-        self._log_to_file()
+        self._log(params, values, grads, hessians)
         return values, grads, hessians
 
     def batched_value(
@@ -1827,8 +1797,10 @@ class Objective:
     def load_run_data(self, filepath: str | Path) -> None:
         """Load optimization state from a run data file.
 
-        Restores all tracking state including loss history, parameters, and timing.
-        The start_time is adjusted so that time_elapsed continues from where it left off.
+        Restores all tracking state including loss history, parameters, and
+        timing.  The previously elapsed time is stored as an offset so that
+        ``warmup_*()`` and ``start_logging()`` still work normally after
+        loading.  Call ``start_logging()`` to resume the wall-clock timer.
 
         Args:
             filepath: Path to the run data NPZ file to load.
@@ -1838,6 +1810,8 @@ class Objective:
 
         Example:
             >>> obj.load_run_data("data/objective_run_data/time100s_evals1000/voyager_adam_gd_2026-01-26_15-30-45.npz")
+            >>> obj.warmup_value_and_grad()   # OK — logging not yet active
+            >>> obj.start_logging()           # resume wall-clock timer
             >>> print(f"Resuming from {obj.eval_count} evaluations")
         """
         filepath = Path(filepath)
@@ -1875,11 +1849,13 @@ class Objective:
                 self._eval_type_counts.get(eval_type, 0) + 1
             )
 
-        # Restore timing: set start_time so elapsed time continues correctly
+        # Store elapsed time as offset; leave _start_time as None so that
+        # warmup_*() and start_logging() work correctly after loading.
         if len(self._time_steps) > 0:
-            self._start_time = time.time() - self._time_steps[-1]
+            self._time_offset = self._time_steps[-1]
         else:
-            self._start_time = time.time()
+            self._time_offset = 0.0
+        self._start_time = None
 
         # Update budget tracking
         if self._max_evals is not None:
@@ -1919,7 +1895,7 @@ class Objective:
             "improvement_count": self.improvement_count,
             "evals_since_improvement": self.evals_since_improvement,
             "budget_exceeded": self.budget_exceeded,
-            "time_exceeded": self._time_exceeded,
+            "time_exceeded": self.time_exceeded,
             "evals_exceeded": self._evals_exceeded,
         }
 
@@ -1930,7 +1906,7 @@ class Objective:
         Does not modify the problem or budget limits.
         """
         self._start_time = None
-        self._time_exceeded = False
+        self._time_offset = 0.0
         self._eval_count = 0
         self._evals_left = self._max_evals
         self._evals_exceeded = False

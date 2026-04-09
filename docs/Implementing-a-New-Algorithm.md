@@ -281,7 +281,7 @@ while not obj.budget_exceeded:
     obj.log_evaluation(prior_params, loss, grads)  # public API for manual logging
 ```
 
-> **Do NOT call** `obj._log_time()`, `obj._log_evals()`, or `obj._log_to_file()` directly — these are private methods. `log_evaluation()` wraps all three.
+> **Do NOT call** `obj._log()`, `obj._log_evals()`, or `obj._log_to_file()` directly — these are private methods. `log_evaluation()` delegates to `_log()` which coordinates all internal logging.
 
 See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/lbfgs_gd.py` for a complete working example.
 
