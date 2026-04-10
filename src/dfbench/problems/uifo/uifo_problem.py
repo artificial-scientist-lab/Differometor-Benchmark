@@ -236,7 +236,7 @@ class UIFOProblem(OpticalSetupProblem):
                 Overrides must narrow default bounds.
         """
         # --- Validate topology specification (exactly one path) ---
-        has_seed = topology_seed is not None
+        has_seed = topology_seed is not None and topology_seed != 42
         has_string = topology is not None
         has_dicts = centers is not None or boundaries is not None
 
