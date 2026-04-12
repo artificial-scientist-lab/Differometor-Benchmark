@@ -300,6 +300,7 @@ class Objective:
         self._bind_evaluation_functions()
 
         self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        self._cached_save_path: Path | None = None
         self._start_time = None
         self._time_offset = 0.0
 
@@ -1098,7 +1099,7 @@ class Objective:
     def _deterministic_warmup_params(
         self,
         n_samples: int = 1,
-    ) -> Float[Array, "n_params"] | Float[Array, "n_samples n_params"]:
+    ) -> Float[Array, "n_samples n_params"]:
         """Return deterministic midpoint params in the currently active raw space."""
         if self._bounds is None:
             raise ValueError(
@@ -1108,11 +1109,7 @@ class Objective:
             raise ValueError("n_samples must be at least 1.")
 
         midpoint = (self._bounds[0] + self._bounds[1]) / 2.0
-        bounded_params = (
-            midpoint
-            if n_samples == 1
-            else jnp.repeat(midpoint[None, :], repeats=n_samples, axis=0)
-        )
+        bounded_params = midpoint[None, :] if n_samples == 1 else jnp.repeat(midpoint[None, :], repeats=n_samples, axis=0)
 
         if self.unbounded:
             return self._map_bounded_to_unbounded(bounded_params)
@@ -1488,25 +1485,25 @@ class Objective:
 
     def warmup_value(self) -> None:
         """Warm up ``value()`` twice on deterministic params without logging."""
-        self._warmup_twice(self.value, self._deterministic_warmup_params())
+        self._warmup_twice(self.value, self._deterministic_warmup_params()[0])
 
     def warmup_grad(self) -> None:
         """Warm up ``grad()`` twice on deterministic params without logging."""
-        self._warmup_twice(self.grad, self._deterministic_warmup_params())
+        self._warmup_twice(self.grad, self._deterministic_warmup_params()[0])
 
     def warmup_hessian(self) -> None:
         """Warm up ``hessian()`` twice on deterministic params without logging."""
-        self._warmup_twice(self.hessian, self._deterministic_warmup_params())
+        self._warmup_twice(self.hessian, self._deterministic_warmup_params()[0])
 
     def warmup_value_and_grad(self) -> None:
         """Warm up ``value_and_grad()`` twice on deterministic params."""
-        self._warmup_twice(self.value_and_grad, self._deterministic_warmup_params())
+        self._warmup_twice(self.value_and_grad, self._deterministic_warmup_params()[0])
 
     def warmup_value_grad_and_hessian(self) -> None:
         """Warm up ``value_grad_and_hessian()`` twice on deterministic params."""
         self._warmup_twice(
             self.value_grad_and_hessian,
-            self._deterministic_warmup_params(),
+            self._deterministic_warmup_params()[0],
         )
 
     def warmup_vmap_value(self, batch_size: int) -> None:
@@ -1804,7 +1801,14 @@ class Objective:
         """
         if algorithm_name is None:
             algorithm_name = self.algorithm_str or "unknown"
-        save_path = self._get_run_data_path(algorithm_name, filepath, hyper_param_str)
+
+        # Reuse cached path if no explicit filepath/hyper_param_str override
+        if self._cached_save_path is not None and filepath is None and hyper_param_str is None:
+            save_path = self._cached_save_path
+        else:
+            save_path = self._get_run_data_path(algorithm_name, filepath, hyper_param_str)
+            if filepath is None and hyper_param_str is None:
+                self._cached_save_path = save_path
 
         # Convert histories to numpy arrays for efficient storage
         # Write to a temporary file in the same directory and atomically replace
@@ -1903,6 +1907,9 @@ class Objective:
         else:
             self._time_offset = 0.0
         self._start_time = None
+
+        # Cache loaded path so subsequent saves overwrite the same file
+        self._cached_save_path = filepath
 
         # Update budget tracking
         if self._max_evals is not None:
