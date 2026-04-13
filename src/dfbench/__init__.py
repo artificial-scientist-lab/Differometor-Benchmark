@@ -13,7 +13,7 @@ Usage:
     `from dfbench.algorithms import AdamGD, EvoxES, BotorchBO`
 
     ### Problems (hierarchical)
-    `from dfbench.problems import VoyagerProblem, RandomUIFOProblem`
+    `from dfbench.problems import VoyagerProblem, UIFOProblem`
 
     ### Benchmarking (hierarchical)
     `from dfbench.benchmark import Benchmark, AlgorithmConfig`

@@ -35,13 +35,14 @@ class TestCoreImports:
     def test_import_problems(self):
         from dfbench.problems import (
             VoyagerProblem,
+            VoyagerTuningProblem,
             ConstrainedVoyagerProblem,
-            RandomUIFOProblem,
+            UIFOProblem,
         )  # noqa: F401
 
-    def test_import_uifo_alias(self):
-        """UIFOProblem backwards-compat alias is importable."""
-        from dfbench.problems import UIFOProblem  # noqa: F401
+    def test_import_random_uifo_alias(self):
+        """RandomUIFOProblem backwards-compat alias is importable."""
+        from dfbench.problems import RandomUIFOProblem  # noqa: F401
 
     # 12.5
     def test_import_benchmark(self):

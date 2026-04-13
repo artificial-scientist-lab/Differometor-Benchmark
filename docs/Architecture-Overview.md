@@ -19,8 +19,8 @@ src/dfbench/
 │   └── generative/           # VAESampling
 ├── problems/
 │   ├── base_problem.py       # OpticalSetupProblem (shared optics logic)
-│   ├── voyager/              # VoyagerProblem, ConstrainedVoyagerProblem
-│   └── uifo/                 # RandomUIFOProblem
+│   ├── voyager/              # VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem
+    └── uifo/                 # UIFOProblem
 └── benchmark/
     ├── benchmark.py          # Benchmark orchestrator, AlgorithmConfig
     └── metrics.py            # Per-run, aggregation, and multi-run metrics
@@ -96,10 +96,14 @@ Algorithms **never** create their own `Objective`; they receive one from the cal
                    ▼
             scalar loss value
                    │
+                   │
+                   ▼
+              _log(params, loss, grad, hessian)
+                   │
        ┌───────────┼───────────────────┐
        │           │                   │
-  _log_time()  _log_evals()     _log_to_file()
-       │           │                   │
+  time_steps   _log_evals()     _log_to_file()
+  (append)         │                   │
        ▼           ▼                   ▼
   _time_steps  _loss_history      periodic NPZ
                _params_history    checkpoint
@@ -108,9 +112,9 @@ Algorithms **never** create their own `Objective`; they receive one from the cal
                _best_loss / _best_params
 ```
 
-Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this exact pipeline. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
+Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this exact pipeline. The internal `_log()` coordinator handles time-step recording, delegates to `_log_evals()` for history tracking, and triggers `_log_to_file()` for periodic checkpoints. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
 
-For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.log_evaluation(params, loss, grad, hessian=None)` provides the same pipeline as a public API — it simulates the corresponding call internally. Do not call the private methods directly.
+For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.log_evaluation(params, loss, grad, hessian=None)` provides the same pipeline as a public API — it delegates to `_log()` internally. Do not call the private methods directly.
 
 ---
 

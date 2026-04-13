@@ -86,8 +86,9 @@ This adds negligible overhead compared to the objective function itself.
 | Problem | Speed | Notes |
 |---------|-------|-------|
 | `VoyagerProblem` | ~12 ms/eval (A100) | Lightweight optimization of the Voyager Setup, good for prototyping, not physics-constrained. Loss < 0 achievable. |
+| `VoyagerTuningProblem` | ~12 ms/eval (A100) | Tuning-only Voyager optimization (6 parameters on key mirrors). Lightweight and good for quick experiments. |
 | `ConstrainedVoyagerProblem` | ~25 ms/eval (A100) | The same setup but physically constrained. Loss < 0 very difficult. |
-| `RandomUIFOProblem` | ~500 ms/eval (A100) | Full 3x3 UIFO setup (constrained). Loss < 0 hard but doable. |
+| `UIFOProblem` | ~500 ms/eval (A100) | Full 3x3 UIFO setup (constrained). Loss < 0 hard but doable. |
 
 Both constrained problems accept a `power_penalty_fn(value, threshold)` callable to control how power-constraint violations are penalized.  Built-in presets: `squashed_relu_penalty` (default), `relu_penalty`, `zero_penalty`. Feel free to try own ones.
 
@@ -132,7 +133,7 @@ OptimizationAlgorithm.optimize()
    └─────┬─────┘      bounded ↔ unbounded sigmoid transform
          │
          ▼
-  ContinuousProblem        (VoyagerProblem, ConstrainedVoyagerProblem, RandomUIFOProblem)
+  ContinuousProblem        (VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem, UIFOProblem)
          │
          ▼
   Differometor Simulator   (JAX-based interferometer physics)
@@ -159,8 +160,8 @@ src/dfbench/
 │   ├── surrogate_based/   # BotorchBO, BotorchTuRBO, ReSTIR
 │   └── generative/        # VAESampling
 ├── problems/
-│   ├── voyager/           # VoyagerProblem, ConstrainedVoyagerProblem
-│   └── uifo/             # RandomUIFOProblem
+│   ├── voyager/           # VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem
+    └── uifo/             # UIFOProblem
 └── benchmark/
     ├── benchmark.py       # Benchmark orchestrator
     └── metrics.py         # Metric computation functions
