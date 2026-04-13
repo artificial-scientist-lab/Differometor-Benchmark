@@ -205,7 +205,7 @@ class BotorchBO(OptimizationAlgorithm):
         )
 
         # Warmup JIT (vmap_value is used for batch evaluation in _evaluate_y)
-        _ = obj.vmap_value(jnp.zeros((1, problem.n_params)))
+        obj.warmup_vmap_value(batch_size=batch_size)
 
         obj.start_logging()
 

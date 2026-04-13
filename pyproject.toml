@@ -36,6 +36,7 @@ debug = [
     "equinox>=0.13.2",
     "ipykernel>=7.1.0",
     "ipywidgets>=8.1.8",
+    "jupytext>=1.19.1",
     "snakeviz>=2.2.2",
     "tueplots>=0.2.1",
 ]

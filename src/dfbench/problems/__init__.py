@@ -11,8 +11,12 @@ from dfbench.problems.base_problem import (
 )
 
 # Import problem classes
-from dfbench.problems.voyager import VoyagerProblem, ConstrainedVoyagerProblem
-from dfbench.problems.uifo import RandomUIFOProblem, UIFOProblem
+from dfbench.problems.voyager import (
+    VoyagerProblem,
+    VoyagerTuningProblem,
+    ConstrainedVoyagerProblem,
+)
+from dfbench.problems.uifo import UIFOProblem, RandomUIFOProblem
 
 __all__ = [
     # Base class
@@ -23,7 +27,8 @@ __all__ = [
     "zero_penalty",
     # Problem classes
     "VoyagerProblem",
+    "VoyagerTuningProblem",
     "ConstrainedVoyagerProblem",
-    "RandomUIFOProblem",
     "UIFOProblem",
+    "RandomUIFOProblem",
 ]

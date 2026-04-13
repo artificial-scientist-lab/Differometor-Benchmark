@@ -113,7 +113,8 @@ optimizer.optimize(
 | `noise_schedule` | `"exponential"` | Decay curve: `"linear"` or `"exponential"` (geometric interpolation). |
 | `noise_injection` | `"update"` | Where noise is added: `"update"` (to Adam step) or `"params"` (to parameters directly). |
 | `noise_clip_norm` | `None` | Hard cap on noise vector L2 norm. |
-| `noise_anneal_iters` | `5000` | Iterations over which noise decays. |
+| `noise_anneal_iters` | `5000` | Iterations over which noise decays. Only used when `noise_anneal_budget_fraction` is not set. |
+| `noise_anneal_budget_fraction` | `None` | If set, noise decays over this fraction of the total budget (via `budget_progress_fraction`). E.g. `0.5` means noise reaches `noise_std_end` at 50% of the budget. Takes priority over `noise_anneal_iters`. |
 | `noise_cap_relative_to_update` | `0.25` | Caps noise to this fraction of the Adam update norm. |
 | `noise_cap_start_iter` | `500` | Iteration at which relative capping activates. |
 

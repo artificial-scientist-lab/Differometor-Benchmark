@@ -147,7 +147,7 @@ class EvoxPSO(OptimizationAlgorithm):
                 return j2t(losses)
 
         # Warmup JIT
-        _ = obj.vmap_value(jnp.zeros((self._batch_size, problem.n_params)))
+        obj.warmup_vmap_value(batch_size=self._batch_size)
 
         pso_problem = PSOProblem(obj)
 
