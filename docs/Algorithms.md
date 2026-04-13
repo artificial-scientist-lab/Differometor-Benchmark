@@ -6,7 +6,8 @@ All built-in algorithms subclass `OptimizationAlgorithm` and follow a common con
 
 ```python
 from dfbench.algorithms import (
-    AdamGD, SAGD, NAAdamGD, LBFGSGD,       # Optax gradient-based
+    AdamGD, SAGD, NAAdamGD, LBFGSGD,       # gradient-based (original)
+    OptaxAdam, OptaxAdamW, OptaxSAM,        # gradient-based (Optax batch, 34 total)
     BFGS, LBFGSB, NonlinearCG, NewtonCG,   # SciPy gradient / quasi-Newton
     TrustNCG, TrustKrylov, TrustConstr,    # SciPy trust-region / constrained
     TNC, SLSQP, COBYQA, COBYLA, Dogleg, SR1,
@@ -24,7 +25,7 @@ Every algorithm declares an `algorithm_type` from the `AlgorithmType` enum:
 
 | Type | `unbounded` | Evaluation methods used | Examples |
 |------|-------------|------------------------|----------|
-| `GRADIENT_BASED` | `True` | `value_and_grad()` | Adam, SA-GD, NA-Adam, L-BFGS |
+| `GRADIENT_BASED` | `True` | `value_and_grad()` | Adam, SA-GD, NA-Adam, L-BFGS, 34 Optax optimizers |
 | `EVOLUTIONARY` | `False` | `vmap_value()` | Random Search, PSO, CMA-ES |
 | `SURROGATE_BASED` | `False` | `value()`, `vmap_value()` | Bayesian Optimization, TuRBO, ReSTIR |
 | `GENERATIVE` | varies | `value()`, `vmap_value()` | VAE Sampling |
@@ -373,6 +374,479 @@ optimizer.optimize(
 
 ---
 
+## Optax Optimizer Batch (34 algorithms)
+
+All Optax-based algorithms share a common base class `OptaxAlgorithm` and live in `src/dfbench/algorithms/gradient_based/`. They operate in **unbounded** (sigmoid-transformed) space and use `obj.value_and_grad()` for gradient information.
+
+**Import:**
+
+```python
+from dfbench.algorithms import (
+    OptaxAdam, OptaxAdamW, OptaxAdaBelief, OptaxAdafactor,
+    OptaxAMSGrad, OptaxAdaGrad, OptaxAdaDelta, OptaxAdaMax,
+    OptaxAdaMaxW, OptaxAdan, OptaxLion, OptaxLAMB,
+    OptaxNadam, OptaxNadamW, OptaxRMSProp, OptaxRProp,
+    OptaxRAdam, OptaxSGD, OptaxSGDM, OptaxNAG,
+    OptaxNoisySGD, OptaxPolyakSGD, OptaxSAM, OptaxSophia,
+    OptaxLookahead, OptaxScheduleFreeAdam, OptaxYogi,
+    OptaxNovoGrad, OptaxOGD, OptaxOAdam,
+    OptaxSignSGD, OptaxSignum, OptaxSM3, OptaxLBFGS,
+)
+```
+
+**Shared hyperparameters.** All standard-loop algorithms accept:
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `learning_rate` | `0.01` | Base learning rate. |
+| `grad_clip_norm` | `1.0` | Maximum global gradient L2 norm (`None` to disable). |
+| `patience` | `None` | Early-stop after this many evals without improvement. |
+
+Additional algorithm-specific hyperparameters are passed as keyword arguments to `optimize()`. The shared helper `build_optimizer()` provides optional gradient clipping and learning-rate warmup.
+
+---
+
+### OptaxAdam
+
+Standard Adam optimizer ([Kingma & Ba, 2015](https://arxiv.org/abs/1412.6980)).
+
+```python
+optimizer = OptaxAdam()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxAdamW
+
+Adam with decoupled weight decay ([Loshchilov & Hutter, 2019](https://arxiv.org/abs/1711.05101)).
+
+```python
+optimizer = OptaxAdamW()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, weight_decay=1e-4, random_seed=42)
+```
+
+| Extra hyperparameter | Default | Description |
+|----------------------|---------|-------------|
+| `weight_decay` | `1e-4` | Decoupled weight decay coefficient. |
+
+---
+
+### OptaxAdaBelief
+
+AdaBelief — adapts step sizes based on *belief* in the gradient ([Zhuang et al., 2020](https://arxiv.org/abs/2010.07468)).
+
+```python
+optimizer = OptaxAdaBelief()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxAdafactor
+
+Memory-efficient factored Adam ([Shazeer & Stern, 2018](https://arxiv.org/abs/1804.04235)).
+
+```python
+optimizer = OptaxAdafactor()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxAMSGrad
+
+AMSGrad variant of Adam that maintains the maximum of past squared gradients ([Reddi et al., 2018](https://arxiv.org/abs/1904.09237)).
+
+```python
+optimizer = OptaxAMSGrad()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxAdaGrad
+
+Adaptive gradient method — per-parameter learning rates decay based on accumulated squared gradients ([Duchi et al., 2011](https://jmlr.org/papers/v12/duchi11a.html)).
+
+```python
+optimizer = OptaxAdaGrad()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxAdaDelta
+
+AdaDelta — learning-rate-free adaptive method using running averages ([Zeiler, 2012](https://arxiv.org/abs/1212.5701)).
+
+```python
+optimizer = OptaxAdaDelta()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxAdaMax
+
+AdaMax — $L^\infty$ variant of Adam ([Kingma & Ba, 2015](https://arxiv.org/abs/1412.6980)).
+
+```python
+optimizer = OptaxAdaMax()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxAdaMaxW
+
+AdaMax with decoupled weight decay.
+
+```python
+optimizer = OptaxAdaMaxW()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, weight_decay=1e-4, random_seed=42)
+```
+
+| Extra hyperparameter | Default | Description |
+|----------------------|---------|-------------|
+| `weight_decay` | `1e-4` | Decoupled weight decay coefficient. |
+
+---
+
+### OptaxAdan
+
+Adaptive Nesterov momentum algorithm ([Xie et al., 2023](https://arxiv.org/abs/2208.06677)).
+
+```python
+optimizer = OptaxAdan()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxLion
+
+Evolved sign momentum optimizer — discovered via meta-learning ([Chen et al., 2023](https://arxiv.org/abs/2302.06675)).
+
+```python
+optimizer = OptaxLion()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxLAMB
+
+Layer-wise Adaptive Moments for Batch training ([You et al., 2020](https://arxiv.org/abs/1904.00962)).
+
+```python
+optimizer = OptaxLAMB()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxNadam
+
+Nesterov-accelerated Adam ([Dozat, 2016](https://openreview.net/forum?id=OM0jvwB8jIp57ZJjtNEZ)).
+
+```python
+optimizer = OptaxNadam()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxNadamW
+
+Nadam with decoupled weight decay.
+
+```python
+optimizer = OptaxNadamW()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, weight_decay=1e-4, random_seed=42)
+```
+
+| Extra hyperparameter | Default | Description |
+|----------------------|---------|-------------|
+| `weight_decay` | `1e-4` | Decoupled weight decay coefficient. |
+
+---
+
+### OptaxRMSProp
+
+RMSProp — root mean square propagation ([Hinton, 2012](https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)).
+
+```python
+optimizer = OptaxRMSProp()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxRProp
+
+RProp — resilient backpropagation with sign-based updates ([Riedmiller & Braun, 1993](https://ieeexplore.ieee.org/document/298623)).
+
+```python
+optimizer = OptaxRProp()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxRAdam
+
+Rectified Adam — variance-rectified adaptive learning rate ([Liu et al., 2020](https://arxiv.org/abs/1908.03265)).
+
+```python
+optimizer = OptaxRAdam()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxSGD / OptaxSGDM / OptaxNAG
+
+Vanilla SGD, SGD with Momentum, and Nesterov Accelerated Gradient. All three live in the same file (`optax_sgd.py`) and share the standard loop.
+
+```python
+OptaxSGD().optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+OptaxSGDM().optimize(problem_objective=obj, learning_rate=0.01, momentum=0.9, random_seed=42)
+OptaxNAG().optimize(problem_objective=obj, learning_rate=0.01, momentum=0.9, random_seed=42)
+```
+
+| Extra hyperparameter | Default | Applies to | Description |
+|----------------------|---------|------------|-------------|
+| `momentum` | `0.9` | SGDM, NAG | Momentum coefficient. |
+
+---
+
+### OptaxNoisySGD
+
+SGD with decaying Gaussian noise injection.
+
+```python
+optimizer = OptaxNoisySGD()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, eta=0.01, gamma=0.55, random_seed=42)
+```
+
+| Extra hyperparameter | Default | Description |
+|----------------------|---------|-------------|
+| `eta` | `0.01` | Noise scale. |
+| `gamma` | `0.55` | Noise decay exponent. |
+
+---
+
+### OptaxPolyakSGD
+
+Polyak step-size SGD — adapts step size using $\text{step} = (f(x) - f^*) / \lVert g \rVert^2$.
+
+> **Note:** Requires passing the current loss to `optimizer.update()`, so this algorithm uses a custom loop.
+
+```python
+optimizer = OptaxPolyakSGD()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, f_min=0.0, random_seed=42)
+```
+
+| Extra hyperparameter | Default | Description |
+|----------------------|---------|-------------|
+| `max_learning_rate` | `learning_rate` | Maximum step size. |
+| `f_min` | `0.0` | Estimated optimal value $f^*$. |
+
+---
+
+### OptaxSAM
+
+Sharpness-Aware Minimization — seeks flat minima by perturbing towards the worst-case neighbourhood ([Foret et al., 2021](https://arxiv.org/abs/2010.01412)).
+
+> **Note:** Each SAM iteration uses **two** `value_and_grad` evaluations (one adversarial, one descent). This algorithm overrides the standard loop.
+
+```python
+optimizer = OptaxSAM()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, rho=0.05, random_seed=42)
+```
+
+| Extra hyperparameter | Default | Description |
+|----------------------|---------|-------------|
+| `rho` | `0.05` | Adversarial perturbation radius. |
+| `sync_period` | `2` | Steps between adversarial and descent phases. |
+
+---
+
+### OptaxSophia
+
+Sophia optimizer — lightweight second-order method using diagonal Hessian EMA with element-wise clipping ([Liu et al., 2023](https://arxiv.org/abs/2305.14342)).
+
+> Optax 0.2.4 does not include Sophia natively. A local `GradientTransformation` wrapper implements Sophia-G (squared-gradient Hessian approximation).
+
+```python
+optimizer = OptaxSophia()
+optimizer.optimize(problem_objective=obj, learning_rate=1e-3, gamma=0.01, random_seed=42)
+```
+
+| Extra hyperparameter | Default | Description |
+|----------------------|---------|-------------|
+| `b1` | `0.965` | First moment decay. |
+| `b2` | `0.99` | Hessian diagonal EMA decay. |
+| `gamma` | `0.01` | Clipping threshold — updates clipped to $[-1/\gamma, 1/\gamma]$. |
+| `weight_decay` | `0.0` | Decoupled weight decay. |
+
+---
+
+### OptaxLookahead
+
+Lookahead wrapper — slow-weight averaging around a fast inner optimizer ([Zhang et al., 2019](https://arxiv.org/abs/1907.08610)).
+
+> Uses `optax.LookaheadParams` internally to maintain fast and slow weights.
+
+```python
+optimizer = OptaxLookahead()
+optimizer.optimize(
+    problem_objective=obj,
+    learning_rate=0.01,
+    inner_optimizer_name="adam",  # adam | adamw | sgd | rmsprop | lion
+    sync_period=6,
+    slow_step_size=0.5,
+    random_seed=42,
+)
+```
+
+| Extra hyperparameter | Default | Description |
+|----------------------|---------|-------------|
+| `inner_optimizer_name` | `"adam"` | Inner optimizer: `adam`, `adamw`, `sgd`, `rmsprop`, `lion`. |
+| `sync_period` | `6` | Fast-weight steps between slow-weight syncs (k). |
+| `slow_step_size` | `0.5` | Interpolation factor $\alpha$ for slow update. |
+
+---
+
+### OptaxScheduleFreeAdam
+
+Schedule-Free Adam — removes the need for an explicit LR schedule by maintaining two parameter sequences ([Defazio et al., 2024](https://arxiv.org/abs/2405.15682)).
+
+```python
+optimizer = OptaxScheduleFreeAdam()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, warmup_steps=200, random_seed=42)
+```
+
+| Extra hyperparameter | Default | Description |
+|----------------------|---------|-------------|
+| `warmup_steps` | `200` | Linear warmup length. |
+
+---
+
+### OptaxYogi
+
+Yogi optimizer — controls adaptive learning-rate increase more conservatively than Adam ([Zaheer et al., 2018](https://papers.nips.cc/paper/8186-adaptive-methods-for-nonconvex-optimization)).
+
+```python
+optimizer = OptaxYogi()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxNovoGrad
+
+NovoGrad — layer-wise gradient normalization optimizer ([Ginsburg et al., 2019](https://arxiv.org/abs/1905.11286)).
+
+```python
+optimizer = OptaxNovoGrad()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxOGD / OptaxOAdam
+
+Optimistic GD and Optimistic Adam.
+
+```python
+OptaxOGD().optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+OptaxOAdam().optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxSignSGD / OptaxSignum
+
+Sign-based optimizers — update with the sign of the gradient.
+
+```python
+OptaxSignSGD().optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+OptaxSignum().optimize(problem_objective=obj, learning_rate=0.01, momentum=0.9, random_seed=42)
+```
+
+| Extra hyperparameter | Default | Applies to | Description |
+|----------------------|---------|------------|-------------|
+| `momentum` | `0.9` | Signum | Momentum coefficient. |
+
+---
+
+### OptaxSM3
+
+SM3 — memory-efficient adaptive optimizer for sparse gradients ([Anil et al., 2019](https://arxiv.org/abs/1901.11150)).
+
+```python
+optimizer = OptaxSM3()
+optimizer.optimize(problem_objective=obj, learning_rate=0.01, random_seed=42)
+```
+
+---
+
+### OptaxLBFGS
+
+L-BFGS optimizer via Optax. Uses second-order curvature information for faster convergence on smooth landscapes.
+
+> Same JIT-compiled pattern as `LBFGSGD` but registered under the `optax_*` naming scheme. Passes the raw value function and gradients to `optimizer.update()` for internal line-search.
+
+```python
+optimizer = OptaxLBFGS()
+optimizer.optimize(problem_objective=obj, patience=500, random_seed=42)
+```
+
+---
+
+### Optax Batch Summary
+
+| Class | `algorithm_str` | Key property | Custom loop? |
+|-------|-----------------|--------------|:------------:|
+| `OptaxAdam` | `optax_adam` | Standard Adam | — |
+| `OptaxAdamW` | `optax_adamw` | Decoupled weight decay | — |
+| `OptaxAdaBelief` | `optax_adabelief` | Belief-based adaptation | — |
+| `OptaxAdafactor` | `optax_adafactor` | Memory-efficient factored | — |
+| `OptaxAMSGrad` | `optax_amsgrad` | Max past squared gradients | — |
+| `OptaxAdaGrad` | `optax_adagrad` | Per-param accumulated LR | — |
+| `OptaxAdaDelta` | `optax_adadelta` | LR-free adaptive | — |
+| `OptaxAdaMax` | `optax_adamax` | $L^\infty$ Adam | — |
+| `OptaxAdaMaxW` | `optax_adamaxw` | AdaMax + weight decay | — |
+| `OptaxAdan` | `optax_adan` | Nesterov momentum variant | — |
+| `OptaxLion` | `optax_lion` | Evolved sign momentum | — |
+| `OptaxLAMB` | `optax_lamb` | Layer-wise adaptive | — |
+| `OptaxNadam` | `optax_nadam` | Nesterov Adam | — |
+| `OptaxNadamW` | `optax_nadamw` | Nadam + weight decay | — |
+| `OptaxRMSProp` | `optax_rmsprop` | Root mean square prop | — |
+| `OptaxRProp` | `optax_rprop` | Resilient backprop | — |
+| `OptaxRAdam` | `optax_radam` | Rectified Adam | — |
+| `OptaxSGD` | `optax_sgd` | Vanilla SGD | — |
+| `OptaxSGDM` | `optax_sgdm` | SGD + momentum | — |
+| `OptaxNAG` | `optax_nag` | Nesterov accelerated | — |
+| `OptaxNoisySGD` | `optax_noisy_sgd` | Gaussian noise injection | — |
+| `OptaxPolyakSGD` | `optax_polyak_sgd` | Polyak step-size | yes |
+| `OptaxSAM` | `optax_sam` | Sharpness-aware (2× grad) | yes |
+| `OptaxSophia` | `optax_sophia` | Diagonal Hessian clipping | — |
+| `OptaxLookahead` | `optax_lookahead` | Slow-weight averaging | yes |
+| `OptaxScheduleFreeAdam` | `optax_schedule_free_adam` | Schedule-free | — |
+| `OptaxYogi` | `optax_yogi` | Conservative adaptive LR | — |
+| `OptaxNovoGrad` | `optax_novograd` | Layer-wise grad norm | — |
+| `OptaxOGD` | `optax_ogd` | Optimistic GD | — |
+| `OptaxOAdam` | `optax_oadam` | Optimistic Adam | — |
+| `OptaxSignSGD` | `optax_sign_sgd` | Sign of gradient | — |
+| `OptaxSignum` | `optax_signum` | Sign + momentum | — |
+| `OptaxSM3` | `optax_sm3` | Memory-efficient sparse | — |
+| `OptaxLBFGS` | `optax_lbfgs` | Quasi-Newton (JIT loop) | yes |
+
+---
+
 ## Summary Table
 
 | Algorithm | Type | Key strength | Typical use case |
@@ -381,6 +855,7 @@ optimizer.optimize(
 | `SAGD` | Gradient | Escapes local minima via stochastic ascent | Rugged landscapes |
 | `NAAdamGD` | Gradient | Noise-based exploration with annealing | Balancing exploration and exploitation |
 | `LBFGSGD` | Gradient | Second-order curvature | Smooth, well-conditioned problems |
+| `OptaxAdam` — `OptaxLBFGS` | Gradient | 34 Optax optimizers (see table above) | Systematic algorithm comparison |
 | `RandomSearch` | Evolutionary | No hyperparameters, unbiased baseline | Baseline comparison |
 | `EvoxPSO` | Evolutionary | Swarm intelligence, many variants | Moderate-dimensional problems |
 | `EvoxES` | Evolutionary | Covariance adaptation (CMA-ES) | General black-box optimization |
