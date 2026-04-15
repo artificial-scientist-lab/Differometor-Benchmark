@@ -156,7 +156,10 @@ src/dfbench/
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
 │   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES
-│   ├── gradient_based/    # AdamGD, SAGD, NAAdamGD, LBFGSGD + 34 Optax optimizers
+│   ├── gradient_based/
+│   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
+│   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
+│   │   └── misc/          # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, …)
 │   ├── surrogate_based/   # BotorchBO, BotorchTuRBO, ReSTIR
 │   └── generative/        # VAESampling
 ├── problems/
@@ -404,11 +407,12 @@ Execution scripts in `./scripts/`:
 - `voyager_scipy_benchmark.py`: SciPy gradient / trust / constrained batch
 
 Reference implementations worth reading:
-- `adam_gd.py`: gradient-based pattern
-- `_scipy_common.py`: shared SciPy wrapper, caching, and budget handling
-- `random_search.py`: simplest batched example
-- `evox_es.py`: wrapping an external library (EvoX/PyTorch)
-- `botorch_bo.py`: surrogate-based with BoTorch
+- `gradient_based/misc/adam_gd.py`: gradient-based pattern (custom loop)
+- `gradient_based/optax/adam.py`: Optax wrapper pattern (minimal subclass)
+- `gradient_based/scipy/_common.py`: shared SciPy wrapper, caching, and budget handling
+- `evolutionary/random_search.py`: simplest batched example
+- `evolutionary/evox_es.py`: wrapping an external library (EvoX/PyTorch)
+- `surrogate_based/botorch_bo.py`: surrogate-based with BoTorch
 
 ---
 

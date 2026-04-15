@@ -127,7 +127,7 @@ optimizer.optimize(
 
 L-BFGS optimizer from Optax. Uses second-order curvature information for faster convergence on smooth landscapes.
 
-> **Note:** Because `optax.lbfgs` needs the raw value function for its internal line-search, this algorithm JIT-compiles the full optimization step and uses `obj.log_evaluation()` to record results after each step (instead of calling `obj.value_and_grad()` directly). This makes it a useful reference for implementing other algorithms that require custom JIT-compiled evaluation loops — see `src/dfbench/algorithms/gradient_based/lbfgs_gd.py`.
+> **Note:** Because `optax.lbfgs` needs the raw value function for its internal line-search, this algorithm JIT-compiles the full optimization step and uses `obj.log_evaluation()` to record results after each step (instead of calling `obj.value_and_grad()` directly). This makes it a useful reference for implementing other algorithms that require custom JIT-compiled evaluation loops — see `src/dfbench/algorithms/gradient_based/misc/lbfgs_gd.py`.
 
 ```python
 optimizer = LBFGSGD()
@@ -151,7 +151,7 @@ Bounded-vs-unbounded behavior is explicit in each class:
 - Unbounded sigmoid-space defaults: `BFGS`, `NonlinearCG`, `NewtonCG`, `TrustNCG`, `TrustKrylov`, `Dogleg`
 - Bounded physical-space defaults: `LBFGSB`, `TrustConstr`, `TNC`, `SLSQP`, `COBYQA`, `COBYLA`, `SR1`
 
-See `src/dfbench/algorithms/gradient_based/_scipy_common.py` and `scripts/voyager_scipy_benchmark.py` for the shared wrapper and a benchmark example.
+See `src/dfbench/algorithms/gradient_based/scipy/_common.py` and `scripts/voyager_scipy_benchmark.py` for the shared wrapper and a benchmark example.
 
 ---
 
@@ -376,7 +376,7 @@ optimizer.optimize(
 
 ## Optax Optimizer Batch (34 algorithms)
 
-All Optax-based algorithms share a common base class `OptaxAlgorithm` and live in `src/dfbench/algorithms/gradient_based/`. They operate in **unbounded** (sigmoid-transformed) space and use `obj.value_and_grad()` for gradient information.
+All Optax-based algorithms share a common base class `OptaxAlgorithm` and live in `src/dfbench/algorithms/gradient_based/optax/`. They operate in **unbounded** (sigmoid-transformed) space and use `obj.value_and_grad()` for gradient information.
 
 **Import:**
 

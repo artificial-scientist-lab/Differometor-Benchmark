@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from dfbench.algorithms import BFGS, TrustConstr, TrustNCG
-from dfbench.algorithms.gradient_based._scipy_common import (
+from dfbench.algorithms.gradient_based.scipy._common import (
     SciPyConfig,
     SciPyObjectiveAdapter,
 )
