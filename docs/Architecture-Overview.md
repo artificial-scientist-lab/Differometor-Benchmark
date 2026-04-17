@@ -14,7 +14,10 @@ src/dfbench/
 │   └── utils.py              # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
 │   ├── evolutionary/         # RandomSearch, EvoxPSO, EvoxES
-│   ├── gradient_based/       # AdamGD, SAGD, NAAdamGD, LBFGSGD
+│   ├── gradient_based/
+│   │   ├── optax/            # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
+│   │   ├── scipy/            # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
+│   │   └── misc/             # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, …)
 │   ├── surrogate_based/      # BotorchBO, BotorchTuRBO, ReSTIR
 │   └── generative/           # VAESampling
 ├── problems/
