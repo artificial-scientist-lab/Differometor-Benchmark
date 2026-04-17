@@ -1,10 +1,13 @@
 """Lookahead optimizer wrapper (Optax)."""
 
+import jax
 import optax
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
     build_optimizer,
+    _is_nonfinite,
+    _MAX_NAN_STREAK,
 )
 from dfbench.core.objective import Objective
 
@@ -86,12 +89,41 @@ class OptaxLookahead(OptaxAlgorithm):
 
         obj.start_logging()
 
+        nan_streak = 0
+        rng_key = jax.random.PRNGKey(
+            random_seed if random_seed is not None else 0
+        )
+
         while not obj.budget_exceeded:
             loss, grads = obj.value_and_grad(la_params.fast)
 
             if patience is not None and obj.evals_since_improvement > patience:
                 break
 
+            if _is_nonfinite(loss, grads):
+                nan_streak += 1
+                rng_key, sub_key = jax.random.split(rng_key)
+
+                if nan_streak > _MAX_NAN_STREAK:
+                    best = obj.best_params
+                    if best is not None:
+                        params = best + jax.random.normal(
+                            sub_key, best.shape
+                        ) * learning_rate
+                    else:
+                        params = obj.random_params_unbounded()
+                    la_params = optax.LookaheadParams.init_synced(params)
+                    opt_state = optimizer.init(la_params)
+                    nan_streak = 0
+                else:
+                    scale = learning_rate * (2 ** min(nan_streak, 8))
+                    fast = la_params.fast + jax.random.normal(
+                        sub_key, la_params.fast.shape
+                    ) * scale
+                    la_params = la_params._replace(fast=fast)
+                continue
+
+            nan_streak = 0
             # Lookahead expects plain gradients, not LookaheadParams
             updates, opt_state = optimizer.update(grads, opt_state, la_params)
             la_params = optax.apply_updates(la_params, updates)

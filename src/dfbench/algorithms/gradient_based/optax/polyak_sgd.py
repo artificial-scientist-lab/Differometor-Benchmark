@@ -1,10 +1,13 @@
 """PolyakSGD optimizer (Optax)."""
 
+import jax
 import optax
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
     build_optimizer,
+    _is_nonfinite,
+    _MAX_NAN_STREAK,
 )
 
 
@@ -69,12 +72,39 @@ class OptaxPolyakSGD(OptaxAlgorithm):
 
         obj.start_logging()
 
+        nan_streak = 0
+        rng_key = jax.random.PRNGKey(
+            random_seed if random_seed is not None else 0
+        )
+
         while not obj.budget_exceeded:
             loss, grads = obj.value_and_grad(params)
 
             if patience is not None and obj.evals_since_improvement > patience:
                 break
 
+            if _is_nonfinite(loss, grads):
+                nan_streak += 1
+                rng_key, sub_key = jax.random.split(rng_key)
+
+                if nan_streak > _MAX_NAN_STREAK:
+                    best = obj.best_params
+                    if best is not None:
+                        params = best + jax.random.normal(
+                            sub_key, best.shape
+                        ) * learning_rate
+                    else:
+                        params = obj.random_params_unbounded()
+                    opt_state = optimizer.init(params)
+                    nan_streak = 0
+                else:
+                    scale = learning_rate * (2 ** min(nan_streak, 8))
+                    params = params + jax.random.normal(
+                        sub_key, params.shape
+                    ) * scale
+                continue
+
+            nan_streak = 0
             updates, opt_state = optimizer.update(
                 grads, opt_state, params, value=loss
             )
