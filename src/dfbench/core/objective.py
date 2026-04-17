@@ -422,8 +422,8 @@ class Objective:
                 self._func = _mapped_unbounded_objective
         else:
             self._func = problem.objective_function
-        self._grad_func = jax.grad(self._func)
-        self._value_and_grad_func = jax.value_and_grad(self._func)
+        self._grad_func = jax.jit(jax.grad(self._func))
+        self._value_and_grad_func = jax.jit(jax.value_and_grad(self._func))
 
         # Memory-efficient Hessian: compute columns in chunks via
         # forward-over-reverse (jvp of grad).  hessian_batch_size controls
