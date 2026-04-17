@@ -31,7 +31,7 @@ class OptaxScheduleFreeAdam(OptaxAlgorithm):
 
     algorithm_str: str = "optax_schedule_free_adam"
 
-    def _make_optimizer(self, learning_rate=0.01, grad_clip_norm=1.0, **kw):
+    def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         base = optax.contrib.schedule_free_adamw(
             learning_rate,
             b1=kw.get("b1", 0.9),

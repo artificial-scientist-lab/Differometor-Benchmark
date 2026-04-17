@@ -20,7 +20,7 @@ class OptaxSGD(OptaxAlgorithm):
 
     algorithm_str: str = "optax_sgd"
 
-    def _make_optimizer(self, learning_rate=0.01, grad_clip_norm=1.0, **kw):
+    def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         return build_optimizer(
             optax.sgd(learning_rate, momentum=0.0, nesterov=False),
             grad_clip_norm=grad_clip_norm,
@@ -39,7 +39,7 @@ class OptaxSGDM(OptaxAlgorithm):
 
     algorithm_str: str = "optax_sgdm"
 
-    def _make_optimizer(self, learning_rate=0.01, grad_clip_norm=1.0, **kw):
+    def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         return build_optimizer(
             optax.sgd(
                 learning_rate,
@@ -62,7 +62,7 @@ class OptaxNAG(OptaxAlgorithm):
 
     algorithm_str: str = "optax_nag"
 
-    def _make_optimizer(self, learning_rate=0.01, grad_clip_norm=1.0, **kw):
+    def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         return build_optimizer(
             optax.sgd(
                 learning_rate,

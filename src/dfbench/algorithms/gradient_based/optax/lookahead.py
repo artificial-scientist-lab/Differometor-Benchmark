@@ -34,7 +34,7 @@ class OptaxLookahead(OptaxAlgorithm):
         "lion": optax.lion,
     }
 
-    def _make_optimizer(self, learning_rate=0.01, grad_clip_norm=1.0, **kw):
+    def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         inner_name = kw.get("inner_optimizer_name", "adam")
         inner_fn = self._INNER_MAP.get(inner_name)
         if inner_fn is None:
@@ -58,7 +58,7 @@ class OptaxLookahead(OptaxAlgorithm):
         init_params=None,
         random_seed=None,
         patience=None,
-        learning_rate=0.01,
+        learning_rate=0.1,
         grad_clip_norm=1.0,
         **kwargs,
     ):

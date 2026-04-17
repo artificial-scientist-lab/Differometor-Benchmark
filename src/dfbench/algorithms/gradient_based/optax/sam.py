@@ -32,7 +32,7 @@ class OptaxSAM(OptaxAlgorithm):
 
     algorithm_str: str = "optax_sam"
 
-    def _make_optimizer(self, learning_rate=0.01, grad_clip_norm=1.0, **kw):
+    def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         rho = kw.get("rho", 0.05)
         sync_period = kw.get("sync_period", 2)
         base = optax.adam(learning_rate)
@@ -50,7 +50,7 @@ class OptaxSAM(OptaxAlgorithm):
         init_params=None,
         random_seed=None,
         patience=None,
-        learning_rate=0.01,
+        learning_rate=0.1,
         grad_clip_norm=1.0,
         **kwargs,
     ):

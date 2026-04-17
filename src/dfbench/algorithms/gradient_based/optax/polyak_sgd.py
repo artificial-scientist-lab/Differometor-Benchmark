@@ -26,7 +26,7 @@ class OptaxPolyakSGD(OptaxAlgorithm):
 
     algorithm_str: str = "optax_polyak_sgd"
 
-    def _make_optimizer(self, learning_rate=0.01, grad_clip_norm=1.0, **kw):
+    def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         parts = []
         if grad_clip_norm is not None:
             parts.append(optax.clip_by_global_norm(grad_clip_norm))
@@ -44,7 +44,7 @@ class OptaxPolyakSGD(OptaxAlgorithm):
         init_params=None,
         random_seed=None,
         patience=None,
-        learning_rate=0.01,
+        learning_rate=0.1,
         grad_clip_norm=1.0,
         **kwargs,
     ):

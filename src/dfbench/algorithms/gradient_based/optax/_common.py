@@ -98,7 +98,7 @@ class OptaxAlgorithm(OptimizationAlgorithm):
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         patience: int | None = None,
-        learning_rate: float = 0.01,
+        learning_rate: float = 0.1,
         grad_clip_norm: float | None = 1.0,
         **kwargs,
     ) -> None:
