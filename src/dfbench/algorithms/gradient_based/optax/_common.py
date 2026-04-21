@@ -11,6 +11,7 @@ override ``optimize`` but still reuse the helpers.
 
 from __future__ import annotations
 
+import jax
 import optax
 import jax.numpy as jnp
 from jaxtyping import Array, Float
@@ -53,6 +54,18 @@ def build_optimizer(
     return optax.chain(*parts) if len(parts) > 1 else base
 
 
+# Maximum consecutive NaN/Inf evaluations before falling back to the
+# best-known point (or a fresh random start).
+_MAX_NAN_STREAK: int = 20
+
+
+def _is_nonfinite(loss, grads) -> bool:
+    """Return True if loss or any gradient entry is NaN or Inf."""
+    return bool(
+        not jnp.isfinite(loss) or not jnp.all(jnp.isfinite(grads))
+    )
+
+
 class OptaxAlgorithm(OptimizationAlgorithm):
     """Thin base class for single-step Optax optimizers.
 
@@ -66,6 +79,12 @@ class OptaxAlgorithm(OptimizationAlgorithm):
     3. JIT warmup ``value_and_grad``
     4. ``obj.start_logging()``
     5. ``while not obj.budget_exceeded``: one ``value_and_grad`` + update
+
+    When the objective returns non-finite (NaN/Inf) values, the optimizer
+    state is left untouched and the parameters are randomly perturbed with
+    an escalating scale.  After ``_MAX_NAN_STREAK`` consecutive failures
+    the loop falls back to the best-known point (or a fresh random start)
+    and reinitialises the optimizer state.
 
     Algorithms that need extra logic (e.g. two-step SAM, Lookahead slow
     weights) should override ``optimize`` entirely.
@@ -98,7 +117,7 @@ class OptaxAlgorithm(OptimizationAlgorithm):
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         patience: int | None = None,
-        learning_rate: float = 0.01,
+        learning_rate: float = 0.1,
         grad_clip_norm: float | None = 1.0,
         **kwargs,
     ) -> None:
@@ -133,11 +152,42 @@ class OptaxAlgorithm(OptimizationAlgorithm):
 
         obj.start_logging()
 
+        nan_streak = 0
+        rng_key = jax.random.PRNGKey(
+            random_seed if random_seed is not None else 0
+        )
+
         while not obj.budget_exceeded:
             loss, grads = obj.value_and_grad(params)
 
             if patience is not None and obj.evals_since_improvement > patience:
                 break
 
+            # --- NaN / Inf guard ------------------------------------------
+            if _is_nonfinite(loss, grads):
+                nan_streak += 1
+                rng_key, sub_key = jax.random.split(rng_key)
+
+                if nan_streak > _MAX_NAN_STREAK:
+                    # Fallback: jump to best-known point or fresh random start
+                    best = obj.best_params
+                    if best is not None:
+                        params = best + jax.random.normal(
+                            sub_key, best.shape
+                        ) * learning_rate
+                    else:
+                        params = obj.random_params_unbounded()
+                    opt_state = optimizer.init(params)
+                    nan_streak = 0
+                else:
+                    # Escalating perturbation: scale doubles each miss
+                    scale = learning_rate * (2 ** min(nan_streak, 8))
+                    params = params + jax.random.normal(
+                        sub_key, params.shape
+                    ) * scale
+                continue
+            # --------------------------------------------------------------
+
+            nan_streak = 0
             updates, opt_state = optimizer.update(grads, opt_state, params)
             params = optax.apply_updates(params, updates)

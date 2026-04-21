@@ -20,7 +20,7 @@ class OptaxSignSGD(OptaxAlgorithm):
 
     algorithm_str: str = "optax_sign_sgd"
 
-    def _make_optimizer(self, learning_rate=0.01, grad_clip_norm=1.0, **kw):
+    def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         return build_optimizer(
             optax.sign_sgd(learning_rate),
             grad_clip_norm=grad_clip_norm,
@@ -44,7 +44,7 @@ class OptaxSignum(OptaxAlgorithm):
 
     algorithm_str: str = "optax_signum"
 
-    def _make_optimizer(self, learning_rate=0.01, grad_clip_norm=1.0, **kw):
+    def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         momentum = kw.get("momentum", 0.9)
         base = optax.chain(
             optax.trace(decay=momentum, nesterov=False),

@@ -117,3 +117,24 @@ class OptaxSophia(OptaxAlgorithm):
             ),
             grad_clip_norm=grad_clip_norm,
         )
+
+    def optimize(
+        self,
+        problem_objective: Objective,
+        init_params=None,
+        random_seed=None,
+        patience=None,
+        learning_rate: float = 1e-3,
+        grad_clip_norm=1.0,
+        **kwargs,
+    ) -> None:
+        """Sophia loop — defaults to learning_rate=1e-3."""
+        super().optimize(
+            problem_objective,
+            init_params=init_params,
+            random_seed=random_seed,
+            patience=patience,
+            learning_rate=learning_rate,
+            grad_clip_norm=grad_clip_norm,
+            **kwargs,
+        )

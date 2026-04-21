@@ -21,7 +21,7 @@ class OptaxLion(OptaxAlgorithm):
 
     algorithm_str: str = "optax_lion"
 
-    def _make_optimizer(self, learning_rate=0.01, grad_clip_norm=1.0, **kw):
+    def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         return build_optimizer(
             optax.lion(
                 learning_rate,
