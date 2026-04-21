@@ -105,17 +105,17 @@ See [Problems](docs/Problems.md) for details on loss computation, parameter mean
 [uv](https://uv.dev/) handles virtual environments and dependency resolution automatically.
 
 ```bash
-uv sync                               # CPU-only
-uv sync --group cuda13                # With GPU support (cuda12 also possible)
-uv sync --group debug                 # With debug tools (testing, profiling, notebooks)
-uv sync --group cuda13 --group debug  # Everything
+uv sync                                  # CPU-only
+uv sync --group cuda13                   # With GPU support (cuda12 also possible)
+uv sync --group analysis                 # With analysis tools (profiling, notebooks)
+uv sync --group cuda13 --group analysis  # Everything
 ```
 
 ### With `pip`
 
 ```bash
 pip install -e .                     # Basic
-pip install -e ".[cuda13,debug]"       # Everything
+pip install -e ".[cuda13,analysis]"    # Everything
 ```
 
 See [Installation](docs/Installation.md) for GPU setup details and HPC notes.
