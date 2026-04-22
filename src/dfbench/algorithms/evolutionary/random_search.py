@@ -14,9 +14,6 @@ class RandomSearch(OptimizationAlgorithm):
     Samples random parameters uniformly within the problem's bounds and evaluates them.
     Useful as a baseline for comparing more sophisticated optimization algorithms.
 
-    All history tracking, printing, and checkpointing is handled by the
-    `Objective` wrapper. The algorithm loop is minimal.
-
     Attributes:
         algorithm_str (str): Identifier string for this algorithm ("random_search").
         algorithm_type (AlgorithmType): Type classification (EVOLUTIONARY).
@@ -71,7 +68,7 @@ class RandomSearch(OptimizationAlgorithm):
         lower, upper = problem.bounds[0], problem.bounds[1]
 
         # Warmup JIT
-        _ = obj.vmap_value(jnp.zeros((self.batch_size, problem.n_params)))
+        obj.warmup_vmap_value(batch_size=self.batch_size)
 
         obj.start_logging()
 

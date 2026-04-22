@@ -5,7 +5,7 @@ All optimization problems in dfbench represent gravitational-wave detector desig
 **Import:**
 
 ```python
-from dfbench.problems import VoyagerProblem, ConstrainedVoyagerProblem, RandomUIFOProblem
+from dfbench.problems import VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem, UIFOProblem
 ```
 
 ---
@@ -16,8 +16,9 @@ from dfbench.problems import VoyagerProblem, ConstrainedVoyagerProblem, RandomUI
 ContinuousProblem          (ABC — core/problem.py)
   └── OpticalSetupProblem  (ABC — problems/base_problem.py)
         ├── VoyagerProblem
+        ├── VoyagerTuningProblem
         ├── ConstrainedVoyagerProblem
-        └── RandomUIFOProblem
+        └── UIFOProblem
 ```
 
 ### `ContinuousProblem` (Abstract Base)
@@ -77,7 +78,7 @@ problem.print_bounds()
 1. The Voyager reference setup is simulated to get a target sensitivity curve.
 2. The target loss is $\sum \log_{10}(\text{sensitivity}_{\text{target}})$.
 3. For a candidate parameter set, the loss is:
-   $$\text{loss} = \sum \log_{10}(\text{sensitivity}_{\text{candidate}}) - \text{target\_loss}$$
+   $$\text{loss} = \sum \log_{10}(\text{sensitivity}_{\text{candidate}}) - \text{target loss}$$
 4. **Loss < 0** means the candidate has better sensitivity than the reference design.
 
 **Rationale for log-scale loss:** Strain sensitivities span many orders of magnitude ($10^{-20}$ to $10^{-24}$). Summing log-sensitivities treats improvements at all frequencies equally rather than being dominated by the worst band.
@@ -100,6 +101,49 @@ Each parameter corresponds to a `(component, property)` pair from the Voyager se
 #### Caveat
 
 `VoyagerProblem` does **not** enforce physical constraints (e.g. maximum mirror power absorption). A solution with loss < 0 may be physically unrealizable. For constrained optimization, use `ConstrainedVoyagerProblem`.
+
+---
+
+### `VoyagerTuningProblem`
+
+| Property | Value |
+|----------|-------|
+| Setup | LIGO Voyager with balanced homodyne detection |
+| Parameters | 6 (tuning only: `prm`, `itmy`, `etmy`, `itmx`, `etmx`, `srm`) |
+| Noise model | Single quantum noise source |
+| Speed | ~12 ms/eval on A100 GPU |
+| Difficulty | Moderate — lower-dimensional than `VoyagerProblem`, useful for quick prototyping |
+
+```python
+problem = VoyagerTuningProblem(n_frequencies=100)
+```
+
+```python
+problem = VoyagerTuningProblem(
+   n_frequencies=100,
+   bounds_overrides={"tuning": (0, 45)},
+)
+problem.print_bounds()
+```
+
+#### How the loss works
+
+1. The Voyager reference setup is simulated to get a target sensitivity curve.
+2. For a candidate parameter set, the loss is:
+   $$\text{loss} = \mathrm{mean}\left(\log_{10}\left(\frac{\text{sensitivity}_{\text{candidate}}}{\text{sensitivity}_{\text{target}}}\right)\right) $$
+3. **Loss < 0** means the candidate has better average sensitivity than the reference design.
+
+#### What the parameters represent
+
+All optimized parameters are mirror tuning angles in degrees:
+
+| Property | Bounds | Physical meaning |
+|----------|--------|-----------------|
+| `tuning` | [-180, 180] | Phase tuning of selected Voyager optics (`prm`, `itmy`, `etmy`, `itmx`, `etmx`, `srm`) |
+
+#### Caveat
+
+`VoyagerTuningProblem` does **not** enforce physical constraints (e.g. maximum mirror power absorption). For constrained optimization, use `ConstrainedVoyagerProblem`.
 
 ---
 
@@ -152,11 +196,11 @@ It could very well be that other penalty functions work better for certain algor
 
 ---
 
-### `RandomUIFOProblem`
+### `UIFOProblem`
 
 | Property | Value |
 |----------|-------|
-| Setup | Quasi-Universal Interferometer (UIFO) with random topology |
+| Setup | Quasi-Universal Interferometer (UIFO) |
 | Parameters | 50–250+ depending on grid size |
 | Noise model | Three sources (same as constrained Voyager) |
 | Constraints | Power thresholds (same as constrained Voyager) |
@@ -164,19 +208,55 @@ It could very well be that other penalty functions work better for certain algor
 | Difficulty | Hard but achievable — the UIFO is overparameterized |
 
 ```python
-problem = RandomUIFOProblem(size=3, n_frequencies=100, topology_seed=42)
+# From a topology seed (random topology, deterministic from seed)
+problem = UIFOProblem(size=3, n_frequencies=100, topology_seed=42)
+
+# From a compact topology string
+problem = UIFOProblem(size=3, topology="AECGCCHEG-SLLSSHLLLLS")
+
+# From explicit dicts
+problem = UIFOProblem(
+    size=3,
+    centers={"11": ("beamsplitter", "left"), ...},
+    boundaries={"01": "squeezer", ...},
+)
 ```
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `size` | `3` | Grid dimensions (3 = 3×3). Larger grids have more components and parameters. |
 | `n_frequencies` | `100` | Frequency points for sensitivity calculation. |
-| `topology_seed` | `42` | Seed for the random graph structure. The same seed always produces the same interferometer topology. |
+| `topology_seed` | `42` | Seed for random topology generation. Set to `None` (with no other topology args) to generate a truly random topology. The seed is always printed to the console. Mutually exclusive with `topology` and `centers`/`boundaries`. |
+| `topology` | `None` | Compact topology string (see below). Mutually exclusive with `topology_seed`. |
+| `centers` | `None` | Interior cell dict. Must be paired with `boundaries`. Mutually exclusive with `topology_seed` and `topology`. |
+| `boundaries` | `None` | Boundary cell dict. Must be paired with `centers`. Mutually exclusive with `topology_seed` and `topology`. |
 | `power_penalty_fn` | `squashed_relu_penalty` | Per-element penalty function `fn(value, threshold)`. See presets above. |
+
+> **Backwards compatibility:** `RandomUIFOProblem` is an alias for `UIFOProblem`.
+
+#### Topology specification
+
+There are three mutually exclusive ways to specify a UIFO topology:
+
+1. **`topology_seed`** — The simplest option. A random topology is generated deterministically from the seed (default: `42`). Pass `topology_seed=None` with no other topology arguments to generate a truly random topology — the seed is printed so you can reproduce it.
+2. **`topology` string** — A compact encoding ideal for configs, papers, and sharing. Uses single-character codes:
+   - **Interior cells:** `A`–`D` = beamsplitter (left/right/top/bottom), `E`–`H` = directional\_beamsplitter (left/right/top/bottom)
+   - **Boundary cells:** `L` = laser, `S` = squeezer, `D` = detector, `H` = balanced\_homodyne
+   - Format: `"<interior_chars>-<boundary_chars>"` in row-major order.
+3. **`centers` + `boundaries` dicts** — Explicit component placement, matching Differometor’s native format.
+
+Conversion helpers are available:
+
+```python
+from dfbench.problems.uifo import topology_to_string, topology_from_string
+
+topology_str = topology_to_string(centers, boundaries, size=3)
+centers, boundaries = topology_from_string(topology_str, size=3)
+```
 
 #### What is a UIFO?
 
-A Quasi-Universal Interferometer Field Optimization (UIFO) is a grid-based interferometer where beamsplitters, mirrors, lasers, and squeezers are placed on a grid and connected by spaces. The topology (which components are placed where and how they connect) is generated randomly from `topology_seed`. Once the topology is fixed, only the continuous parameters (reflectivities, tunings, lengths, etc.) are optimized.
+A Quasi-Universal Interferometer Field Optimization (UIFO) is a grid-based interferometer where beamsplitters, mirrors, lasers, and squeezers are placed on a grid and connected by spaces. The topology (which components are placed where and how they connect) is generated randomly from `topology_seed` (printed on initialization for reproducibility). Once the topology is fixed, only the continuous parameters (reflectivities, tunings, lengths, etc.) are optimized.
 
 **Rationale — coupled grid-cell spaces:** Horizontal and vertical spaces at the same grid positions are constrained to have equal lengths via `constrain_inter_grid_cell_spaces()`. This preserves the physical grid structure and prevents the optimizer from "folding" the interferometer into a degenerate geometry.
 

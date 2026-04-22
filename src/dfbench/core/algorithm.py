@@ -178,7 +178,7 @@ class OptimizationAlgorithm(ABC):
                 Use the seed for framework-specific seeding (e.g. torch.manual_seed)
                 and the key for JAX-based random operations.
         """
-        obj.unbounded = unbounded
+        obj.set_space_mode(unbounded)
         if algorithm_str:
             obj.algorithm_str = algorithm_str
         elif self.algorithm_str:

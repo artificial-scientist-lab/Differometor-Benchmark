@@ -33,6 +33,8 @@ Objective(
     print_every: int = 100,
     algorithm_str: str | None = None,
     save_to_file_every: int | None = None,
+    unit_mapping: Callable | None = None,
+    inverse_unit_mapping: Callable | None = None,
 )
 ```
 
@@ -57,6 +59,8 @@ Objective(
 | `print_every` | `int` | `100` | When `verbose ≥ 1`, print a progress summary every N evaluations. |
 | `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
 | `save_to_file_every` | `int \| None` | `None` | Automatically checkpoint to an NPZ-file every N evaluations. `None` disables auto-saving. The time spent saving is excluded from the elapsed-time clock. |
+| `unit_mapping` | `Callable \| None` | `None` | Optional function mapping unbounded params to the **[0, 1] range**. Can be scalar (e.g. `jax.nn.sigmoid`) or element-wise vector. The Objective handles scaling to actual bounds: `bounded = lb + (ub - lb) * f(x)`. If omitted, the default sigmoid is used. |
+| `inverse_unit_mapping` | `Callable \| None` | `None` | Inverse of the forward mapping, mapping [0, 1] → unbounded space. The Objective normalises bounded params to [0, 1] before calling this: `unbounded = f_inv((bounded - lb) / (ub - lb))`. Must be provided whenever `unit_mapping` is provided. |
 
 ### Choosing `unbounded`
 
@@ -64,6 +68,63 @@ Objective(
 |-------------|-------------------------|--------------------|
 | `False` | `problem.objective_function` | Random Search, PSO, CMA-ES, Bayesian Optimization |
 | `True` | `problem.sigmoid_objective_function` | Some gradient-based methods (Adam, L-BFGS, SA-GD, NA-Adam in their current implementations) |
+
+### Choosing a bounded/unbounded mapping (important)
+
+If you are new, use the defaults first:
+
+- Leave both mapping arguments as `None`
+- Set `unbounded=True` only if your optimizer expects unconstrained search space
+- The default pair is sigmoid + inverse-sigmoid (logit)
+
+Use a custom mapping only if you know exactly why you need it.
+
+Rules:
+
+- If you pass `unit_mapping`, you must also pass `inverse_unit_mapping`
+- The forward mapping must produce values in **[0, 1]**; the Objective scales to actual bounds via `bounded = lb + (ub - lb) * f(x)`
+- The inverse mapping receives values already normalised to [0, 1] by the Objective: `unbounded = f_inv((bounded - lb) / (ub - lb))`
+- The inverse should satisfy approximately: `inverse(forward(x)) ≈ x` in the range you optimize over
+- Both callables can be **scalar** functions (e.g. `jax.nn.sigmoid`) or **element-wise vector** functions — JAX broadcasts element-wise operations, so both work. The Objective uses `jax.vmap` for batching regardless
+
+Minimal custom example (scalar function):
+
+```python
+import jax
+from dfbench import Objective
+
+# sigmoid maps (-inf, +inf) -> (0, 1) — perfect for the [0,1] contract
+obj = Objective(
+    problem,
+    unbounded=True,
+    unit_mapping=jax.nn.sigmoid,
+    inverse_unit_mapping=lambda x: jax.numpy.log(x / (1.0 - x)),
+)
+```
+
+Element-wise vector example (different mapping per dimension):
+
+```python
+import jax.numpy as jnp
+
+def forward(x):
+    # Per-dimension [0,1] mapping; x is shape (n_params,)
+    return jnp.where(x > 0, 1 - jnp.exp(-x), jnp.exp(x)) * 0.5 + 0.5
+
+def inverse(x):
+    x = jnp.clip(x, 1e-7, 1.0 - 1e-7)
+    centered = 2.0 * (x - 0.5)
+    return jnp.where(centered > 0, -jnp.log(1 - centered), jnp.log(centered + 1))
+
+obj = Objective(
+    problem,
+    unbounded=True,
+    unit_mapping=forward,
+    inverse_unit_mapping=inverse,
+)
+```
+
+You do **not** need to handle bounds scaling — the Objective does that automatically.
 
 ---
 
@@ -150,14 +211,14 @@ obj.warmup_grad()
 obj.warmup_hessian()
 obj.warmup_value_and_grad()
 obj.warmup_value_grad_and_hessian()
-obj.warmup_vmap_value()
-obj.warmup_vmap_grad()
-obj.warmup_vmap_hessian()
-obj.warmup_vmap_value_and_grad()
-obj.warmup_vmap_value_grad_and_hessian()
+obj.warmup_vmap_value(batch_size=10)
+obj.warmup_vmap_grad(batch_size=10)
+obj.warmup_vmap_hessian(batch_size=10)
+obj.warmup_vmap_value_and_grad(batch_size=10)
+obj.warmup_vmap_value_grad_and_hessian(batch_size=10)
 ```
 
-Each helper executes the matching path **twice** on deterministic parameters and must be called before `start_logging()`. The batched variants use a deterministic batch of size 2.
+Each helper executes the matching path **twice** on deterministic parameters and must be called before `start_logging()`. The batched variants accept a `batch_size` argument to match the batch size used during optimisation.
 
 ### `reset()`
 
@@ -177,6 +238,28 @@ obj.set_seed(42)
 p3 = obj.random_params_bounded(100)   # identical to p1
 ```
 
+### `set_space_mode(unbounded, unit_mapping=None, inverse_unit_mapping=None)`
+
+Switches between bounded and unbounded mode before optimization starts.
+
+- Must be called before `start_logging()`
+- Re-binds all internal JAX evaluation paths (`value`, `grad`, `hessian`, all `vmap_*`)
+- Can optionally replace the mapping pair at the same time
+- Custom mappings follow the same [0, 1] contract as the constructor: the forward function maps to [0, 1], the Objective handles bounds scaling
+
+```python
+# default sigmoid mapping
+obj.set_space_mode(True)
+
+# custom mapping pair (scalar functions work)
+import jax
+obj.set_space_mode(
+    True,
+    unit_mapping=jax.nn.sigmoid,
+    inverse_unit_mapping=lambda x: jax.numpy.log(x / (1.0 - x)),
+)
+```
+
 ---
 
 ## Random Sampling
@@ -192,7 +275,16 @@ Returns uniform random samples inside `problem.bounds`.
 
 ### `random_params_unbounded(n_samples=1, rng_key=None)`
 
-Generates samples uniform in the bounded space then maps them through the inverse sigmoid (logit) transform to unbounded $(-\infty, +\infty)$ space. This ensures that `sigmoid_bounding(result, bounds)` recovers the original bounded distribution.
+Generates samples uniform in the bounded space then maps them to unbounded space using:
+
+- your custom `inverse_unit_mapping` if provided — the Objective normalises bounded samples to [0, 1] first, then calls your inverse
+- otherwise the default inverse sigmoid (logit)
+
+With the matching forward mapping, this round-trip holds:
+
+```python
+bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
+```
 
 ---
 
@@ -218,6 +310,8 @@ Generates samples uniform in the bounded space then maps them through the invers
 | `time_left` | `float \| None` | Seconds remaining. `None` if unlimited. |
 | `time_exceeded` | `bool` | Whether the time cap has been reached. |
 | `time_progress_fraction` | `float` | Fraction of time budget consumed (0–1). |
+| `budget_left_fraction` | `float` | Fraction of the tightest budget remaining. `min(1 - time_progress, 1 - evals_progress)`, considering only budgets that are set. 1.0 when no budget is configured. |
+| `budget_progress_fraction` | `float` | Fraction of the tightest budget consumed (`1 - budget_left_fraction`). 0.0 when no budget is configured. |
 | `budget_exceeded` | `bool` | `True` when **any** budget (time **or** evals) is exhausted. This is the main loop-termination check. |
 
 ### Best Results
@@ -226,7 +320,7 @@ Generates samples uniform in the bounded space then maps them through the invers
 |----------|------|-------------|
 | `best_loss` | `float \| None` | Lowest loss observed. `None` before the first evaluation. |
 | `best_params` | `Array \| None` | Raw parameters at `best_loss` (may be in unbounded space). |
-| `best_params_bounded` | `Array \| None` | Best parameters mapped to bounded space via sigmoid. **Use this for final output.** |
+| `best_params_bounded` | `Array \| None` | Best parameters mapped to bounded space via the active mapping (custom mapping if configured, otherwise sigmoid). **Use this for final output.** |
 
 ### Current State
 
@@ -276,9 +370,9 @@ These properties return **copies** to prevent external mutation.
 
 ## I/O Methods
 
-### `save_run_data(algorithm_name, filepath=None, hyper_param_str=None) → Path`
+### `save_run_data(algorithm_name=None, filepath=None, hyper_param_str=None) → Path`
 
-Saves the full optimization state to a compressed NPZ file. Writes atomically (to `.tmp.npz` first, then `os.replace`) to prevent corruption from interrupted HPC jobs.
+Saves the full optimization state to a compressed NPZ file. Writes atomically (to `.tmp.npz` first, then `os.replace`) to prevent corruption from interrupted HPC jobs. If `algorithm_name` is not provided it defaults to `self.algorithm_str` (or `"unknown"` when that is also unset).
 
 Default path: `data/objective_run_data/{budget_dir}/{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`
 
@@ -321,12 +415,12 @@ Returns a snapshot dictionary:
 Every evaluation method follows the same pipeline internally:
 
 1. **Execute** the JAX function (`_func`, `_value_and_grad_func`, `_vmap_func`, etc.)
-2. **`_log_time()`** — record a `time_steps` entry; check time budget.
-3. **`_log_evals(params, loss, grad, hessian)`** — record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget.
+2. **`_log(params, loss, grad, hessian)`** — the coordinator: checks `time_exceeded`, appends to `_time_steps`, then delegates to `_log_evals()` and `_log_to_file()`.
+3. **`_log_evals(params, loss, grad, hessian, time_exceeded)`** — record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget. Receives `time_exceeded` as an explicit parameter from `_log()` to ensure a consistent time snapshot.
 4. **`_log_to_file()`** — if `save_to_file_every` is set, trigger a periodic checkpoint.
 
-> **Important:** These are private methods — do not call `_log_time()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad, hessian=None)` method instead, which wraps all three. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm.md#custom-jit-compiled-loops-with-log_evaluation) for details.
+> **Important:** These are private methods — do not call `_log()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad, hessian=None)` method instead, which delegates to `_log()`. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm.md#custom-jit-compiled-loops-with-log_evaluation) for details.
 
 Budget enforcement happens *after* the evaluation returns. This means the algorithm always receives a valid result, but once any budget is exceeded the history stops growing and `budget_exceeded` becomes `True`.
 
-When a batch evaluation (`vmap_*`) would push `eval_count` past `max_evals`, the evaluations are counted but *not logged*, preserving history alignment and setting the `budget_exceeded` flag to `True`. The `time_steps` entry added by `_log_time()` is also removed to keep all lists in sync. This may be subject to change but in the current setting, this is the most straight-forward way and irrelevant if budged is planned well (reducing population as `evals_left` nears zero).
+When a batch evaluation (`vmap_*`) would push `eval_count` past `max_evals`, the evaluations are counted but *not logged*, preserving history alignment and setting the `budget_exceeded` flag to `True`. The `time_steps` entry added by `_log()` is also removed to keep all lists in sync. This may be subject to change but in the current setting, this is the most straight-forward way and irrelevant if budged is planned well (reducing population as `evals_left` nears zero).

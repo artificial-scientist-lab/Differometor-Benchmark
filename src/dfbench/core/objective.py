@@ -3,6 +3,7 @@ import os
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -40,10 +41,12 @@ class Objective:
        gradients, evaluation types, and elapsed time.  Configurable flags
        control what is stored (see constructor args).
 
-    4. **Bounded / unbounded mode** – when ``unbounded=True`` the objective
-       is evaluated through a sigmoid transform so that algorithms can
-       optimise in unconstrained $(-\\infty, +\\infty)$ space while the
-       underlying problem remains bounded.
+        4. **Bounded / unbounded mode** – when ``unbounded=True`` the objective
+             is evaluated through a configurable mapping from unbounded to bounded
+             space (default: sigmoid transform) so that algorithms can optimise in
+             unconstrained $(-\\infty, +\\infty)$ space while the underlying
+             problem remains bounded.  Custom mappings map to the [0, 1] range;
+             the Objective scales to actual bounds automatically.
 
     5. **Reproducible random sampling** – ``set_seed`` initialises a JAX
        PRNG key that is consumed by ``random_params_bounded`` and
@@ -91,10 +94,11 @@ class Objective:
 
     **Random sampling**
 
-    - ``set_seed(seed)``           – set JAX PRNG seed for reproducibility.
-    - ``random_params_bounded(n)`` – uniform samples inside parameter bounds.
-    - ``random_params_unbounded(n)`` – samples mapped to unbounded space via
-      inverse-sigmoid.
+        - ``set_seed(seed)``             – set JAX PRNG seed for reproducibility.
+        - ``random_params_bounded(n)``   – uniform samples inside parameter bounds.
+        - ``random_params_unbounded(n)`` – samples mapped to unbounded space via
+            inverse mapping (default: inverse-sigmoid).  For custom mappings
+            the Objective normalises to [0, 1] before calling the inverse.
 
     **I/O**
 
@@ -162,6 +166,10 @@ class Objective:
     +------------------------------------+---------------------------------------------------+
     | ``time_progress_fraction``         | Fraction of time budget consumed (0–1).           |
     +------------------------------------+---------------------------------------------------+
+    | ``budget_left_fraction``           | Fraction of tightest budget remaining (1->0).     |
+    +------------------------------------+---------------------------------------------------+
+    | ``budget_progress_fraction``       | Fraction of tightest budget consumed (0->1).      |
+    +------------------------------------+---------------------------------------------------+
     | ``loss_history_reduced``           | Losses with batches reduced to min.               |
     +------------------------------------+---------------------------------------------------+
     | ``params_history_reduced``         | Params with batches reduced to single entry.      |
@@ -205,12 +213,16 @@ class Objective:
         algorithm_str: str | None = None,
         save_to_file_every: int | None = None,
         display_mode: str = "live",
+        unit_mapping: Callable | None = None,
+        inverse_unit_mapping: Callable | None = None,
+        hessian_batch_size: int = 1,
     ):
         """Initialize the Objective wrapper for optimization problems.
 
         Args:
             problem: The continuous optimization problem to wrap.
-            unbounded: If True, use sigmoid-transformed objective. Defaults to False.
+            unbounded: If True, use unbounded objective mode with the active
+                mapping (default: sigmoid). Defaults to False.
             max_evals: Maximum number of evaluations allowed. None for unlimited.
             max_time: Maximum wall-clock time in seconds. None for unlimited.
             save_time_steps: Whether to track timestamps for each evaluation.
@@ -231,6 +243,26 @@ class Objective:
                 ``"live"`` (default) shows a continuously-refreshing in-place
                 dashboard with progress bars.  ``"log"`` prints traditional
                 multi-line log blocks that scroll the terminal.
+            unit_mapping: Optional function that maps unbounded
+                parameters to the **[0, 1] range** (unit interval).  Can be a
+                scalar function (e.g. ``jax.nn.sigmoid``) or a vector function
+                operating element-wise on arrays — both work because JAX
+                broadcasts element-wise operations.  The Objective handles
+                scaling from [0, 1] to the actual problem bounds:
+                ``bounded = lower + (upper - lower) * f(unbounded)``.
+                Must be provided together with ``inverse_unit_mapping``.
+            inverse_unit_mapping: Inverse of
+                ``unit_mapping``, mapping from [0, 1] back to
+                unbounded space.  The Objective normalises bounded parameters
+                to [0, 1] before calling this function:
+                ``unbounded = f_inv((bounded - lower) / (upper - lower))``.
+                Must be provided together with ``unit_mapping``.
+            hessian_batch_size: Number of Hessian columns to compute
+                simultaneously via ``vmap``.  Higher values trade GPU memory
+                for speed.  ``1`` (default) is the most memory-efficient
+                (sequential ``lax.map``); set to ``n_params`` to recover
+                full ``jax.hessian`` parallelism.  Values between 1 and
+                ``n_params`` compute columns in chunks.
         """
 
         self.unbounded = unbounded
@@ -257,35 +289,20 @@ class Objective:
         self._save_eval_type_history = save_eval_type_history
         self._save_to_file_every = save_to_file_every
         self._display_mode = display_mode
+        self._hessian_batch_size = hessian_batch_size
+
+        self._set_space_mappings(
+            unit_mapping,
+            inverse_unit_mapping,
+        )
 
         self._bounds = problem.bounds
-        self._func = (
-            problem.sigmoid_objective_function
-            if self.unbounded
-            else problem.objective_function
-        )
-        self._grad_func = jax.grad(self._func)
-        self._hessian_func = jax.hessian(self._func)
-        self._value_and_grad_func = jax.value_and_grad(self._func)
-
-        def _value_grad_and_hessian(params):
-            value, grad = self._value_and_grad_func(params)
-            hessian = self._hessian_func(params)
-            return value, grad, hessian
-
-        self._value_grad_and_hessian_func = _value_grad_and_hessian
-        self._vmap_func = jax.vmap(self._func)
-        self._vmap_grad_func = jax.vmap(self._grad_func)
-        self._vmap_hessian_func = jax.vmap(self._hessian_func)
-        self._vmap_value_and_grad_func = jax.vmap(self._value_and_grad_func)
-        self._vmap_value_grad_and_hessian_func = jax.vmap(
-            self._value_grad_and_hessian_func
-        )
+        self._bind_evaluation_functions()
 
         self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self._time_left = self._max_time
+        self._cached_save_path: Path | None = None
         self._start_time = None
-        self._time_exceeded = False
+        self._time_offset = 0.0
 
         self._eval_count = 0
         self._evals_left = self._max_evals
@@ -313,6 +330,196 @@ class Objective:
 
         # Display renderer (lazy-initialised on first use)
         self._display: LiveDisplay | LogDisplay | None = None
+
+    def _set_space_mappings(
+        self,
+        unit_mapping: Callable | None,
+        inverse_unit_mapping: Callable | None,
+    ) -> None:
+        """Set or clear custom [0,1]-space mappings.
+
+        The forward mapping must produce values in [0, 1]; the Objective
+        handles scaling to actual bounds.  The inverse mapping receives
+        values already normalised to [0, 1] by the Objective.
+        """
+        if (unit_mapping is None) != (
+            inverse_unit_mapping is None
+        ):
+            raise ValueError(
+                "Custom unbounded mapping requires both "
+                "unit_mapping and inverse_unit_mapping."
+            )
+
+        self._unit_mapping = unit_mapping
+        self._inverse_unit_mapping = inverse_unit_mapping
+        self._unit_mapping_vmap = (
+            jax.vmap(unit_mapping)
+            if unit_mapping is not None
+            else None
+        )
+        self._inverse_unit_mapping_vmap = (
+            jax.vmap(inverse_unit_mapping)
+            if inverse_unit_mapping is not None
+            else None
+        )
+
+    def _map_unbounded_to_bounded(
+        self,
+        params: Float[Array, "n_params"],
+    ) -> Float[Array, "n_params"]:
+        """Map a single parameter vector from unbounded to bounded space.
+
+        Custom mappings produce [0, 1] values; this method scales to bounds.
+        """
+        if self._unit_mapping is not None:
+            lower, upper = self._problem.bounds
+            return lower + (upper - lower) * self._unit_mapping(params)
+        return sigmoid_bounding(params, self._problem.bounds)
+
+    def _map_unbounded_to_bounded_batched(
+        self,
+        params: Float[Array, "batch n_params"],
+    ) -> Float[Array, "batch n_params"]:
+        """Map a parameter batch from unbounded to bounded space."""
+        if self._unit_mapping_vmap is not None:
+            lower, upper = self._problem.bounds
+            return lower + (upper - lower) * self._unit_mapping_vmap(
+                params
+            )
+        return jax.vmap(lambda x: sigmoid_bounding(x, self._problem.bounds))(params)
+
+    def _map_bounded_to_unbounded(
+        self,
+        params: Float[Array, "... n_params"],
+    ) -> Float[Array, "... n_params"]:
+        """Map params from bounded to unbounded space using configured inverse.
+
+        For custom mappings, normalises to [0, 1] first, then calls the
+        user-provided inverse which maps [0, 1] → (-∞, +∞).
+        """
+        if self._inverse_unit_mapping is not None:
+            arr = jnp.asarray(params)
+            lower, upper = self._problem.bounds
+            normalized = (arr - lower) / (upper - lower)
+            if arr.ndim == 1:
+                return self._inverse_unit_mapping(normalized)
+            assert self._inverse_unit_mapping_vmap is not None
+            return self._inverse_unit_mapping_vmap(normalized)
+        return self._inverse_sigmoid_bounding(params, self._problem.bounds)
+
+    def _bind_evaluation_functions(self) -> None:
+        """Bind evaluation callables for the currently active search space."""
+        problem = self._problem
+        if self.unbounded:
+            if self._unit_mapping is None:
+                self._func = problem.sigmoid_objective_function
+            else:
+
+                def _mapped_unbounded_objective(params):
+                    bounded = self._map_unbounded_to_bounded(params)
+                    return problem.objective_function(bounded)
+
+                self._func = _mapped_unbounded_objective
+        else:
+            self._func = problem.objective_function
+        self._grad_func = jax.jit(jax.grad(self._func))
+        self._value_and_grad_func = jax.jit(jax.value_and_grad(self._func))
+
+        # Memory-efficient Hessian: compute columns in chunks via
+        # forward-over-reverse (jvp of grad).  hessian_batch_size controls
+        # how many columns are computed in parallel (1 = fully sequential,
+        # n_params = fully parallel like jax.hessian).
+        _grad_for_hessian = jax.grad(self._func)
+        _hbs = self._hessian_batch_size
+
+        def _batched_hessian(params):
+            n = params.shape[0]
+
+            def _cols_chunk(basis_chunk):
+                """Compute multiple Hessian columns in parallel."""
+                def _single_col(e_i):
+                    _, col = jax.jvp(_grad_for_hessian, (params,), (e_i,))
+                    return col
+                return jax.vmap(_single_col)(basis_chunk)
+
+            # Build full identity and split into chunks
+            basis = jnp.eye(n)
+            # Pad to multiple of batch size for lax.map
+            remainder = n % _hbs
+            if remainder != 0:
+                pad_size = _hbs - remainder
+                basis = jnp.concatenate(
+                    [basis, jnp.zeros((pad_size, n))], axis=0
+                )
+            chunks = basis.reshape(-1, _hbs, n)
+            # lax.map iterates sequentially over chunks
+            result = jax.lax.map(_cols_chunk, chunks)
+            # Reshape back: (n_chunks, batch_size, n_params) -> (total, n_params)
+            result = result.reshape(-1, n)
+            return result[:n]  # Remove padding rows
+
+        self._hessian_func = _batched_hessian
+
+        def _value_grad_and_hessian(params):
+            value, grad = self._value_and_grad_func(params)
+            hessian = self._hessian_func(params)
+            return value, grad, hessian
+
+        self._value_grad_and_hessian_func = _value_grad_and_hessian
+        self._vmap_func = jax.vmap(self._func)
+        self._vmap_grad_func = jax.vmap(self._grad_func)
+        self._vmap_hessian_func = jax.vmap(self._hessian_func)
+        self._vmap_value_and_grad_func = jax.vmap(self._value_and_grad_func)
+        self._vmap_value_grad_and_hessian_func = jax.vmap(
+            self._value_grad_and_hessian_func
+        )
+
+    def set_space_mode(
+        self,
+        unbounded: bool,
+        unit_mapping: Callable | None = None,
+        inverse_unit_mapping: Callable | None = None,
+    ) -> None:
+        """Switch between bounded and unbounded evaluation mode.
+
+        This rebinds all internal JAX callables so subsequent ``value*`` /
+        ``grad*`` / ``hessian*`` evaluations use the requested objective.
+
+        Args:
+            unbounded: If True, evaluate in unbounded mode using the active
+                mapping. If False, use ``problem.objective_function`` directly.
+            unit_mapping: Optional function mapping unbounded
+                parameters to the [0, 1] range.  Can be scalar (e.g.
+                ``jax.nn.sigmoid``) or element-wise vector.  The Objective
+                scales to actual bounds: ``lb + (ub - lb) * f(x)``.
+                Must be passed together with ``inverse_unit_mapping``.
+            inverse_unit_mapping: Inverse of the forward mapping,
+                mapping [0, 1] → (-∞, +∞).  The Objective normalises bounded
+                params to [0, 1] before calling this.  Must be passed together
+                with ``unit_mapping``.
+
+        Raises:
+            RuntimeError: If logging already started for the current run.
+        """
+        if self._start_time is not None:
+            raise RuntimeError(
+                "set_space_mode() must be called before start_logging() so "
+                "evaluation histories stay consistent."
+            )
+        if (unit_mapping is None) != (
+            inverse_unit_mapping is None
+        ):
+            raise ValueError(
+                "set_space_mode() custom mapping requires both "
+                "unit_mapping and inverse_unit_mapping."
+            )
+        if unit_mapping is not None:
+            self._set_space_mappings(
+                unit_mapping,
+                inverse_unit_mapping,
+            )
+        self.unbounded = unbounded
+        self._bind_evaluation_functions()
 
     def __call__(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate the objective function at given parameters.
@@ -372,28 +579,25 @@ class Objective:
     @property
     def time_left(self) -> float | None:
         """Time remaining in seconds before budget is exceeded. None if no limit."""
+        if self._max_time is None:
+            return None
         if self._start_time is None:
-            return self._max_time
-        self._time_left = (
-            max(0, self._max_time - (time.time() - self._start_time))
-            if self._max_time is not None
-            else None
-        )
-        return self._time_left
+            return max(0.0, self._max_time - self._time_offset)
+        return max(0.0, self._max_time - self.time_elapsed)
 
     @property
     def time_elapsed(self) -> float:
-        """Total time elapsed since start_logging() was called."""
+        """Total time elapsed (including any previously loaded offset)."""
         if self._start_time is None:
-            return 0.0
+            return self._time_offset
         return time.time() - self._start_time
 
     @property
     def time_exceeded(self) -> bool:
         """Whether the time budget has been exceeded."""
-        if self._max_time is not None:
-            self._time_exceeded = self.time_elapsed >= self._max_time
-        return self._time_exceeded
+        if self._max_time is None:
+            return False
+        return self.time_elapsed >= self._max_time
 
     @property
     def time_progress_fraction(self) -> float:
@@ -401,6 +605,32 @@ class Objective:
         if self._max_time is not None:
             return min(1.0, self.time_elapsed / self._max_time)
         return 0.0
+
+    @property
+    def budget_progress_fraction(self) -> float:
+        """Fraction of the tightest budget consumed (0.0 -> 1.0).
+
+        Computed as ``max(evals_progress_fraction, time_progress_fraction)``
+        considering only the budgets that are actually set.
+        Returns 0.0 when no budget is configured.
+        """
+        fracs: list[float] = []
+        if self._max_evals is not None:
+            fracs.append(self.evals_progress_fraction)
+        if self._max_time is not None:
+            fracs.append(self.time_progress_fraction)
+        if not fracs:
+            return 0.0
+        return min(1.0, max(fracs))
+
+    @property
+    def budget_left_fraction(self) -> float:
+        """Fraction of the tightest budget remaining (1.0 -> 0.0).
+
+        Equivalent to ``1 - budget_progress_fraction``.
+        Returns 1.0 when no budget is configured.
+        """
+        return 1.0 - self.budget_progress_fraction
 
     @property
     def budget_exceeded(self) -> bool:
@@ -418,7 +648,7 @@ class Objective:
         if self._best_params is None:
             return None
         if self.unbounded:
-            return sigmoid_bounding(self._best_params, self._problem.bounds)
+            return self._map_unbounded_to_bounded(self._best_params)
         return self._best_params
 
     @property
@@ -483,12 +713,9 @@ class Objective:
             if p is None:
                 result.append(None)
             elif p.ndim == 1:
-                result.append(sigmoid_bounding(p, self._problem.bounds))
+                result.append(self._map_unbounded_to_bounded(p))
             else:
-                sigmoid_bounding_v = jax.vmap(
-                    lambda x: sigmoid_bounding(x, self._problem.bounds)
-                )
-                result.append(sigmoid_bounding_v(p))
+                result.append(self._map_unbounded_to_bounded_batched(p))
         return result
 
     @property
@@ -630,7 +857,7 @@ class Objective:
             if p is None:
                 result.append(None)
             else:
-                result.append(sigmoid_bounding(p, self._problem.bounds))
+                result.append(self._map_unbounded_to_bounded(p))
         return result
 
     @property
@@ -794,12 +1021,13 @@ class Objective:
     ) -> Float[Array, "n_samples n_params"] | Float[Array, "n_params"]:
         """Generate random parameters in unbounded space.
 
-        Samples uniformly in bounded space, then applies inverse sigmoid
-        transform to map to unbounded space (-∞, +∞).
+        Samples uniformly in bounded space, then applies the configured
+        inverse mapping (default: inverse sigmoid / logit) to map to
+        unbounded space (-∞, +∞).
 
-        The inverse sigmoid transform ensures that when these unbounded params
-        are passed through sigmoid_bounding, they recover the original bounded
-        samples.
+        The inverse mapping ensures that when these unbounded params are
+        passed through the matching forward mapping, they recover the
+        original bounded samples.
 
         Reproducibility:
             - If rng_key is provided: Uses that specific key (manual control)
@@ -823,10 +1051,8 @@ class Objective:
         # Generate bounded samples (will use internal key if set)
         bounded_samples = self.random_params_bounded(n_samples, rng_key=rng_key)
 
-        # Apply inverse sigmoid bounding
-        unbounded = self._inverse_sigmoid_bounding(
-            bounded_samples, self._problem.bounds
-        )
+        # Apply configured inverse mapping (default: inverse sigmoid)
+        unbounded = self._map_bounded_to_unbounded(bounded_samples)
 
         return unbounded
 
@@ -873,7 +1099,7 @@ class Objective:
     def _deterministic_warmup_params(
         self,
         n_samples: int = 1,
-    ) -> Float[Array, "n_params"] | Float[Array, "n_samples n_params"]:
+    ) -> Float[Array, "n_samples n_params"]:
         """Return deterministic midpoint params in the currently active raw space."""
         if self._bounds is None:
             raise ValueError(
@@ -883,14 +1109,10 @@ class Objective:
             raise ValueError("n_samples must be at least 1.")
 
         midpoint = (self._bounds[0] + self._bounds[1]) / 2.0
-        bounded_params = (
-            midpoint
-            if n_samples == 1
-            else jnp.repeat(midpoint[None, :], repeats=n_samples, axis=0)
-        )
+        bounded_params = midpoint[None, :] if n_samples == 1 else jnp.repeat(midpoint[None, :], repeats=n_samples, axis=0)
 
         if self.unbounded:
-            return self._inverse_sigmoid_bounding(bounded_params, self._bounds)
+            return self._map_bounded_to_unbounded(bounded_params)
         return bounded_params
 
     def _warmup_twice(self, fn, params) -> None:
@@ -1026,29 +1248,23 @@ class Objective:
 
         return 0
 
-    def _log_time(self) -> None:
-        """Internal: Log current timestamp and check time budget."""
-
+    def _log(
+        self,
+        params: Float[Array, "n_params"] | Float[Array, "batch n_params"] | None = None,
+        loss: Float | Float[Array, "batch"] | None = None,
+        grad: Float | Float[Array, "batch"] | None = None,
+        hessian: Float[Array, "n_params n_params"]
+        | Float[Array, "batch n_params n_params"]
+        | None = None,
+    ) -> None:
+        """Internal: Log timestamp, evaluation results, and optionally save to file."""
         if self._start_time is None:
             return
-
-        time_elapsed = (
-            time.time() - self._start_time if self._start_time is not None else 0.0
-        )
-
-        # Update time_exceeded flag if time budget is set
-        if self._max_time is not None:
-            self._time_exceeded = time_elapsed >= self._max_time
-
-        # Record timestamp if saving time steps and budget not exceeded
-        if (
-            self._save_time_steps
-            and not self._time_exceeded
-            and not self._evals_exceeded
-        ):
-            self._time_steps.append(time_elapsed)
-
-        return
+        time_exceeded = self.time_exceeded
+        if self._save_time_steps and not time_exceeded and not self._evals_exceeded:
+            self._time_steps.append(self.time_elapsed)
+        self._log_evals(params, loss, grad, hessian, time_exceeded=time_exceeded)
+        self._log_to_file()
 
     def _log_evals(
         self,
@@ -1058,6 +1274,7 @@ class Objective:
         hessian: Float[Array, "n_params n_params"]
         | Float[Array, "batch n_params n_params"]
         | None = None,
+        time_exceeded: bool = False,
     ) -> None:
         """Internal: Log evaluation results, update histories, and track best loss.
 
@@ -1072,7 +1289,7 @@ class Objective:
             return
 
         # Stop logging if budget exceeded
-        if self._time_exceeded or self._evals_exceeded:
+        if time_exceeded or self._evals_exceeded:
             return
 
         # Determine how many items this call represents
@@ -1252,7 +1469,7 @@ class Objective:
         # TODO consider checking if multithreaded
         t0 = time.time() if self._start_time is not None else None
         try:
-            self.save_run_data(algorithm_name=self.algorithm_str or "unknown")
+            self.save_run_data()
         except Exception:
             # propagate after optionally logging, dont adjust start_time on failure
             raise
@@ -1268,65 +1485,91 @@ class Objective:
 
     def warmup_value(self) -> None:
         """Warm up ``value()`` twice on deterministic params without logging."""
-        self._warmup_twice(self.value, self._deterministic_warmup_params())
+        self._warmup_twice(self.value, self._deterministic_warmup_params()[0])
 
     def warmup_grad(self) -> None:
         """Warm up ``grad()`` twice on deterministic params without logging."""
-        self._warmup_twice(self.grad, self._deterministic_warmup_params())
+        self._warmup_twice(self.grad, self._deterministic_warmup_params()[0])
 
     def warmup_hessian(self) -> None:
         """Warm up ``hessian()`` twice on deterministic params without logging."""
-        self._warmup_twice(self.hessian, self._deterministic_warmup_params())
+        self._warmup_twice(self.hessian, self._deterministic_warmup_params()[0])
 
     def warmup_value_and_grad(self) -> None:
         """Warm up ``value_and_grad()`` twice on deterministic params."""
-        self._warmup_twice(self.value_and_grad, self._deterministic_warmup_params())
+        self._warmup_twice(self.value_and_grad, self._deterministic_warmup_params()[0])
 
     def warmup_value_grad_and_hessian(self) -> None:
         """Warm up ``value_grad_and_hessian()`` twice on deterministic params."""
         self._warmup_twice(
             self.value_grad_and_hessian,
-            self._deterministic_warmup_params(),
+            self._deterministic_warmup_params()[0],
         )
 
-    def warmup_vmap_value(self) -> None:
-        """Warm up ``vmap_value()`` twice on a deterministic batch of size 2."""
+    def warmup_vmap_value(self, batch_size: int) -> None:
+        """Warm up ``vmap_value()`` twice on a deterministic batch.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
         self._warmup_twice(
             self.vmap_value,
-            self._deterministic_warmup_params(n_samples=2),
+            self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_grad(self) -> None:
-        """Warm up ``vmap_grad()`` twice on a deterministic batch of size 2."""
+    def warmup_vmap_grad(self, batch_size: int) -> None:
+        """Warm up ``vmap_grad()`` twice on a deterministic batch.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
         self._warmup_twice(
             self.vmap_grad,
-            self._deterministic_warmup_params(n_samples=2),
+            self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_hessian(self) -> None:
-        """Warm up ``vmap_hessian()`` twice on a deterministic batch of size 2."""
+    def warmup_vmap_hessian(self, batch_size: int) -> None:
+        """Warm up ``vmap_hessian()`` twice on a deterministic batch.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
         self._warmup_twice(
             self.vmap_hessian,
-            self._deterministic_warmup_params(n_samples=2),
+            self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_value_and_grad(self) -> None:
-        """Warm up ``vmap_value_and_grad()`` twice on a deterministic batch."""
+    def warmup_vmap_value_and_grad(self, batch_size: int) -> None:
+        """Warm up ``vmap_value_and_grad()`` twice on a deterministic batch.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
         self._warmup_twice(
             self.vmap_value_and_grad,
-            self._deterministic_warmup_params(n_samples=2),
+            self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_value_grad_and_hessian(self) -> None:
-        """Warm up ``vmap_value_grad_and_hessian()`` twice on a deterministic batch."""
+    def warmup_vmap_value_grad_and_hessian(self, batch_size: int) -> None:
+        """Warm up ``vmap_value_grad_and_hessian()`` twice on a deterministic batch.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
         self._warmup_twice(
             self.vmap_value_grad_and_hessian,
-            self._deterministic_warmup_params(n_samples=2),
+            self._deterministic_warmup_params(n_samples=batch_size),
         )
 
     def start_logging(self) -> None:
-        """Start the optimization timer. Call this before beginning optimization."""
-        self._start_time = time.time()
+        """Start the optimization timer. Call this before beginning optimization.
+
+        If a checkpoint was loaded via ``load_run_data()``, the previously
+        elapsed time (stored in ``_time_offset``) is absorbed into
+        ``_start_time`` so that ``time_elapsed`` remains the single source of truth.
+        """
+        self._start_time = time.time() - self._time_offset
+        self._time_offset = 0.0
 
     def log_evaluation(
         self,
@@ -1350,10 +1593,7 @@ class Objective:
             grad: Gradient value(s) computed.
             hessian: Hessian value(s) computed.
         """
-        self._log_time()
-        self._log_evals(params, loss, grad, hessian)
-
-        self._log_to_file()
+        self._log(params, loss, grad, hessian)
         return
 
     def value(self, params: Float[Array, "n_params"]) -> Float:
@@ -1367,10 +1607,7 @@ class Objective:
         """
         loss = self._func(params)
 
-        self._log_time()
-        self._log_evals(params, loss, None)
-
-        self._log_to_file()
+        self._log(params, loss)
         return loss
 
     def grad(self, params: Float[Array, "n_params"]) -> Float[Array, "n_params"]:
@@ -1384,10 +1621,7 @@ class Objective:
         """
         grad = self._grad_func(params)
 
-        self._log_time()
-        self._log_evals(params, None, grad)
-
-        self._log_to_file()
+        self._log(params, grad=grad)
         return grad
 
     def hessian(
@@ -1396,10 +1630,7 @@ class Objective:
         """Compute the Hessian of the objective function at given parameters."""
         hessian = self._hessian_func(params)
 
-        self._log_time()
-        self._log_evals(params, None, None, hessian)
-
-        self._log_to_file()
+        self._log(params, hessian=hessian)
         return hessian
 
     def value_and_grad(
@@ -1415,10 +1646,7 @@ class Objective:
         """
         value, grad = self._value_and_grad_func(params)
 
-        self._log_time()
-        self._log_evals(params, value, grad)
-
-        self._log_to_file()
+        self._log(params, value, grad)
         return value, grad
 
     def value_grad_and_hessian(
@@ -1427,10 +1655,7 @@ class Objective:
         """Compute value, gradient, and Hessian at a single parameter vector."""
         value, grad, hessian = self._value_grad_and_hessian_func(params)
 
-        self._log_time()
-        self._log_evals(params, value, grad, hessian)
-
-        self._log_to_file()
+        self._log(params, value, grad, hessian)
         return value, grad, hessian
 
     def vmap_value(
@@ -1446,10 +1671,7 @@ class Objective:
         """
         losses = self._vmap_func(params)
 
-        self._log_time()
-        self._log_evals(params, losses, None)
-
-        self._log_to_file()
+        self._log(params, losses)
         return losses
 
     def vmap_grad(
@@ -1465,10 +1687,7 @@ class Objective:
         """
         grads = self._vmap_grad_func(params)
 
-        self._log_time()
-        self._log_evals(params, None, grads)
-
-        self._log_to_file()
+        self._log(params, grad=grads)
         return grads
 
     def vmap_hessian(
@@ -1477,10 +1696,7 @@ class Objective:
         """Compute Hessians for a batch of parameters."""
         hessians = self._vmap_hessian_func(params)
 
-        self._log_time()
-        self._log_evals(params, None, None, hessians)
-
-        self._log_to_file()
+        self._log(params, hessian=hessians)
         return hessians
 
     def vmap_value_and_grad(
@@ -1496,10 +1712,7 @@ class Objective:
         """
         values, grads = self._vmap_value_and_grad_func(params)
 
-        self._log_time()
-        self._log_evals(params, values, grads)
-
-        self._log_to_file()
+        self._log(params, values, grads)
         return values, grads
 
     def vmap_value_grad_and_hessian(
@@ -1512,10 +1725,7 @@ class Objective:
         """Compute values, gradients, and Hessians for a batch of parameters."""
         values, grads, hessians = self._vmap_value_grad_and_hessian_func(params)
 
-        self._log_time()
-        self._log_evals(params, values, grads, hessians)
-
-        self._log_to_file()
+        self._log(params, values, grads, hessians)
         return values, grads, hessians
 
     def batched_value(
@@ -1562,7 +1772,7 @@ class Objective:
 
     def save_run_data(
         self,
-        algorithm_name: str = "unknown",
+        algorithm_name: str | None = None,
         filepath: str | None = None,
         hyper_param_str: str | None = None,
     ) -> Path:
@@ -1574,7 +1784,8 @@ class Objective:
         If hyper_param_str is provided, adds an additional subdirectory level for organization.
 
         Args:
-            algorithm_name: Name of the algorithm for file naming.
+            algorithm_name: Name of the algorithm for file naming.  Defaults to
+                ``self.algorithm_str`` if set, otherwise ``"unknown"``.
             filepath: Custom file path. If None, uses standard naming convention.
             hyper_param_str: Optional hyperparameter string for subdirectory organization
                 (e.g., "lr0.1_patience500").
@@ -1588,7 +1799,16 @@ class Objective:
             >>> obj.save_run_data(algorithm_name="adam_gd", hyper_param_str="lr0.1")
             Path('data/objective_run_data/time100s_evals1000/lr0.1/voyager_adam_gd_2026-01-26_15-30-45.npz')
         """
-        save_path = self._get_run_data_path(algorithm_name, filepath, hyper_param_str)
+        if algorithm_name is None:
+            algorithm_name = self.algorithm_str or "unknown"
+
+        # Reuse cached path if no explicit filepath/hyper_param_str override
+        if self._cached_save_path is not None and filepath is None and hyper_param_str is None:
+            save_path = self._cached_save_path
+        else:
+            save_path = self._get_run_data_path(algorithm_name, filepath, hyper_param_str)
+            if filepath is None and hyper_param_str is None:
+                self._cached_save_path = save_path
 
         # Convert histories to numpy arrays for efficient storage
         # Write to a temporary file in the same directory and atomically replace
@@ -1628,8 +1848,10 @@ class Objective:
     def load_run_data(self, filepath: str | Path) -> None:
         """Load optimization state from a run data file.
 
-        Restores all tracking state including loss history, parameters, and timing.
-        The start_time is adjusted so that time_elapsed continues from where it left off.
+        Restores all tracking state including loss history, parameters, and
+        timing.  The previously elapsed time is stored as an offset so that
+        ``warmup_*()`` and ``start_logging()`` still work normally after
+        loading.  Call ``start_logging()`` to resume the wall-clock timer.
 
         Args:
             filepath: Path to the run data NPZ file to load.
@@ -1639,6 +1861,8 @@ class Objective:
 
         Example:
             >>> obj.load_run_data("data/objective_run_data/time100s_evals1000/voyager_adam_gd_2026-01-26_15-30-45.npz")
+            >>> obj.warmup_value_and_grad()   # OK — logging not yet active
+            >>> obj.start_logging()           # resume wall-clock timer
             >>> print(f"Resuming from {obj.eval_count} evaluations")
         """
         filepath = Path(filepath)
@@ -1676,11 +1900,16 @@ class Objective:
                 self._eval_type_counts.get(eval_type, 0) + 1
             )
 
-        # Restore timing: set start_time so elapsed time continues correctly
+        # Store elapsed time as offset; leave _start_time as None so that
+        # warmup_*() and start_logging() work correctly after loading.
         if len(self._time_steps) > 0:
-            self._start_time = time.time() - self._time_steps[-1]
+            self._time_offset = self._time_steps[-1]
         else:
-            self._start_time = time.time()
+            self._time_offset = 0.0
+        self._start_time = None
+
+        # Cache loaded path so subsequent saves overwrite the same file
+        self._cached_save_path = filepath
 
         # Update budget tracking
         if self._max_evals is not None:
@@ -1720,7 +1949,7 @@ class Objective:
             "improvement_count": self.improvement_count,
             "evals_since_improvement": self.evals_since_improvement,
             "budget_exceeded": self.budget_exceeded,
-            "time_exceeded": self._time_exceeded,
+            "time_exceeded": self.time_exceeded,
             "evals_exceeded": self._evals_exceeded,
         }
 
@@ -1731,7 +1960,7 @@ class Objective:
         Does not modify the problem or budget limits.
         """
         self._start_time = None
-        self._time_exceeded = False
+        self._time_offset = 0.0
         self._eval_count = 0
         self._evals_left = self._max_evals
         self._evals_exceeded = False

@@ -70,7 +70,7 @@ class AdamGD(OptimizationAlgorithm):
         optimizer_state = optimizer.init(params)
 
         # Warm-up JIT
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
 
         obj.start_logging()
 

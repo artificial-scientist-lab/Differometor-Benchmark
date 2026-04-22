@@ -25,7 +25,10 @@ Place your algorithm in the appropriate subdirectory:
 ```
 src/dfbench/algorithms/
 ├── evolutionary/        ← population-based (PSO, ES, random search)
-├── gradient_based/      ← uses gradients (Adam, L-BFGS, etc.)
+├── gradient_based/
+│   ├── optax/           ← Optax optimizer wrappers (subclass OptaxAlgorithm)
+│   ├── scipy/           ← SciPy minimize wrappers (subclass ScipyMinimizeAlgorithm)
+│   └── misc/            ← custom optimization loops
 ├── surrogate_based/     ← builds a surrogate model (BO, kNN, etc.)
 └── generative/          ← generative models (VAE, diffusion, etc.)
 ```
@@ -206,7 +209,7 @@ params = obj.random_params_unbounded()             # shape: (n_params,)
 ```python
 obj.warmup_value()                       # single eval path
 obj.warmup_value_and_grad()              # when using gradients
-obj.warmup_vmap_value()                  # for batched methods
+obj.warmup_vmap_value(batch_size=100)    # for batched methods (match your batch size)
 ```
 
 Warmup can take seconds because it triggers JAX compilation. Do this **before** `start_logging()` so the compilation time is not counted against the time budget. The `warmup_*()` helpers use deterministic params internally and run the corresponding path twice.
@@ -281,9 +284,9 @@ while not obj.budget_exceeded:
     obj.log_evaluation(prior_params, loss, grads)  # public API for manual logging
 ```
 
-> **Do NOT call** `obj._log_time()`, `obj._log_evals()`, or `obj._log_to_file()` directly — these are private methods. `log_evaluation()` wraps all three.
+> **Do NOT call** `obj._log()`, `obj._log_evals()`, or `obj._log_to_file()` directly — these are private methods. `log_evaluation()` delegates to `_log()` which coordinates all internal logging.
 
-See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/lbfgs_gd.py` for a complete working example.
+See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/misc/lbfgs_gd.py` for a complete working example.
 
 ---
 
@@ -316,6 +319,26 @@ random_seed, key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 params = obj.random_params_unbounded()
 loss, grad = obj.value_and_grad(params)
 ```
+
+If you need a different transform than sigmoid, configure it explicitly before logging starts. Custom mappings must map to the [0, 1] range; the Objective handles scaling to actual bounds (`bounded = lb + (ub - lb) * f(x)`):
+
+```python
+import jax
+
+# Scalar function — works on floats and arrays alike
+obj.set_space_mode(
+    True,
+    unit_mapping=jax.nn.sigmoid,
+    inverse_unit_mapping=lambda x: jnp.log(x / (1.0 - x)),
+)
+```
+
+Important:
+
+- Always pass both functions together (forward and inverse)
+- The forward maps to [0, 1]; the inverse maps [0, 1] → unbounded. Bounds scaling is handled by `Objective`
+- Functions can be scalar (e.g. `jax.nn.sigmoid`) or element-wise vector; both work because JAX broadcasts element-wise operations. Batching is handled by `Objective` via `jax.vmap`
+- `obj.best_params_bounded` and `obj.random_params_unbounded()` then follow your custom mapping pair
 
 ---
 
