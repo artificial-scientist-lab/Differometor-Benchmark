@@ -17,6 +17,12 @@ class SciPyBudgetExceeded(RuntimeError):
     """Raised inside a SciPy objective/callback when the Objective budget is spent."""
 
 
+# Large but finite penalty returned when the objective produces NaN/Inf.
+# Using ``np.inf`` causes SciPy's derivative-free solvers (Nelder-Mead,
+# Powell, basin-hopping, dual-annealing) to terminate prematurely or crash.
+_NAN_PENALTY = 1e30
+
+
 # ---------------------------------------------------------------------------
 # Bounds helpers
 # ---------------------------------------------------------------------------
@@ -51,8 +57,10 @@ def make_scipy_fun(obj: Objective):
     def fun(x_np: np.ndarray) -> float:
         if obj.budget_exceeded:
             raise SciPyBudgetExceeded
-        loss = obj.value(jnp.asarray(x_np))
-        return float(loss)
+        loss = float(obj.value(jnp.asarray(x_np)))
+        if not np.isfinite(loss):
+            return _NAN_PENALTY
+        return loss
 
     return fun
 
@@ -69,7 +77,11 @@ def make_scipy_fun_and_grad(obj: Objective):
         if obj.budget_exceeded:
             raise SciPyBudgetExceeded
         loss, grad = obj.value_and_grad(jnp.asarray(x_np))
-        return float(loss), np.asarray(grad, dtype=np.float64)
+        loss_f = float(loss)
+        grad_np = np.asarray(grad, dtype=np.float64)
+        if not np.isfinite(loss_f) or not np.all(np.isfinite(grad_np)):
+            return _NAN_PENALTY, np.zeros_like(x_np, dtype=np.float64)
+        return loss_f, grad_np
 
     return fun
 
