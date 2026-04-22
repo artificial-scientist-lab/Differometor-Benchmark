@@ -31,6 +31,11 @@ from dfbench.core.utils import t2j
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 DTYPE = torch.float64
 
+# NaN/Inf handling: perturb the offending point with miniscule Gaussian noise
+# escalating geometrically. Mirrors the optax / nevergrad / OMADS pattern.
+_NAN_PERTURB_BASE = 1e-10
+_MAX_NAN_STREAK = 20
+
 
 def get_problem_bounds_torch(problem, device=DEVICE, dtype=DTYPE):
     """Return problem bounds as a (2, d) torch tensor."""
@@ -58,8 +63,8 @@ def evaluate_objective(
     obj: Objective,
     *,
     negate: bool = True,
-    max_retries: int = 3,
-    perturbation_scale: float = 1e-6,
+    max_retries: int = _MAX_NAN_STREAK,
+    perturbation_scale: float = _NAN_PERTURB_BASE,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Evaluate ``obj`` at normalised inputs *X* ∈ [0, 1]^d.
 
@@ -88,7 +93,8 @@ def evaluate_objective(
         for idx in torch.where(invalid)[0]:
             for retry in range(max_retries):
                 xp = X[idx].clone()
-                xp += torch.randn_like(xp) * perturbation_scale * (retry + 1)
+                scale = perturbation_scale * (2 ** retry)
+                xp += torch.randn_like(xp) * scale
                 xp = torch.clamp(xp, 0.0, 1.0)
                 xp_jax = t2j(unnormalize(xp.unsqueeze(0), bounds).squeeze(0))
                 yr = obj.value(xp_jax)
