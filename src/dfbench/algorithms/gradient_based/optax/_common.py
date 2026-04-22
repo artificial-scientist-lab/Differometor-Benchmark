@@ -58,6 +58,10 @@ def build_optimizer(
 # best-known point (or a fresh random start).
 _MAX_NAN_STREAK: int = 20
 
+# NaN perturbation base scale.  Starts miniscule (1e-10) and doubles each
+# consecutive miss, mirroring the escalation used elsewhere in dfbench.
+_NAN_PERTURB_BASE: float = 1e-10
+
 
 def _is_nonfinite(loss, grads) -> bool:
     """Return True if loss or any gradient entry is NaN or Inf."""
@@ -174,14 +178,15 @@ class OptaxAlgorithm(OptimizationAlgorithm):
                     if best is not None:
                         params = best + jax.random.normal(
                             sub_key, best.shape
-                        ) * learning_rate
+                        ) * _NAN_PERTURB_BASE
                     else:
                         params = obj.random_params_unbounded()
                     opt_state = optimizer.init(params)
                     nan_streak = 0
                 else:
-                    # Escalating perturbation: scale doubles each miss
-                    scale = learning_rate * (2 ** min(nan_streak, 8))
+                    # Escalating perturbation: starts at 1e-10 and doubles
+                    # each consecutive miss (capped at 2**30 ≈ 1e9 growth).
+                    scale = _NAN_PERTURB_BASE * (2 ** min(nan_streak, 30))
                     params = params + jax.random.normal(
                         sub_key, params.shape
                     ) * scale
