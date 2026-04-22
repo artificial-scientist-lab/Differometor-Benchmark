@@ -1,19 +1,10 @@
-"""Tests for the CMA-family algorithm batch.
+"""Algorithm-specific unit tests for the CMA-family algorithm batch.
 
-Covers:
-- Smoke tests for every new algorithm class (instantiation, optimize, basic
-  invariants).
-- Shared parametrised tests against the common algorithm protocol (algorithm_str,
-  algorithm_type, eval_count > 0, best_loss set, loss_history non-empty).
-- Backend-specific checks (bounded mode, init_params acceptance, sigma0
-  plumbing, algorithm_str distinctness).
-
-Tests that actually import optional backends (pycma / cmaes / evosax) are
-skipped gracefully when the dependency is absent so the core CI suite can run
-without all optional packages.
-
-Native JAX algorithms (JAXOnePlusOneES, JAXMuLambdaES) have no external
-dependencies and must pass in all environments.
+These tests cover algorithm-specific knobs that the shared parametrised suite
+in ``test_algorithms_uniform.py`` does not exercise (init params, sigma
+plumbing, restart strategies, pop-size handling, mu/lambda validation).
+Common protocol checks (algorithm_str, eval_count > 0, etc.) are covered by
+the REGISTRY in ``test_algorithms_uniform.py``.
 """
 
 from __future__ import annotations
@@ -21,7 +12,6 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
 
 # ---------------------------------------------------------------------------
@@ -76,114 +66,7 @@ def _make_obj(problem, max_evals: int = _MAX_EVALS):
 
 
 # ---------------------------------------------------------------------------
-# Section A — Common protocol (parametrised across all available backends)
-# ---------------------------------------------------------------------------
-
-
-class TestCmaFamilyProtocol:
-    """Parametrise the standard algorithm invariants across every new class."""
-
-    def _all_classes(self):
-        classes = [JAXOnePlusOneES, JAXMuLambdaES]
-        if pycma_available:
-            classes += [PyCMACMAES, PyCMAActiveCMAES, PyCMAIPOP, PyCMABIPOP]
-        if cmaes_available:
-            classes += [CMAESSepCMA]
-        if evosax_available:
-            classes += [EvosaxMAES, EvosaxLMMAES]
-        return classes
-
-    @pytest.fixture
-    def all_classes(self):
-        return self._all_classes()
-
-    def test_algorithm_str_nonempty(self, mock_problem):
-        """algorithm_str is a non-empty string on all new classes."""
-        for cls in self._all_classes():
-            algo = cls()
-            assert isinstance(algo.algorithm_str, str)
-            assert len(algo.algorithm_str) > 0, f"{cls.__name__}.algorithm_str is empty"
-
-    def test_algorithm_type_evolutionary(self, mock_problem):
-        """algorithm_type is EVOLUTIONARY on all new classes."""
-        for cls in self._all_classes():
-            assert cls.algorithm_type == AlgorithmType.EVOLUTIONARY, cls.__name__
-
-    def test_is_optimization_algorithm(self, mock_problem):
-        """All new classes inherit from OptimizationAlgorithm."""
-        for cls in self._all_classes():
-            assert issubclass(cls, OptimizationAlgorithm), cls.__name__
-
-    def test_eval_count_positive(self, mock_problem):
-        """eval_count > 0 after optimize()."""
-        for cls in self._all_classes():
-            obj = _make_obj(mock_problem)
-            cls().optimize(obj, random_seed=7)
-            assert obj.eval_count > 0, f"{cls.__name__} produced zero evaluations"
-
-    def test_best_loss_set(self, mock_problem):
-        """best_loss is not None after optimize()."""
-        for cls in self._all_classes():
-            obj = _make_obj(mock_problem)
-            cls().optimize(obj, random_seed=7)
-            assert obj.best_loss is not None, f"{cls.__name__} left best_loss as None"
-
-    def test_loss_history_nonempty(self, mock_problem):
-        """loss_history is non-empty after optimize()."""
-        for cls in self._all_classes():
-            obj = _make_obj(mock_problem)
-            cls().optimize(obj, random_seed=7)
-            assert len(obj.loss_history) > 0, f"{cls.__name__} left loss_history empty"
-
-    def test_time_steps_monotonic(self, mock_problem):
-        """time_steps are monotonically non-decreasing."""
-        for cls in self._all_classes():
-            obj = _make_obj(mock_problem)
-            cls().optimize(obj, random_seed=7)
-            ts = obj.time_steps
-            for i in range(1, len(ts)):
-                assert ts[i] >= ts[i - 1], f"{cls.__name__}: time_steps not monotonic"
-
-
-# ---------------------------------------------------------------------------
-# Section B — algorithm_str uniqueness
-# ---------------------------------------------------------------------------
-
-
-class TestAlgorithmStrUniqueness:
-    def test_all_strings_unique(self, mock_problem):
-        """Every new CMA-family class has a distinct algorithm_str."""
-        classes = [JAXOnePlusOneES, JAXMuLambdaES]
-        if pycma_available:
-            classes += [PyCMACMAES, PyCMAActiveCMAES, PyCMAIPOP, PyCMABIPOP]
-        if cmaes_available:
-            classes += [CMAESSepCMA]
-        if evosax_available:
-            classes += [EvosaxMAES, EvosaxLMMAES]
-
-        strings = [cls().algorithm_str for cls in classes]
-        assert len(strings) == len(set(strings)), (
-            f"Duplicate algorithm_str found: {strings}"
-        )
-
-    def test_backend_prefix_in_str(self):
-        """algorithm_str values carry explicit backend prefixes."""
-        if pycma_available:
-            assert PyCMACMAES().algorithm_str.startswith("pycma_")
-            assert PyCMAIPOP().algorithm_str.startswith("pycma_")
-            assert PyCMABIPOP().algorithm_str.startswith("pycma_")
-            assert PyCMAActiveCMAES().algorithm_str.startswith("pycma_")
-        if cmaes_available:
-            assert CMAESSepCMA().algorithm_str.startswith("cmaes_")
-        if evosax_available:
-            assert EvosaxMAES().algorithm_str.startswith("evosax_")
-            assert EvosaxLMMAES().algorithm_str.startswith("evosax_")
-        assert JAXOnePlusOneES().algorithm_str.startswith("jax_")
-        assert JAXMuLambdaES().algorithm_str.startswith("jax_")
-
-
-# ---------------------------------------------------------------------------
-# Section C — pycma-specific tests
+# pycma-specific knobs
 # ---------------------------------------------------------------------------
 
 

@@ -25,6 +25,7 @@ periodically (same behaviour as the legacy ``verbose >= 1`` path).
 
 from __future__ import annotations
 
+import math
 import sys
 import shutil
 import time
@@ -396,6 +397,9 @@ class LiveDisplay:
         except Exception:
             losses = []
 
+        # Filter out non-finite values before building the sparkline.
+        losses = [v for v in losses if isinstance(v, (int, float)) and math.isfinite(v)]
+
         # Deduplicate consecutive equal values (running-minimum trajectory)
         running_min: list[float] = []
         cur_min = float("inf")
@@ -479,12 +483,21 @@ class LogDisplay:
         last_ckpt = obj.last_checkpoint_eval
         avg_batch = (s["eval_count"] / log_calls) if log_calls > 0 else None
 
+        max_evals = obj._max_evals
+        max_time = obj._max_time
+        evals_str = f"{s['eval_count']}"
+        if max_evals is not None:
+            evals_str += f" / {max_evals}"
+        time_str = f"{s['time_elapsed']:.2f}s"
+        if max_time is not None:
+            time_str += f" / {max_time:.0f}s"
+
         parts = [
             "───────────────",
-            f"evals    = {s['eval_count']}",
+            f"evals    = {evals_str}",
             f"best     = {s['best_loss']}",
             f"current  = {s['current_loss']}",
-            f"time     = {s['time_elapsed']:.2f}s",
+            f"time     = {time_str}",
             f"improv   = {s['improvement_count']}",
             f"since    = {s['evals_since_improvement']}",
         ]

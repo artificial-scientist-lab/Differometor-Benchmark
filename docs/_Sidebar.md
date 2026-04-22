@@ -19,6 +19,7 @@
 
 **Contributing**
 - [Implementing a New Algorithm](Implementing-a-New-Algorithm)
+- [Testing](Testing)
 
 **Reference**
 - [Utilities and Helpers](Utilities-and-Helpers)

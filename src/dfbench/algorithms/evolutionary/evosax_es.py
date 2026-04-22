@@ -95,6 +95,23 @@ def _run_evosax_loop(
         rng, ask_rng, tell_rng = jax.random.split(rng, 3)
         x, state = strategy.ask(ask_rng, state, es_params)  # (pop, n)
 
+        # NaN/Inf escape hatch on candidates: when LM-MA-ES (or similar) lets
+        # internal state diverge it can ask for NaN points. Replace those rows
+        # with the current best (or box centre) plus a 1e-10 perturbation so
+        # the strategy keeps moving without recording NaN losses.
+        x_np = np.array(x, copy=True)
+        bad_rows = ~np.all(np.isfinite(x_np), axis=1)
+        if bad_rows.any():
+            if obj.best_params is not None:
+                anchor = np.asarray(obj.best_params, dtype=np.float32)
+            else:
+                anchor = 0.5 * (np.asarray(lb_jnp) + np.asarray(ub_jnp))
+            n_bad = int(bad_rows.sum())
+            iteration_nan_rng = np.random.default_rng(int(jax.random.bits(rng)))
+            noise = iteration_nan_rng.normal(size=(n_bad, x_np.shape[1])) * 1e-10
+            x_np[bad_rows] = anchor + noise.astype(np.float32)
+            x = jnp.asarray(x_np)
+
         # Clip to bounded space before evaluation
         x_clipped = jnp.clip(x, lb_jnp, ub_jnp)
 
@@ -103,6 +120,13 @@ def _run_evosax_loop(
         chunks = [obj.vmap_value(x_clipped[i : i + batch_size])
                   for i in range(0, n_pop, batch_size)]
         fitness = jnp.concatenate(chunks)
+
+        # NaN/Inf escape hatch: replace any non-finite fitness with a large
+        # finite penalty so the strategy's covariance update stays well-posed.
+        # We deliberately do *not* perturb-and-retry here: evosax internal
+        # state already drives sampling, so a large-but-finite penalty steers
+        # the next generation away from the NaN region without corrupting it.
+        fitness = jnp.where(jnp.isfinite(fitness), fitness, jnp.float32(1e30))
 
         state, _ = strategy.tell(tell_rng, x_clipped, fitness, state, es_params)
         iteration += 1

@@ -68,7 +68,7 @@ class RandomSearch(OptimizationAlgorithm):
         lower, upper = problem.bounds[0], problem.bounds[1]
 
         # Warmup JIT
-        _ = obj.vmap_value(jnp.zeros((self.batch_size, problem.n_params)))
+        obj.warmup_vmap_value(batch_size=self.batch_size)
 
         obj.start_logging()
 

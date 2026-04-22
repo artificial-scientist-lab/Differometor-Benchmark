@@ -211,14 +211,14 @@ obj.warmup_grad()
 obj.warmup_hessian()
 obj.warmup_value_and_grad()
 obj.warmup_value_grad_and_hessian()
-obj.warmup_vmap_value()
-obj.warmup_vmap_grad()
-obj.warmup_vmap_hessian()
-obj.warmup_vmap_value_and_grad()
-obj.warmup_vmap_value_grad_and_hessian()
+obj.warmup_vmap_value(batch_size=10)
+obj.warmup_vmap_grad(batch_size=10)
+obj.warmup_vmap_hessian(batch_size=10)
+obj.warmup_vmap_value_and_grad(batch_size=10)
+obj.warmup_vmap_value_grad_and_hessian(batch_size=10)
 ```
 
-Each helper executes the matching path **twice** on deterministic parameters and must be called before `start_logging()`. The batched variants use a deterministic batch of size 2.
+Each helper executes the matching path **twice** on deterministic parameters and must be called before `start_logging()`. The batched variants accept a `batch_size` argument to match the batch size used during optimisation.
 
 ### `reset()`
 
@@ -310,6 +310,8 @@ bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
 | `time_left` | `float \| None` | Seconds remaining. `None` if unlimited. |
 | `time_exceeded` | `bool` | Whether the time cap has been reached. |
 | `time_progress_fraction` | `float` | Fraction of time budget consumed (0–1). |
+| `budget_left_fraction` | `float` | Fraction of the tightest budget remaining. `min(1 - time_progress, 1 - evals_progress)`, considering only budgets that are set. 1.0 when no budget is configured. |
+| `budget_progress_fraction` | `float` | Fraction of the tightest budget consumed (`1 - budget_left_fraction`). 0.0 when no budget is configured. |
 | `budget_exceeded` | `bool` | `True` when **any** budget (time **or** evals) is exhausted. This is the main loop-termination check. |
 
 ### Best Results
@@ -368,9 +370,9 @@ These properties return **copies** to prevent external mutation.
 
 ## I/O Methods
 
-### `save_run_data(algorithm_name, filepath=None, hyper_param_str=None) → Path`
+### `save_run_data(algorithm_name=None, filepath=None, hyper_param_str=None) → Path`
 
-Saves the full optimization state to a compressed NPZ file. Writes atomically (to `.tmp.npz` first, then `os.replace`) to prevent corruption from interrupted HPC jobs.
+Saves the full optimization state to a compressed NPZ file. Writes atomically (to `.tmp.npz` first, then `os.replace`) to prevent corruption from interrupted HPC jobs. If `algorithm_name` is not provided it defaults to `self.algorithm_str` (or `"unknown"` when that is also unset).
 
 Default path: `data/objective_run_data/{budget_dir}/{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`
 
@@ -413,12 +415,12 @@ Returns a snapshot dictionary:
 Every evaluation method follows the same pipeline internally:
 
 1. **Execute** the JAX function (`_func`, `_value_and_grad_func`, `_vmap_func`, etc.)
-2. **`_log_time()`** — record a `time_steps` entry; check time budget.
-3. **`_log_evals(params, loss, grad, hessian)`** — record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget.
+2. **`_log(params, loss, grad, hessian)`** — the coordinator: checks `time_exceeded`, appends to `_time_steps`, then delegates to `_log_evals()` and `_log_to_file()`.
+3. **`_log_evals(params, loss, grad, hessian, time_exceeded)`** — record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget. Receives `time_exceeded` as an explicit parameter from `_log()` to ensure a consistent time snapshot.
 4. **`_log_to_file()`** — if `save_to_file_every` is set, trigger a periodic checkpoint.
 
-> **Important:** These are private methods — do not call `_log_time()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad, hessian=None)` method instead, which wraps all three. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm.md#custom-jit-compiled-loops-with-log_evaluation) for details.
+> **Important:** These are private methods — do not call `_log()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad, hessian=None)` method instead, which delegates to `_log()`. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm.md#custom-jit-compiled-loops-with-log_evaluation) for details.
 
 Budget enforcement happens *after* the evaluation returns. This means the algorithm always receives a valid result, but once any budget is exceeded the history stops growing and `budget_exceeded` becomes `True`.
 
-When a batch evaluation (`vmap_*`) would push `eval_count` past `max_evals`, the evaluations are counted but *not logged*, preserving history alignment and setting the `budget_exceeded` flag to `True`. The `time_steps` entry added by `_log_time()` is also removed to keep all lists in sync. This may be subject to change but in the current setting, this is the most straight-forward way and irrelevant if budged is planned well (reducing population as `evals_left` nears zero).
+When a batch evaluation (`vmap_*`) would push `eval_count` past `max_evals`, the evaluations are counted but *not logged*, preserving history alignment and setting the `budget_exceeded` flag to `True`. The `time_steps` entry added by `_log()` is also removed to keep all lists in sync. This may be subject to change but in the current setting, this is the most straight-forward way and irrelevant if budged is planned well (reducing population as `evals_left` nears zero).
