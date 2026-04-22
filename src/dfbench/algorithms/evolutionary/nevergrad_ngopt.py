@@ -17,6 +17,7 @@ from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
+from dfbench.algorithms.evolutionary._nevergrad_common import safe_evaluate
 
 try:
     import nevergrad as ng
@@ -89,6 +90,8 @@ class NevergradNGOpt(OptimizationAlgorithm):
             if obj.budget_exceeded:
                 break
 
+            rng = np.random.default_rng(random_seed + _restart)
+
             parametrization = ng.p.Array(
                 shape=(n_params,),
                 lower=lb,
@@ -110,10 +113,9 @@ class NevergradNGOpt(OptimizationAlgorithm):
                     break
 
                 candidate = optimizer.ask()
-                params_np = candidate.value
-                params_jax = jnp.asarray(params_np, dtype=jnp.float32)
+                params_np = np.asarray(candidate.value, dtype=np.float64)
 
-                loss = obj.value(params_jax)
+                loss, _ = safe_evaluate(obj, params_np, lb, ub, rng)
 
                 optimizer.tell(candidate, float(loss))
                 step += 1

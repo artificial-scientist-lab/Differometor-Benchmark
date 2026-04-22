@@ -20,6 +20,7 @@ from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
+from dfbench.algorithms.evolutionary._nevergrad_common import safe_evaluate
 
 try:
     import nevergrad as ng
@@ -98,6 +99,8 @@ class NevergradTBPSA(OptimizationAlgorithm):
             if obj.budget_exceeded:
                 break
 
+            rng = np.random.default_rng(random_seed + _restart)
+
             parametrization = ng.p.Array(
                 shape=(n_params,),
                 lower=lb,
@@ -119,17 +122,17 @@ class NevergradTBPSA(OptimizationAlgorithm):
                     break
 
                 candidate = optimizer.ask()
-                params_np = candidate.value
-                params_jax = jnp.asarray(params_np, dtype=jnp.float32)
+                params_np = np.asarray(candidate.value, dtype=np.float64)
 
-                # Repeated evaluations for noise averaging
+                # Repeated evaluations for noise averaging; each evaluation
+                # is NaN-guarded independently.
                 losses = []
                 for _ in range(num_evaluations):
                     if obj.budget_exceeded:
                         break
-                    loss = obj.value(params_jax)
+                    loss, _ = safe_evaluate(obj, params_np, lb, ub, rng)
                     losses.append(float(loss))
 
-                avg_loss = float(np.mean(losses))
+                avg_loss = float(np.mean(losses)) if losses else float("inf")
                 optimizer.tell(candidate, avg_loss)
                 step += 1
