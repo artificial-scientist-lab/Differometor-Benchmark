@@ -25,7 +25,10 @@ Place your algorithm in the appropriate subdirectory:
 ```
 src/dfbench/algorithms/
 ├── evolutionary/        ← population-based (PSO, ES, random search)
-├── gradient_based/      ← uses gradients (Adam, L-BFGS, etc.)
+├── gradient_based/
+│   ├── optax/           ← Optax optimizer wrappers (subclass OptaxAlgorithm)
+│   ├── scipy/           ← SciPy minimize wrappers (subclass ScipyMinimizeAlgorithm)
+│   └── misc/            ← custom optimization loops
 ├── surrogate_based/     ← builds a surrogate model (BO, kNN, etc.)
 └── generative/          ← generative models (VAE, diffusion, etc.)
 ```
@@ -206,7 +209,7 @@ params = obj.random_params_unbounded()             # shape: (n_params,)
 ```python
 obj.warmup_value()                       # single eval path
 obj.warmup_value_and_grad()              # when using gradients
-obj.warmup_vmap_value()                  # for batched methods
+obj.warmup_vmap_value(batch_size=100)    # for batched methods (match your batch size)
 ```
 
 Warmup can take seconds because it triggers JAX compilation. Do this **before** `start_logging()` so the compilation time is not counted against the time budget. The `warmup_*()` helpers use deterministic params internally and run the corresponding path twice.
@@ -281,9 +284,9 @@ while not obj.budget_exceeded:
     obj.log_evaluation(prior_params, loss, grads)  # public API for manual logging
 ```
 
-> **Do NOT call** `obj._log_time()`, `obj._log_evals()`, or `obj._log_to_file()` directly — these are private methods. `log_evaluation()` wraps all three.
+> **Do NOT call** `obj._log()`, `obj._log_evals()`, or `obj._log_to_file()` directly — these are private methods. `log_evaluation()` delegates to `_log()` which coordinates all internal logging.
 
-See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/lbfgs_gd.py` for a complete working example.
+See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/misc/lbfgs_gd.py` for a complete working example.
 
 ---
 

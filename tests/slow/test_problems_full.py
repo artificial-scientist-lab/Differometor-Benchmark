@@ -140,33 +140,33 @@ class TestConstrainedVoyagerProblem:
 
 
 # ======================================================================
-# RandomUIFOProblem (4.16–4.20)
+# UIFOProblem (4.16–4.20)
 # ======================================================================
 
 
-class TestRandomUIFOProblem:
+class TestUIFOProblem:
     def test_initializes(self):
         """4.16 Initializes without error."""
-        from dfbench.problems import RandomUIFOProblem
+        from dfbench.problems import UIFOProblem
 
-        p = RandomUIFOProblem(size=3, topology_seed=42)
+        p = UIFOProblem(size=3, topology_seed=42)
         assert p is not None
 
     def test_bounds_shape(self):
         """4.17 Same shape checks."""
-        from dfbench.problems import RandomUIFOProblem
+        from dfbench.problems import UIFOProblem
 
-        p = RandomUIFOProblem(size=3, topology_seed=42)
+        p = UIFOProblem(size=3, topology_seed=42)
         b = p.bounds
         assert b.shape[0] == 2
         assert jnp.all(b[0] < b[1])
 
     def test_different_topology_seeds(self):
         """4.18 Different topology_seed → different n_params or bounds."""
-        from dfbench.problems import RandomUIFOProblem
+        from dfbench.problems import UIFOProblem
 
-        p1 = RandomUIFOProblem(size=3, topology_seed=42)
-        p2 = RandomUIFOProblem(size=3, topology_seed=99)
+        p1 = UIFOProblem(size=3, topology_seed=42)
+        p2 = UIFOProblem(size=3, topology_seed=99)
         different = (p1.n_params != p2.n_params) or not jnp.allclose(
             p1.bounds, p2.bounds
         )
@@ -174,9 +174,15 @@ class TestRandomUIFOProblem:
 
     def test_same_topology_seeds(self):
         """4.19 Same topology_seed → identical n_params and bounds."""
-        from dfbench.problems import RandomUIFOProblem
+        from dfbench.problems import UIFOProblem
 
-        p1 = RandomUIFOProblem(size=3, topology_seed=42)
-        p2 = RandomUIFOProblem(size=3, topology_seed=42)
+        p1 = UIFOProblem(size=3, topology_seed=42)
+        p2 = UIFOProblem(size=3, topology_seed=42)
         assert p1.n_params == p2.n_params
         np.testing.assert_array_equal(np.array(p1.bounds), np.array(p2.bounds))
+
+    def test_backwards_compat_alias(self):
+        """4.20 RandomUIFOProblem is an alias for UIFOProblem."""
+        from dfbench.problems import RandomUIFOProblem, UIFOProblem
+
+        assert RandomUIFOProblem is UIFOProblem
