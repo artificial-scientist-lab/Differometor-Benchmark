@@ -22,16 +22,16 @@ uv sync
 uv sync --group cuda12
 ```
 
-### With development tools (profiling, notebooks, testing)
+### With analysis tools (profiling, notebooks)
 
 ```bash
-uv sync --group dev
+uv sync --group analysis
 ```
 
-### Everything (GPU + dev)
+### Everything (GPU + analysis)
 
 ```bash
-uv sync --group cuda12 --group dev
+uv sync --group cuda12 --group analysis
 ```
 
 ## Alternative: Install with `pip`

@@ -1,7 +1,72 @@
-"""Gradient-based optimization algorithms."""
+"""Gradient-based optimization algorithms.
 
-from dfbench.algorithms.gradient_based.adam_gd import AdamGD
-from dfbench.algorithms.gradient_based.custom_jax import (
+Organized into three sub-packages:
+  - ``scipy``:  Wrappers around ``scipy.optimize.minimize``.
+  - ``optax``:  Wrappers around Optax first-order optimizers.
+  - ``misc``:   Algorithms with custom training loops.
+
+In addition, :mod:`custom_jax` provides hybrid / variance-reduced JAX
+algorithms (SGLD, ASAM, GD→L-BFGS hand-off, etc.).
+"""
+
+from dfbench.algorithms.gradient_based.scipy import (  # noqa: F401
+    BFGS,
+    COBYLA,
+    COBYQA,
+    Dogleg,
+    LBFGSB,
+    NewtonCG,
+    NonlinearCG,
+    SLSQP,
+    SR1,
+    TNC,
+    TrustConstr,
+    TrustKrylov,
+    TrustNCG,
+)
+from dfbench.algorithms.gradient_based.optax import (  # noqa: F401
+    OptaxAdam,
+    OptaxAdamW,
+    OptaxAdaBelief,
+    OptaxAdafactor,
+    OptaxAMSGrad,
+    OptaxAdaGrad,
+    OptaxAdaDelta,
+    OptaxAdaMax,
+    OptaxAdaMaxW,
+    OptaxAdan,
+    OptaxLion,
+    OptaxLAMB,
+    OptaxNadam,
+    OptaxNadamW,
+    OptaxRMSProp,
+    OptaxRProp,
+    OptaxRAdam,
+    OptaxSGD,
+    OptaxSGDM,
+    OptaxNAG,
+    OptaxNoisySGD,
+    OptaxPolyakSGD,
+    OptaxSAM,
+    OptaxSophia,
+    OptaxLookahead,
+    OptaxScheduleFreeAdam,
+    OptaxYogi,
+    OptaxNovoGrad,
+    OptaxOGD,
+    OptaxOAdam,
+    OptaxSignSGD,
+    OptaxSignum,
+    OptaxSM3,
+)
+from dfbench.algorithms.gradient_based.misc import (  # noqa: F401
+    AdamGD,
+    LBFGSGD,
+    NAAdamGD,
+    OptaxLBFGS,
+    SAGD,
+)
+from dfbench.algorithms.gradient_based.custom_jax import (  # noqa: F401
     ARCJAX,
     ASAMJAX,
     AdamToLBFGSJAX,
@@ -15,11 +80,63 @@ from dfbench.algorithms.gradient_based.custom_jax import (
     SGHMCJAX,
     SGLDJAX,
 )
-from dfbench.algorithms.gradient_based.na_adam_gd import NAAdamGD
-from dfbench.algorithms.gradient_based.sa_gd import SAGD
 
 __all__ = [
+    # SciPy
+    "BFGS",
+    "COBYLA",
+    "COBYQA",
+    "Dogleg",
+    "LBFGSB",
+    "NewtonCG",
+    "NonlinearCG",
+    "SLSQP",
+    "SR1",
+    "TNC",
+    "TrustConstr",
+    "TrustKrylov",
+    "TrustNCG",
+    # Optax
+    "OptaxAdam",
+    "OptaxAdamW",
+    "OptaxAdaBelief",
+    "OptaxAdafactor",
+    "OptaxAMSGrad",
+    "OptaxAdaGrad",
+    "OptaxAdaDelta",
+    "OptaxAdaMax",
+    "OptaxAdaMaxW",
+    "OptaxAdan",
+    "OptaxLion",
+    "OptaxLAMB",
+    "OptaxNadam",
+    "OptaxNadamW",
+    "OptaxRMSProp",
+    "OptaxRProp",
+    "OptaxRAdam",
+    "OptaxSGD",
+    "OptaxSGDM",
+    "OptaxNAG",
+    "OptaxNoisySGD",
+    "OptaxPolyakSGD",
+    "OptaxSAM",
+    "OptaxSophia",
+    "OptaxLookahead",
+    "OptaxScheduleFreeAdam",
+    "OptaxYogi",
+    "OptaxNovoGrad",
+    "OptaxOGD",
+    "OptaxOAdam",
+    "OptaxSignSGD",
+    "OptaxSignum",
+    "OptaxSM3",
+    # Misc
     "AdamGD",
+    "LBFGSGD",
+    "NAAdamGD",
+    "OptaxLBFGS",
+    "SAGD",
+    # Custom JAX hybrid algorithms
     "SGLDJAX",
     "ASAMJAX",
     "AdamToLBFGSJAX",
@@ -32,6 +149,4 @@ __all__ = [
     "NoisyAdamJAX",
     "GDRestartsJAX",
     "GaussianSmoothingGDJAX",
-    "NAAdamGD",
-    "SAGD",
 ]
