@@ -86,8 +86,9 @@ This adds negligible overhead compared to the objective function itself.
 | Problem | Speed | Notes |
 |---------|-------|-------|
 | `VoyagerProblem` | ~12 ms/eval (A100) | Lightweight optimization of the Voyager Setup, good for prototyping, not physics-constrained. Loss < 0 achievable. |
+| `VoyagerTuningProblem` | ~12 ms/eval (A100) | Tuning-only Voyager optimization (6 parameters on key mirrors). Lightweight and good for quick experiments. |
 | `ConstrainedVoyagerProblem` | ~25 ms/eval (A100) | The same setup but physically constrained. Loss < 0 very difficult. |
-| `RandomUIFOProblem` | ~500 ms/eval (A100) | Full 3x3 UIFO setup (constrained). Loss < 0 hard but doable. |
+| `UIFOProblem` | ~500 ms/eval (A100) | Full 3x3 UIFO setup (constrained). Loss < 0 hard but doable. |
 
 Both constrained problems accept a `power_penalty_fn(value, threshold)` callable to control how power-constraint violations are penalized.  Built-in presets: `squashed_relu_penalty` (default), `relu_penalty`, `zero_penalty`. Feel free to try own ones.
 
@@ -104,17 +105,17 @@ See [Problems](docs/Problems.md) for details on loss computation, parameter mean
 [uv](https://uv.dev/) handles virtual environments and dependency resolution automatically.
 
 ```bash
-uv sync                               # CPU-only
-uv sync --group cuda13                # With GPU support (cuda12 also possible)
-uv sync --group debug                 # With debug tools (testing, profiling, notebooks)
-uv sync --group cuda13 --group debug  # Everything
+uv sync                                  # CPU-only
+uv sync --group cuda13                   # With GPU support (cuda12 also possible)
+uv sync --group analysis                 # With analysis tools (profiling, notebooks)
+uv sync --group cuda13 --group analysis  # Everything
 ```
 
 ### With `pip`
 
 ```bash
 pip install -e .                     # Basic
-pip install -e ".[cuda13,debug]"       # Everything
+pip install -e ".[cuda13,analysis]"    # Everything
 ```
 
 See [Installation](docs/Installation.md) for GPU setup details and HPC notes.
@@ -132,7 +133,7 @@ OptimizationAlgorithm.optimize()
    └─────┬─────┘      bounded ↔ unbounded sigmoid transform
          │
          ▼
-  ContinuousProblem        (VoyagerProblem, ConstrainedVoyagerProblem, RandomUIFOProblem)
+  ContinuousProblem        (VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem, UIFOProblem)
          │
          ▼
   Differometor Simulator   (JAX-based interferometer physics)
@@ -155,15 +156,18 @@ src/dfbench/
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
 │   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES
-│   ├── gradient_based/    # AdamGD, SAGD, NAAdamGD, LBFGSGD
+│   ├── gradient_based/
+│   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
+│   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
+│   │   └── misc/          # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, …)
 │   ├── surrogate_based/   # BotorchBO, BotorchTuRBO, ReSTIR
 │   │                      # + BO batch: AxSAASBO, BAxUS, BotorchqNEI,
 │   │                      #   BotorchqKG, REMBO, GEBO, LineBO,
 │   │                      #   HEBO, SMAC, TuRBOLBFGS
 │   └── generative/        # VAESampling
 ├── problems/
-│   ├── voyager/           # VoyagerProblem, ConstrainedVoyagerProblem
-│   └── uifo/             # RandomUIFOProblem
+│   ├── voyager/           # VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem
+    └── uifo/             # UIFOProblem
 └── benchmark/
     ├── benchmark.py       # Benchmark orchestrator
     └── metrics.py         # Metric computation functions
@@ -406,11 +410,12 @@ Execution scripts in `./scripts/`:
 - `voyager_scipy_benchmark.py`: SciPy gradient / trust / constrained batch
 
 Reference implementations worth reading:
-- `adam_gd.py`: gradient-based pattern
-- `_scipy_common.py`: shared SciPy wrapper, caching, and budget handling
-- `random_search.py`: simplest batched example
-- `evox_es.py`: wrapping an external library (EvoX/PyTorch)
-- `botorch_bo.py`: surrogate-based with BoTorch
+- `gradient_based/misc/adam_gd.py`: gradient-based pattern (custom loop)
+- `gradient_based/optax/adam.py`: Optax wrapper pattern (minimal subclass)
+- `gradient_based/scipy/_common.py`: shared SciPy wrapper, caching, and budget handling
+- `evolutionary/random_search.py`: simplest batched example
+- `evolutionary/evox_es.py`: wrapping an external library (EvoX/PyTorch)
+- `surrogate_based/botorch_bo.py`: surrogate-based with BoTorch
 
 ---
 

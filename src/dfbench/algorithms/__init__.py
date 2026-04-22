@@ -3,23 +3,23 @@
 from dfbench.algorithms.evolutionary.evox_es import EvoxES
 from dfbench.algorithms.evolutionary.evox_pso import EvoxPSO
 from dfbench.algorithms.evolutionary.random_search import RandomSearch
-from dfbench.algorithms.gradient_based.adam_gd import AdamGD
-from dfbench.algorithms.gradient_based.bfgs import BFGS
-from dfbench.algorithms.gradient_based.cobyla import COBYLA
-from dfbench.algorithms.gradient_based.cobyqa import COBYQA
-from dfbench.algorithms.gradient_based.dogleg import Dogleg
-from dfbench.algorithms.gradient_based.lbfgs_gd import LBFGSGD
-from dfbench.algorithms.gradient_based.lbfgsb import LBFGSB
-from dfbench.algorithms.gradient_based.na_adam_gd import NAAdamGD
-from dfbench.algorithms.gradient_based.newton_cg import NewtonCG
-from dfbench.algorithms.gradient_based.nonlinear_cg import NonlinearCG
-from dfbench.algorithms.gradient_based.sa_gd import SAGD
-from dfbench.algorithms.gradient_based.slsqp import SLSQP
-from dfbench.algorithms.gradient_based.sr1 import SR1
-from dfbench.algorithms.gradient_based.tnc import TNC
-from dfbench.algorithms.gradient_based.trust_constr import TrustConstr
-from dfbench.algorithms.gradient_based.trust_krylov import TrustKrylov
-from dfbench.algorithms.gradient_based.trust_ncg import TrustNCG
+from dfbench.algorithms.gradient_based.misc.adam_gd import AdamGD
+from dfbench.algorithms.gradient_based.scipy.bfgs import BFGS
+from dfbench.algorithms.gradient_based.scipy.cobyla import COBYLA
+from dfbench.algorithms.gradient_based.scipy.cobyqa import COBYQA
+from dfbench.algorithms.gradient_based.scipy.dogleg import Dogleg
+from dfbench.algorithms.gradient_based.misc.lbfgs_gd import LBFGSGD
+from dfbench.algorithms.gradient_based.scipy.lbfgsb import LBFGSB
+from dfbench.algorithms.gradient_based.misc.na_adam_gd import NAAdamGD
+from dfbench.algorithms.gradient_based.scipy.newton_cg import NewtonCG
+from dfbench.algorithms.gradient_based.scipy.nonlinear_cg import NonlinearCG
+from dfbench.algorithms.gradient_based.misc.sa_gd import SAGD
+from dfbench.algorithms.gradient_based.scipy.slsqp import SLSQP
+from dfbench.algorithms.gradient_based.scipy.sr1 import SR1
+from dfbench.algorithms.gradient_based.scipy.tnc import TNC
+from dfbench.algorithms.gradient_based.scipy.trust_constr import TrustConstr
+from dfbench.algorithms.gradient_based.scipy.trust_krylov import TrustKrylov
+from dfbench.algorithms.gradient_based.scipy.trust_ncg import TrustNCG
 from dfbench.algorithms.surrogate_based.botorch_bo import BotorchBO
 from dfbench.algorithms.surrogate_based.botorch_turbo import BotorchTuRBO
 from dfbench.algorithms.surrogate_based.restir import ReSTIR
@@ -32,6 +32,39 @@ from dfbench.algorithms.surrogate_based.botorch_linebo import LineBO
 from dfbench.algorithms.surrogate_based.hebo_bo import HEBO
 from dfbench.algorithms.surrogate_based.turbo_lbfgs import TuRBOLBFGS
 from dfbench.algorithms.generative.vae_sampling import VAESampling
+
+# Optax
+from dfbench.algorithms.gradient_based.optax.adam import OptaxAdam
+from dfbench.algorithms.gradient_based.optax.adamw import OptaxAdamW
+from dfbench.algorithms.gradient_based.optax.adabelief import OptaxAdaBelief
+from dfbench.algorithms.gradient_based.optax.adafactor import OptaxAdafactor
+from dfbench.algorithms.gradient_based.optax.amsgrad import OptaxAMSGrad
+from dfbench.algorithms.gradient_based.optax.adagrad import OptaxAdaGrad
+from dfbench.algorithms.gradient_based.optax.adadelta import OptaxAdaDelta
+from dfbench.algorithms.gradient_based.optax.adamax import OptaxAdaMax
+from dfbench.algorithms.gradient_based.optax.adamaxw import OptaxAdaMaxW
+from dfbench.algorithms.gradient_based.optax.adan import OptaxAdan
+from dfbench.algorithms.gradient_based.optax.lion import OptaxLion
+from dfbench.algorithms.gradient_based.optax.lamb import OptaxLAMB
+from dfbench.algorithms.gradient_based.optax.nadam import OptaxNadam
+from dfbench.algorithms.gradient_based.optax.nadamw import OptaxNadamW
+from dfbench.algorithms.gradient_based.optax.rmsprop import OptaxRMSProp
+from dfbench.algorithms.gradient_based.optax.rprop import OptaxRProp
+from dfbench.algorithms.gradient_based.optax.radam import OptaxRAdam
+from dfbench.algorithms.gradient_based.optax.sgd import OptaxSGD, OptaxSGDM, OptaxNAG
+from dfbench.algorithms.gradient_based.optax.noisy_sgd import OptaxNoisySGD
+from dfbench.algorithms.gradient_based.optax.polyak_sgd import OptaxPolyakSGD
+from dfbench.algorithms.gradient_based.optax.sam import OptaxSAM
+from dfbench.algorithms.gradient_based.optax.sophia import OptaxSophia
+from dfbench.algorithms.gradient_based.optax.lookahead import OptaxLookahead
+from dfbench.algorithms.gradient_based.optax.schedule_free_adam import OptaxScheduleFreeAdam
+from dfbench.algorithms.gradient_based.optax.yogi import OptaxYogi
+from dfbench.algorithms.gradient_based.optax.novograd import OptaxNovoGrad
+from dfbench.algorithms.gradient_based.optax.ogd import OptaxOGD
+from dfbench.algorithms.gradient_based.optax.oadam import OptaxOAdam
+from dfbench.algorithms.gradient_based.optax.sign import OptaxSignSGD, OptaxSignum
+from dfbench.algorithms.gradient_based.optax.sm3 import OptaxSM3
+from dfbench.algorithms.gradient_based.misc.optax_lbfgs import OptaxLBFGS
 
 # External-package algorithms: imported only when their dependencies exist.
 try:
@@ -79,4 +112,39 @@ __all__ = [
     "SMAC",
     "TuRBOLBFGS",
     "VAESampling",
+    # Optax batch
+    "OptaxAdam",
+    "OptaxAdamW",
+    "OptaxAdaBelief",
+    "OptaxAdafactor",
+    "OptaxAMSGrad",
+    "OptaxAdaGrad",
+    "OptaxAdaDelta",
+    "OptaxAdaMax",
+    "OptaxAdaMaxW",
+    "OptaxAdan",
+    "OptaxLion",
+    "OptaxLAMB",
+    "OptaxNadam",
+    "OptaxNadamW",
+    "OptaxRMSProp",
+    "OptaxRProp",
+    "OptaxRAdam",
+    "OptaxSGD",
+    "OptaxSGDM",
+    "OptaxNAG",
+    "OptaxNoisySGD",
+    "OptaxPolyakSGD",
+    "OptaxSAM",
+    "OptaxSophia",
+    "OptaxLookahead",
+    "OptaxScheduleFreeAdam",
+    "OptaxYogi",
+    "OptaxNovoGrad",
+    "OptaxOGD",
+    "OptaxOAdam",
+    "OptaxSignSGD",
+    "OptaxSignum",
+    "OptaxSM3",
+    "OptaxLBFGS",
 ]

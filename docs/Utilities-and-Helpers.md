@@ -132,6 +132,6 @@ Algorithm and problem concrete classes are available from their subpackages:
 
 ```python
 from dfbench.algorithms import AdamGD, EvoxPSO, BotorchBO, ...
-from dfbench.problems import VoyagerProblem, ConstrainedVoyagerProblem, RandomUIFOProblem
+from dfbench.problems import VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem, UIFOProblem
 from dfbench.benchmark import Benchmark, AlgorithmConfig, BenchmarkResult
 ```

@@ -183,9 +183,8 @@ class ReSTIR(OptimizationAlgorithm):
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         # 3. JIT warmup (before start_logging so compilation time is excluded)
-        _warmup_batch = obj.random_params_bounded(n_samples=self.batch_size)
-        _ = obj.vmap_value(_warmup_batch)
-        _ = obj.vmap_grad(_warmup_batch)
+        obj.warmup_vmap_value(batch_size=self.batch_size)
+        obj.warmup_vmap_grad(batch_size=self.batch_size)
 
         # 4. Start logging
         obj.start_logging()

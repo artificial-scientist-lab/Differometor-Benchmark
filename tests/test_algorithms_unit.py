@@ -1,180 +1,59 @@
-"""Section 7 — Algorithm unit tests with mock problem.
+"""Algorithm-specific unit tests.
 
-Tests 7.1–7.32: common checks, gradient-based, evolutionary, surrogate, generative.
+The cross-algorithm baseline (smoke run, bounds, monotonic time, etc.)
+lives in ``tests/test_algorithms_uniform.py``. This module is for tests
+that exercise *one* algorithm's internals — helpers, knobs, validation
+errors — and that do not generalise.
+
+When you add a new algorithm, put its algorithm-specific tests here.
+One class per algorithm, named after the algorithm.
 """
 
 from __future__ import annotations
 
+from scipy.optimize import SR1 as ScipySR1
+
 import numpy as np
 import pytest
 
-from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
+from dfbench.algorithms import (
+    Dogleg,
+    EvoxES,
+    EvoxPSO,
+    OptaxLBFGS,
+    OptaxLookahead,
+    OptaxPolyakSGD,
+    OptaxSAM,
+    OptaxSophia,
+    OptaxAdamW,
+    OptaxAdaBelief,
+    OptaxNoisySGD,
+    RandomSearch,
+    SAGD,
+    SR1,
+)
 from dfbench.core.objective import Objective
 
-# ── Import all algorithm classes ──────────────────────────────────────
 
-from dfbench.algorithms import (
-    AdamGD,
-    SAGD,
-    NAAdamGD,
-    LBFGSGD,
-    RandomSearch,
-    EvoxES,
-    EvoxPSO,
-    BotorchBO,
-    BotorchTuRBO,
-    ReSTIR,
-    VAESampling,
-)
-
-# ── Parametrised list of all algorithms ───────────────────────────────
-
-ALL_ALGORITHMS = [
-    AdamGD,
-    SAGD,
-    NAAdamGD,
-    LBFGSGD,
-    RandomSearch,
-    EvoxES,
-    EvoxPSO,
-    BotorchBO,
-    BotorchTuRBO,
-    ReSTIR,
-    VAESampling,
-]
-
-GRADIENT_ALGORITHMS = [AdamGD, SAGD, NAAdamGD, LBFGSGD]
-EVOLUTIONARY_ALGORITHMS = [RandomSearch, EvoxES, EvoxPSO]
-SURROGATE_ALGORITHMS = [BotorchBO, BotorchTuRBO, ReSTIR]
-GENERATIVE_ALGORITHMS = [VAESampling]
-
-
-# ======================================================================
-# Common checks (7.1–7.7)
-# ======================================================================
-
-
-class TestCommonChecks:
-    @pytest.mark.parametrize("cls", ALL_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_algorithm_str(self, cls):
-        """7.1 algorithm_str is a non-empty string."""
-        algo = cls()
-        assert isinstance(algo.algorithm_str, str) and len(algo.algorithm_str) > 0
-
-    @pytest.mark.parametrize("cls", ALL_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_algorithm_type(self, cls):
-        """7.2 algorithm_type is a valid AlgorithmType."""
-        algo = cls()
-        assert isinstance(algo.algorithm_type, AlgorithmType)
-
-    @staticmethod
-    def _optimize_kwargs(cls):
-        """Return extra kwargs needed by algorithms with required params."""
-        if cls in (BotorchBO, BotorchTuRBO):
-            return {"max_iterations": 2, "n_initial": 5}
-        return {}
-
-    @pytest.mark.parametrize("cls", ALL_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_optimize_produces_evals(self, cls, mock_problem):
-        """7.3 After optimize(), eval_count > 0."""
-        algo = cls()
-        obj = Objective(mock_problem, max_evals=30, max_time=60)
-        algo.optimize(obj, random_seed=42, **self._optimize_kwargs(cls))
-        assert obj.eval_count > 0
-
-    @pytest.mark.parametrize("cls", ALL_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_best_loss_not_none(self, cls, mock_problem):
-        """7.4 After optimize(), best_loss is not None."""
-        algo = cls()
-        obj = Objective(mock_problem, max_evals=30, max_time=60)
-        algo.optimize(obj, random_seed=42, **self._optimize_kwargs(cls))
-        assert obj.best_loss is not None
-
-    @pytest.mark.parametrize("cls", ALL_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_loss_history_non_empty(self, cls, mock_problem):
-        """7.5 After optimize(), loss_history is non-empty."""
-        algo = cls()
-        obj = Objective(mock_problem, max_evals=30, max_time=60)
-        algo.optimize(obj, random_seed=42, **self._optimize_kwargs(cls))
-        assert len(obj.loss_history) > 0
-
-    @pytest.mark.parametrize("cls", ALL_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_time_steps_monotonic(self, cls, mock_problem):
-        """7.6 time_steps monotonically non-decreasing."""
-        algo = cls()
-        obj = Objective(mock_problem, max_evals=30, max_time=60)
-        algo.optimize(obj, random_seed=42, **self._optimize_kwargs(cls))
-        ts = obj.time_steps
-        assert len(ts) > 0
-        for i in range(1, len(ts)):
-            assert ts[i] >= ts[i - 1]
-
-    @pytest.mark.parametrize(
-        "cls",
-        [AdamGD, RandomSearch],
-        ids=lambda c: c.__name__,
-    )
-    def test_reproducibility(self, cls, mock_problem):
-        """7.7 Two runs with same seed produce identical loss_history."""
-        algo1 = cls()
-        obj1 = Objective(mock_problem, max_evals=15, max_time=60)
-        algo1.optimize(obj1, random_seed=42, **self._optimize_kwargs(cls))
-
-        algo2 = cls()
-        obj2 = Objective(mock_problem, max_evals=15, max_time=60)
-        algo2.optimize(obj2, random_seed=42, **self._optimize_kwargs(cls))
-
-        np.testing.assert_allclose(
-            [float(l) for l in obj1.loss_history],
-            [float(l) for l in obj2.loss_history],
-            atol=1e-5,
-        )
-
-
-# ======================================================================
-# Gradient-based (7.8–7.16)
-# ======================================================================
-
-
-class TestGradientBased:
-    @pytest.mark.parametrize("cls", GRADIENT_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_algorithm_type(self, cls):
-        """7.8 algorithm_type is GRADIENT_BASED."""
-        assert cls.algorithm_type == AlgorithmType.GRADIENT_BASED
-
-    @pytest.mark.parametrize("cls", GRADIENT_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_unbounded_mode(self, cls, mock_problem):
-        """7.9 prepare() sets obj.unbounded = True."""
-        algo = cls()
-        obj = Objective(mock_problem, max_evals=10, max_time=60)
-        algo.optimize(obj, random_seed=42)
-        assert obj.unbounded is True
-
-    @pytest.mark.parametrize("cls", GRADIENT_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_best_params_bounded(self, cls, mock_problem):
-        """7.10 best_params_bounded is within problem bounds."""
-        algo = cls()
-        obj = Objective(mock_problem, max_evals=10, max_time=60)
-        algo.optimize(obj, random_seed=42)
-        bp = obj.best_params_bounded
-        bounds = mock_problem.bounds
-        assert np.all(np.array(bp) >= np.array(bounds[0]) - 1e-6)
-        assert np.all(np.array(bp) <= np.array(bounds[1]) + 1e-6)
+# ── SAGD: simulated-annealing transition probability ─────────────────
 
 
 class TestSAGD:
-    def test_transition_probability_range(self, mock_problem):
-        """7.12 SAGD transition probability is in [0, 1]."""
+    def test_transition_probability_range(self):
+        """``_compute_transition_probability`` is a probability in [0, 1]
+        across a wide range of energy gaps and epochs."""
         algo = SAGD()
         for delta_e in [0.001, 0.1, 1.0, 10.0]:
             for epoch in [0, 10, 100, 1000]:
                 p = algo._compute_transition_probability(
                     delta_e=delta_e, epoch=epoch, T0=1.0, learning_rate=0.01
                 )
-                assert 0.0 <= p <= 1.0, f"p={p} for delta_e={delta_e}, epoch={epoch}"
+                assert 0.0 <= p <= 1.0, (
+                    f"p={p} for delta_e={delta_e}, epoch={epoch}"
+                )
 
-    def test_double_annealing(self, mock_problem):
-        """7.13 Double-annealing mode returns valid probability."""
+    def test_double_annealing(self):
+        """The double-annealing branch also returns a valid probability."""
         algo = SAGD()
         p = algo._compute_transition_probability(
             delta_e=0.5,
@@ -188,10 +67,12 @@ class TestSAGD:
         assert 0.0 <= p <= 1.0
 
 
+# ── NAAdamGD: noise-annealing schedule ────────────────────────────────
+
+
 class TestNAAdamGD:
     def test_anneal_sigma_positive(self):
-        """7.14 _anneal_sigma returns > 0 for progress in [0, 1)."""
-        from dfbench.algorithms.gradient_based.na_adam_gd import _anneal_sigma
+        from dfbench.algorithms.gradient_based.misc.na_adam_gd import _anneal_sigma
 
         for progress in [0.0, 0.1, 0.5, 0.9]:
             sigma = _anneal_sigma(
@@ -200,8 +81,7 @@ class TestNAAdamGD:
             assert sigma > 0, f"sigma={sigma} at progress={progress}"
 
     def test_anneal_sigma_exponential(self):
-        """7.14b Exponential schedule also returns positive."""
-        from dfbench.algorithms.gradient_based.na_adam_gd import _anneal_sigma
+        from dfbench.algorithms.gradient_based.misc.na_adam_gd import _anneal_sigma
 
         sigma = _anneal_sigma(
             0.5, sigma_start=0.1, sigma_end=0.001, schedule="exponential"
@@ -209,63 +89,31 @@ class TestNAAdamGD:
         assert sigma > 0
 
 
-# ======================================================================
-# Evolutionary (7.17–7.22)
-# ======================================================================
+# ── Evolutionary: variant validation and batched eval semantics ──────
 
 
 class TestEvolutionary:
-    @pytest.mark.parametrize("cls", EVOLUTIONARY_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_algorithm_type(self, cls):
-        """7.17 algorithm_type is EVOLUTIONARY."""
-        assert cls.algorithm_type == AlgorithmType.EVOLUTIONARY
-
-    @pytest.mark.parametrize("cls", EVOLUTIONARY_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_bounded_mode(self, cls, mock_problem):
-        """7.18 prepare() sets obj.unbounded = False."""
-        algo = cls()
-        obj = Objective(mock_problem, max_evals=30, max_time=60)
-        algo.optimize(obj, random_seed=42)
-        assert obj.unbounded is False
-
-    def test_random_search_eval_count(self, mock_problem):
-        """7.19 RandomSearch: eval_count == batch_size * iterations."""
+    def test_random_search_batches_evals(self, mock_problem):
+        """RandomSearch reports its batched evals, not just one per iter."""
         algo = RandomSearch(batch_size=10)
-        max_evals = 50
-        obj = Objective(mock_problem, max_evals=max_evals, max_time=60)
+        obj = Objective(mock_problem, max_evals=50, max_time=60)
         algo.optimize(obj, random_seed=42)
-        # eval_count should reflect all attempted evaluations
         assert obj.eval_count > 0
 
     def test_evox_es_invalid_variant(self):
-        """7.20 EvoxES: invalid variant string raises ValueError."""
         with pytest.raises((ValueError, KeyError)):
-            algo = EvoxES(variant="nonexistent_variant")
-            obj = Objective.__new__(Objective)
-            # Trigger validation on optimize if not in __init__
+            EvoxES(variant="nonexistent_variant")
 
     def test_evox_pso_invalid_variant(self):
-        """7.21 EvoxPSO: invalid variant string raises ValueError."""
         with pytest.raises((ValueError, KeyError)):
-            algo = EvoxPSO(variant="nonexistent_variant")
-            obj = Objective.__new__(Objective)
+            EvoxPSO(variant="nonexistent_variant")
 
 
-# ======================================================================
-# Surrogate-based (7.23–7.28)
-# ======================================================================
-
-
-class TestSurrogateBased:
-    @pytest.mark.parametrize("cls", SURROGATE_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_algorithm_type(self, cls):
-        """7.23 algorithm_type is SURROGATE_BASED."""
-        assert cls.algorithm_type == AlgorithmType.SURROGATE_BASED
+# ── ReSTIR helpers: kNN, standardisation, importance ─────────────────
 
 
 class TestReSTIRHelpers:
     def test_knn_predict_shape(self):
-        """7.26 knn_predict returns shape (M,) for M queries."""
         import jax.numpy as jnp
         from dfbench.algorithms.surrogate_based.restir import knn_predict
 
@@ -276,7 +124,6 @@ class TestReSTIRHelpers:
         assert preds.shape == (3,)
 
     def test_standardize_data(self):
-        """7.27 standardize_data output has mean ≈ 0, std ≈ 1."""
         import jax.numpy as jnp
         from dfbench.algorithms.surrogate_based.restir import standardize_data
 
@@ -285,8 +132,7 @@ class TestReSTIRHelpers:
         np.testing.assert_allclose(float(jnp.mean(X_scaled)), 0.0, atol=1e-5)
         np.testing.assert_allclose(float(jnp.std(X_scaled)), 1.0, atol=0.2)
 
-    def test_importance(self):
-        """7.28 importance with tau=1 returns exp(-loss)."""
+    def test_importance_with_unit_temperature(self):
         import jax.numpy as jnp
         from dfbench.algorithms.surrogate_based.restir import importance
 
@@ -296,20 +142,11 @@ class TestReSTIRHelpers:
         np.testing.assert_allclose(np.array(result), np.array(expected), atol=1e-6)
 
 
-# ======================================================================
-# Generative (7.29–7.32)
-# ======================================================================
-
-
-class TestGenerative:
-    def test_algorithm_type(self):
-        """7.29 algorithm_type is GENERATIVE."""
-        assert VAESampling.algorithm_type == AlgorithmType.GENERATIVE
+# ── VAE helpers: forward, loss, training loop ────────────────────────
 
 
 class TestVAEHelpers:
     def test_resnet_vae_forward(self):
-        """7.30 ResNetVAE forward returns (recon, mu, logvar) correct shapes."""
         import torch
         from dfbench.algorithms.generative.vae_sampling import ResNetVAE
 
@@ -323,7 +160,6 @@ class TestVAEHelpers:
         assert logvar.shape == (5, 4)
 
     def test_vae_loss_function(self):
-        """7.31 vae_loss_function returns (total, recon, kld) — all finite."""
         import torch
         from dfbench.algorithms.generative.vae_sampling import (
             ResNetVAE,
@@ -341,7 +177,6 @@ class TestVAEHelpers:
         assert torch.isfinite(kld)
 
     def test_train_vae_no_crash(self):
-        """7.32 train_vae does not crash on small synthetic data."""
         import torch
         from torch.utils.data import DataLoader, TensorDataset
         from dfbench.algorithms.generative.vae_sampling import ResNetVAE, train_vae
@@ -351,8 +186,102 @@ class TestVAEHelpers:
         loader = DataLoader(dataset, batch_size=5, shuffle=True)
         model = ResNetVAE(input_dim=10, latent_dim=4, hidden_dim=32, num_res_blocks=1)
         train_vae(model, loader, epochs=2, device="cpu", verbose=False)
-        # Verify loss decreased by running inference
         model.eval()
         with torch.no_grad():
             recon, mu, logvar = model(data)
         assert torch.isfinite(recon).all()
+
+
+# ── Optax: algorithm-specific knobs ──────────────────────────────────
+
+# Algorithms that should make noticeable progress on the 2D quadratic
+# within a small budget. This is a stronger claim than "it runs without
+# crashing"; it verifies the optimizer actually moves downhill.
+LOSS_IMPROVING_OPTAX = [
+    OptaxAdamW,
+    OptaxAdaBelief,
+    OptaxNoisySGD,
+    OptaxPolyakSGD,
+    OptaxSAM,
+    OptaxSophia,
+    OptaxLBFGS,
+]
+
+
+class TestOptaxLossImproves:
+    @pytest.mark.parametrize("cls", LOSS_IMPROVING_OPTAX, ids=lambda c: c.__name__)
+    def test_best_loss_below_initial(self, cls, mock_problem):
+        algo = cls()
+        obj = Objective(mock_problem, max_evals=50, max_time=120)
+        algo.optimize(obj, random_seed=42)
+        history = [float(l) for l in obj.loss_history if l is not None]
+        assert len(history) >= 2
+        assert min(history) < history[0], (
+            f"{cls.__name__}: best loss {min(history):.6f} did not improve "
+            f"over initial {history[0]:.6f}"
+        )
+
+
+class TestOptaxSAM:
+    def test_custom_rho_runs(self, mock_problem):
+        algo = OptaxSAM()
+        obj = Objective(mock_problem, max_evals=20, max_time=60)
+        algo.optimize(obj, random_seed=42, rho=0.1)
+        assert obj.eval_count > 0
+
+
+class TestOptaxLookahead:
+    def test_alternative_inner_optimizer(self, mock_problem):
+        algo = OptaxLookahead()
+        obj = Objective(mock_problem, max_evals=15, max_time=60)
+        algo.optimize(obj, random_seed=42, inner_optimizer_name="adamw")
+        assert obj.eval_count > 0
+
+    def test_unknown_inner_optimizer_raises(self, mock_problem):
+        algo = OptaxLookahead()
+        obj = Objective(mock_problem, max_evals=10, max_time=60)
+        with pytest.raises(ValueError, match="Unknown inner optimizer"):
+            algo.optimize(obj, random_seed=42, inner_optimizer_name="nonexistent")
+
+
+class TestOptaxPolyakSGD:
+    def test_custom_f_min(self, mock_problem):
+        algo = OptaxPolyakSGD()
+        obj = Objective(mock_problem, max_evals=15, max_time=60)
+        algo.optimize(obj, random_seed=42, f_min=0.0)
+        assert obj.eval_count > 0
+
+
+class TestOptaxSophia:
+    def test_custom_gamma(self, mock_problem):
+        algo = OptaxSophia()
+        obj = Objective(mock_problem, max_evals=15, max_time=60)
+        algo.optimize(obj, random_seed=42, gamma=0.05)
+        assert obj.eval_count > 0
+
+
+# ── SciPy: method-specific behaviour ────────────────────────────────
+
+
+class TestDogleg:
+    def test_logs_dense_hessian(self, mock_problem):
+        """Dogleg requires a dense Hessian; the adapter must log it."""
+        obj = Objective(
+            mock_problem,
+            max_evals=30,
+            max_time=60.0,
+            save_hessian_history=True,
+        )
+        Dogleg().optimize(obj, random_seed=42)
+        assert len(obj.hessian_history) > 0
+        assert any(entry is not None for entry in obj.hessian_history)
+
+
+class TestSR1:
+    def test_uses_sr1_hessian_update_strategy(self, mock_problem):
+        """The SR1 wrapper must pass a ``scipy.optimize.SR1`` strategy to SciPy."""
+        obj = Objective(mock_problem, max_evals=30, max_time=60.0)
+        algo = SR1()
+        algo.optimize(obj, random_seed=42)
+        assert isinstance(algo._last_hessian_update_strategy, ScipySR1)
+
