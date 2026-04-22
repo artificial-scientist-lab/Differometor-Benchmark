@@ -24,9 +24,9 @@ from dfbench.algorithms.surrogate_based.botorch_bo import BotorchBO
 from dfbench.algorithms.surrogate_based.botorch_turbo import BotorchTuRBO
 from dfbench.algorithms.surrogate_based.restir import ReSTIR
 from dfbench.algorithms.generative.vae_sampling import VAESampling
-from dfbench.algorithms.derivative_free.pdfo_uobyqa import PDFOUOBYQA
-from dfbench.algorithms.derivative_free.pdfo_newuoa import PDFONEWUOA
-from dfbench.algorithms.derivative_free.pdfo_lincoa import PDFOLINCOA
+from dfbench.algorithms.derivative_free.pdfo.uobyqa import PDFOUOBYQA
+from dfbench.algorithms.derivative_free.pdfo.newuoa import PDFONEWUOA
+from dfbench.algorithms.derivative_free.pdfo.lincoa import PDFOLINCOA
 from dfbench.algorithms.derivative_free.pybobyqa import PyBOBYQA
 
 # Optax
