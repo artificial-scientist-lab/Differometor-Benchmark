@@ -32,7 +32,7 @@ from dfbench.algorithms import (
     SAGD,
     SR1,
 )
-from dfbench.algorithms.direct_search.omads_mads import OmadsMADS, OmadsOrthoMADS
+from dfbench.algorithms.derivative_free.omads_mads import OmadsMADS, OmadsOrthoMADS
 from dfbench.core.objective import Objective
 
 

@@ -1,6 +1,6 @@
 """Optimization algorithms."""
 
-from dfbench.algorithms.direct_search.omads_mads import OmadsMADS, OmadsOrthoMADS
+from dfbench.algorithms.derivative_free.omads_mads import OmadsMADS, OmadsOrthoMADS
 from dfbench.algorithms.evolutionary.evox_es import EvoxES
 from dfbench.algorithms.evolutionary.evox_pso import EvoxPSO
 from dfbench.algorithms.evolutionary.random_search import RandomSearch
