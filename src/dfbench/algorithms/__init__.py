@@ -2,9 +2,9 @@
 
 from dfbench.algorithms.evolutionary.evox_es import EvoxES
 from dfbench.algorithms.evolutionary.evox_pso import EvoxPSO
-from dfbench.algorithms.evolutionary.nevergrad_ngopt import NevergradNGOpt
-from dfbench.algorithms.evolutionary.nevergrad_oneplusone import NevergradOnePlusOne
-from dfbench.algorithms.evolutionary.nevergrad_tbpsa import NevergradTBPSA
+from dfbench.algorithms.evolutionary.nevergrad.ngopt import NevergradNGOpt
+from dfbench.algorithms.evolutionary.nevergrad.oneplusone import NevergradOnePlusOne
+from dfbench.algorithms.evolutionary.nevergrad.tbpsa import NevergradTBPSA
 from dfbench.algorithms.evolutionary.random_search import RandomSearch
 from dfbench.algorithms.gradient_based.misc.adam_gd import AdamGD
 from dfbench.algorithms.gradient_based.scipy.bfgs import BFGS

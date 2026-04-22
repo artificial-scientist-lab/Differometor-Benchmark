@@ -20,7 +20,7 @@ from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.algorithms.evolutionary._nevergrad_common import safe_evaluate
+from dfbench.algorithms.evolutionary.nevergrad._common import safe_evaluate
 
 try:
     import nevergrad as ng
