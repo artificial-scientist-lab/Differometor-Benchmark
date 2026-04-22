@@ -1,11 +1,15 @@
 """UIFO optimization problems."""
 
-from dfbench.problems.uifo.random_uifo_problem import RandomUIFOProblem
-
-# Backwards compatibility alias
-UIFOProblem = RandomUIFOProblem
+from dfbench.problems.uifo.uifo_problem import (
+    UIFOProblem,
+    RandomUIFOProblem,
+    topology_to_string,
+    topology_from_string,
+)
 
 __all__ = [
-    "RandomUIFOProblem",
     "UIFOProblem",
+    "RandomUIFOProblem",
+    "topology_to_string",
+    "topology_from_string",
 ]

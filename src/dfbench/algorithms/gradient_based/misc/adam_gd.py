@@ -60,7 +60,7 @@ class AdamGD(OptimizationAlgorithm):
         random_seed, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         if init_params is None:
-            params = obj.random_params_unbounded() * (1 + 1e-8)
+            params = obj.random_params_unbounded()
         else:
             params = init_params
 
@@ -70,7 +70,7 @@ class AdamGD(OptimizationAlgorithm):
         optimizer_state = optimizer.init(params)
 
         # Warm-up JIT
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
 
         obj.start_logging()
 
