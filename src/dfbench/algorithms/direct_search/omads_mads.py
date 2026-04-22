@@ -45,8 +45,10 @@ try:
     if not hasattr(_samplers, "sampling") and hasattr(_samplers, "Sampling"):
         _samplers.sampling = _samplers.Sampling
 
-    from OMADS.MADS import main as _mads_main
-    from OMADS.POLL import main as _poll_main
+    import OMADS as _omads_pkg
+
+    _mads_main = _omads_pkg.mads.main
+    _poll_main = _omads_pkg.poll.main
 except Exception as exc:  # pragma: no cover
     _OMADS_IMPORT_ERROR = str(exc)
     _mads_main = None  # type: ignore[assignment]
@@ -118,7 +120,32 @@ def _run_omads(
 
     # --- blackbox callable ---------------------------------------------------
 
-    def _blackbox(x: list[float], *argv: Any) -> list[Any]:
+    # NaN/Inf escape hatch: when the objective returns a non-finite value we
+    # perturb the candidate by Gaussian noise whose scale starts at 1e-10 and
+    # doubles per attempt. Perturbations are clipped to the box. After
+    # ``_MAX_NAN_STREAK`` failures we return a large finite penalty so MADS
+    # can keep its mesh state consistent.
+    _NAN_PERTURB_BASE = 1e-10
+    _MAX_NAN_STREAK = 20
+    _NAN_PENALTY = 1e30
+    rng = np.random.default_rng(seed)
+
+    def _safe_eval(x: np.ndarray) -> float:
+        loss = float(obj.value(jnp.asarray(x, dtype=jnp.float32)))
+        if np.isfinite(loss):
+            return loss
+        cur = x.astype(np.float64)
+        for k in range(_MAX_NAN_STREAK):
+            if obj.budget_exceeded:
+                break
+            scale = _NAN_PERTURB_BASE * (2 ** k)
+            perturbed = np.clip(cur + rng.normal(size=cur.shape) * scale, lower, upper)
+            loss = float(obj.value(jnp.asarray(perturbed, dtype=jnp.float32)))
+            if np.isfinite(loss):
+                return loss
+        return _NAN_PENALTY
+
+    def _blackbox(x: list[float]) -> list[Any]:
         """Blackbox evaluation for OMADS.
 
         Returns [f_val, [0.0]] (no constraints).
@@ -126,13 +153,7 @@ def _run_omads(
         if obj.budget_exceeded:
             return [float("inf"), [0.0]]
 
-        params = jnp.array(x, dtype=jnp.float32)
-        loss = obj.value(params)
-        loss_val = float(loss)
-
-        if np.isnan(loss_val) or np.isinf(loss_val):
-            return [float("inf"), [0.0]]
-        return [loss_val, [0.0]]
+        return [_safe_eval(np.asarray(x, dtype=np.float64)), [0.0]]
 
     # --- build config dict ---------------------------------------------------
 
@@ -150,7 +171,7 @@ def _run_omads(
             "var_names": [f"x{i}" for i in range(n_params)],
             "scaling": scaling,
             "post_dir": post_dir,
-            "Failure_stop": False,
+            "failure_stop": False,
         },
         "options": {
             "seed": seed,
@@ -177,8 +198,10 @@ def _run_omads(
     try:
         run_fn(config)
     except Exception:
-        # OMADS can raise on extreme mesh refinement or numerical edge cases.
-        # The Objective already logged all evaluations; we just return.
+        # OMADS can raise on extreme mesh refinement, when budget is exhausted
+        # mid-poll, or on numerical edge cases (e.g. matrix singularities).
+        # All evaluations performed so far have already been logged via the
+        # Objective; we just stop the run here.
         pass
 
     # --- cleanup temp files --------------------------------------------------
