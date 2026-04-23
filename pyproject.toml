@@ -26,7 +26,12 @@ dependencies = [
     "cma>=3.3.0",
     "cmaes>=0.10.0",
     "evosax>=0.1.6",
+    "pdfo>=2.2.0",
+    "ax-platform>=1.2.4",
 ]
+
+[project.optional-dependencies]
+smac = ["smac>=2.4.0"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dfbench"]
