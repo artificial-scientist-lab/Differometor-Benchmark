@@ -55,6 +55,7 @@ class SciPyObjectiveAdapter:
             self._value_and_grad_fn = jax.jit(jax.value_and_grad(func))
 
         if config.use_hessp:
+
             def _value_grad_and_hessp(params, vector):
                 value, grad = jax.value_and_grad(func)(params)
                 hessp = jax.jvp(grad_fn, (params,), (vector,))[1]
@@ -67,6 +68,7 @@ class SciPyObjectiveAdapter:
             self._hessp_only_fn = jax.jit(_hessp_only)
 
         if config.use_dense_hessian:
+
             def _value_grad_and_hessian(params):
                 value, grad = jax.value_and_grad(func)(params)
                 hessian = jax.hessian(func)(params)
@@ -221,7 +223,9 @@ class SciPyObjectiveAdapter:
     def hessp(self, x: np.ndarray, vector: np.ndarray) -> np.ndarray:
         """SciPy ``hessp`` callback with explicit logging."""
         if self._value_grad_and_hessp_fn is None or self._hessp_only_fn is None:
-            raise RuntimeError("hessp() requested, but this adapter was not configured.")
+            raise RuntimeError(
+                "hessp() requested, but this adapter was not configured."
+            )
 
         x_np = self._to_numpy_vector(x)
         vector_np = self._to_numpy_vector(vector)
@@ -231,7 +235,9 @@ class SciPyObjectiveAdapter:
 
         if self._same_point(x_np):
             hessp = self._hessp_only_fn(jnp.asarray(x_np), jnp.asarray(vector_np))
-            self.obj.log_evaluation(jnp.asarray(x_np), self._latest_loss, self._latest_grad)
+            self.obj.log_evaluation(
+                jnp.asarray(x_np), self._latest_loss, self._latest_grad
+            )
         else:
             loss, grad, hessp = self._value_grad_and_hessp_fn(
                 jnp.asarray(x_np),
@@ -318,7 +324,9 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
         hessian_update_strategy: object | None = None,
     ) -> None:
         obj = problem_objective
-        self.prepare(obj, unbounded=self.scipy_config.unbounded, random_seed=random_seed)
+        self.prepare(
+            obj, unbounded=self.scipy_config.unbounded, random_seed=random_seed
+        )
 
         x0 = np.asarray(self._resolve_init_params(obj, init_params), dtype=float)
         adapter = SciPyObjectiveAdapter(

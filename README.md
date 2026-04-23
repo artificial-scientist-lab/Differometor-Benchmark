@@ -164,6 +164,9 @@ src/dfbench/
 │   │   ├── misc/          # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, …)
 │   │   └── custom_jax.py  # Native-JAX custom/hybrid batch (SGLD, ASAM, GD→L-BFGS, …)
 │   ├── surrogate_based/   # BotorchBO, BotorchTuRBO, ReSTIR
+│   │                      # + BO batch: AxSAASBO, BAxUS, BotorchqNEI,
+│   │                      #   BotorchqKG, REMBO, GEBO, LineBO,
+│   │                      #   HEBO, SMAC, TuRBOLBFGS
 │   └── generative/        # VAESampling
 ├── problems/
 │   ├── voyager/           # VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem
@@ -424,6 +427,11 @@ See [Objective API Reference](docs/Objective-API-Reference.md) for the complete 
 | `NevergradOnePlusOne`, `NevergradTBPSA`, `NevergradNGOpt` | Evolutionary | Nevergrad rugged-landscape baselines |
 | `BotorchBO` | Surrogate | Sample-efficient Bayesian Optimization |
 | `BotorchTuRBO` | Surrogate | Trust-region BO for high dimensions |
+| `BotorchqNEI`, `BotorchqKG` | Surrogate | Noise-aware / lookahead BoTorch acquisitions |
+| `BAxUS`, `AxSAASBO` | Surrogate | High-dim Ax/BoTorch BO (subspace / sparse-axis) |
+| `REMBO`, `GEBO`, `LineBO` | Surrogate | Embedding / gradient / line-search BO variants |
+| `TuRBOLBFGS` | Surrogate | TuRBO basin-finding + L-BFGS refinement |
+| `HEBO`, `SMAC` | Surrogate | External BO packages (HEBO, SMAC3) |
 | `ReSTIR` | Surrogate | GPU-native kNN surrogate, scales to 100k+ candidates |
 | `VAESampling` | Generative | Latent-space compression + BO |
 

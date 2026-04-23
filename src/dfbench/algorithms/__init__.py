@@ -54,6 +54,14 @@ from dfbench.algorithms.gradient_based.scipy.trust_ncg import TrustNCG
 from dfbench.algorithms.surrogate_based.botorch_bo import BotorchBO
 from dfbench.algorithms.surrogate_based.botorch_turbo import BotorchTuRBO
 from dfbench.algorithms.surrogate_based.restir import ReSTIR
+from dfbench.algorithms.surrogate_based.ax_baxus import BAxUS
+from dfbench.algorithms.surrogate_based.botorch_qnei import BotorchqNEI
+from dfbench.algorithms.surrogate_based.botorch_qkg import BotorchqKG
+from dfbench.algorithms.surrogate_based.botorch_rembo import REMBO
+from dfbench.algorithms.surrogate_based.botorch_gebo import GEBO
+from dfbench.algorithms.surrogate_based.botorch_linebo import LineBO
+from dfbench.algorithms.surrogate_based.hebo_bo import HEBO
+from dfbench.algorithms.surrogate_based.turbo_lbfgs import TuRBOLBFGS
 from dfbench.algorithms.generative.vae_sampling import VAESampling
 from dfbench.algorithms.derivative_free.pdfo.uobyqa import PDFOUOBYQA
 from dfbench.algorithms.derivative_free.pdfo.newuoa import PDFONEWUOA
@@ -92,6 +100,17 @@ from dfbench.algorithms.gradient_based.optax.oadam import OptaxOAdam
 from dfbench.algorithms.gradient_based.optax.sign import OptaxSignSGD, OptaxSignum
 from dfbench.algorithms.gradient_based.optax.sm3 import OptaxSM3
 from dfbench.algorithms.gradient_based.misc.optax_lbfgs import OptaxLBFGS
+
+# External-package algorithms: imported only when their dependencies exist.
+try:
+    from dfbench.algorithms.surrogate_based.ax_saasbo import AxSAASBO
+except ImportError:
+    pass
+
+try:
+    from dfbench.algorithms.surrogate_based.smac_bo import SMAC
+except ImportError:
+    pass
 
 __all__ = [
     "BasinHopping",
@@ -147,6 +166,16 @@ __all__ = [
     "BotorchBO",
     "BotorchTuRBO",
     "ReSTIR",
+    "AxSAASBO",
+    "BAxUS",
+    "BotorchqNEI",
+    "BotorchqKG",
+    "REMBO",
+    "GEBO",
+    "LineBO",
+    "HEBO",
+    "SMAC",
+    "TuRBOLBFGS",
     "VAESampling",
     "PDFOUOBYQA",
     "PDFONEWUOA",
