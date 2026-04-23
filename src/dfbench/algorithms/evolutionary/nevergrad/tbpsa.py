@@ -106,6 +106,11 @@ class NevergradTBPSA(OptimizationAlgorithm):
                 lower=lb,
                 upper=ub,
             )
+            # Per-coordinate mutation scale: without this, Nevergrad uses an
+            # isotropic unit-Gaussian step in physical space, which is wildly
+            # mis-scaled on problems like Voyager where bound widths span
+            # several orders of magnitude.
+            parametrization.set_mutation(sigma=(0.3 * (ub - lb)))
 
             optimizer = ng.optimizers.TBPSA(
                 parametrization=parametrization,

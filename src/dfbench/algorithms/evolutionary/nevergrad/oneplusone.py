@@ -98,6 +98,14 @@ class NevergradOnePlusOne(OptimizationAlgorithm):
                 lower=lb,
                 upper=ub,
             )
+            # Per-coordinate mutation scale.  Without this, Nevergrad uses an
+            # isotropic unit-Gaussian step in physical space, which is wildly
+            # mis-scaled on problems like Voyager where bound widths span
+            # several orders of magnitude.  We also start small (5% of each
+            # box width): a (1+1)-ES with a large initial step has a vanishing
+            # acceptance probability in moderate-to-high dimensions and would
+            # waste many evaluations just shrinking sigma via the 1/5 rule.
+            parametrization.set_mutation(sigma=(0.05 * (ub - lb)))
 
             optimizer = ng.optimizers.OnePlusOne(
                 parametrization=parametrization,
