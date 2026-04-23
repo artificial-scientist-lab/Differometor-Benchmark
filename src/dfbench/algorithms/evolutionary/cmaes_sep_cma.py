@@ -93,7 +93,10 @@ class CMAESSepCMA(OptimizationAlgorithm):
             init_params: Initial mean vector.  Sampled uniformly in bounds
                 when ``None``.
             random_seed: Seed for reproducibility.
-            sigma0: Initial step size.  Defaults to ``0.3 × mean(ub - lb)``.
+            sigma0: Initial step size, as a dimensionless fraction of the
+                unit cube (the search is performed in ``[0, 1]^n`` and
+                mapped to physical bounds at evaluation time).  Defaults to
+                ``0.3``.
             pop_size: Population size λ.  If ``None``, the ``cmaes`` library
                 uses its default (``4 + floor(3·ln n)``).
             max_iterations: Maximum number of CMA generations.  ``None``
@@ -106,25 +109,35 @@ class CMAESSepCMA(OptimizationAlgorithm):
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
-        np.random.seed(random_seed)
 
         lb_np = np.asarray(problem.bounds[0])
         ub_np = np.asarray(problem.bounds[1])
+        width = ub_np - lb_np
         n = problem.n_params
 
+        # The cmaes package has no per-coordinate sigma.  On problems where
+        # bound widths span orders of magnitude (e.g. Voyager), running the
+        # CMA search directly in physical coordinates means a single scalar
+        # ``sigma`` cannot be reasonable for every axis simultaneously.  We
+        # therefore run the search in the unit cube [0, 1]^n and map to
+        # physical space only when evaluating the Objective.
         if init_params is None:
-            x0 = np.random.uniform(lb_np, ub_np, size=n)
+            x0_unit = np.random.uniform(0.0, 1.0, size=n)
         else:
-            x0 = np.clip(np.asarray(init_params, dtype=float), lb_np, ub_np)
+            x0_phys = np.clip(np.asarray(init_params, dtype=float), lb_np, ub_np)
+            x0_unit = (x0_phys - lb_np) / width
 
-        sigma = sigma0 if sigma0 is not None else float(np.mean(0.3 * (ub_np - lb_np)))
+        # sigma is now a dimensionless fraction of the unit cube.
+        sigma = sigma0 if sigma0 is not None else 0.3
         batch_size = self._batch_size
 
-        # Build bounds array for cmaes: shape (n, 2)
-        bounds_array = np.stack([lb_np, ub_np], axis=1)  # (n, 2)
+        # Bounds in unit space for cmaes' internal repair.
+        bounds_array = np.stack(
+            [np.zeros(n), np.ones(n)], axis=1
+        )  # (n, 2)
 
         optimizer = SepCMA(
-            mean=x0,
+            mean=x0_unit,
             sigma=sigma,
             bounds=bounds_array,
             population_size=pop_size,
@@ -146,11 +159,14 @@ class CMAESSepCMA(OptimizationAlgorithm):
             if optimizer.should_stop():
                 break
 
-            # Collect the full population before evaluating (enables batching)
-            candidates = [optimizer.ask() for _ in range(actual_pop)]
-            candidates_clipped = [np.clip(x, lb_np, ub_np) for x in candidates]
+            # Collect the full population in unit space, then map to physical
+            # space for evaluation.  Covariance updates stay in unit space.
+            candidates_unit = [
+                np.clip(optimizer.ask(), 0.0, 1.0) for _ in range(actual_pop)
+            ]
+            candidates_phys = [lb_np + c * width for c in candidates_unit]
 
-            batch = jnp.asarray(np.stack(candidates_clipped))
+            batch = jnp.asarray(np.stack(candidates_phys))
             # Evaluate in chunks of batch_size
             all_losses = []
             for i in range(0, actual_pop, batch_size):
@@ -159,7 +175,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
             losses_jnp = jnp.concatenate(all_losses)
             losses = np.asarray(losses_jnp).tolist()
 
-            solutions = list(zip(candidates_clipped, losses))
+            solutions = list(zip(candidates_unit, losses))
             optimizer.tell(solutions)
 
             iteration += 1
