@@ -283,17 +283,15 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         _ = _lbfgs_step(params, warm_state)
         obj.start_logging()
 
-        initial_budget = obj.evals_left
-        if initial_budget is None:
-            adam_budget = min_adam_steps
-        else:
-            target = int(max(1, round(float(initial_budget) * adam_fraction)))
-            adam_budget = min(max(1, target), max(1, initial_budget - 1))
-            adam_budget = max(adam_budget, min_adam_steps)
-
         # Stage 1: Adam exploration
+        # Use Objective's tightest-budget fraction so this works uniformly for
+        # eval-bounded, time-bounded, or both-bounded runs. min_adam_steps acts
+        # as a floor so Stage 1 always gets a minimum amount of exploration.
         adam_steps = 0
-        while not obj.budget_exceeded and adam_steps < adam_budget:
+        while not obj.budget_exceeded and (
+            obj.budget_progress_fraction < adam_fraction
+            or adam_steps < min_adam_steps
+        ):
             loss, grad = obj.value_and_grad(params)
             if patience is not None and obj.evals_since_improvement > patience:
                 break
