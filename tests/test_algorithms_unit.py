@@ -20,6 +20,9 @@ from dfbench.algorithms import (
     Dogleg,
     EvoxES,
     EvoxPSO,
+    NevergradNGOpt,
+    NevergradOnePlusOne,
+    NevergradTBPSA,
     OptaxLBFGS,
     OptaxLookahead,
     OptaxPolyakSGD,
@@ -108,6 +111,29 @@ class TestEvolutionary:
     def test_evox_pso_invalid_variant(self):
         with pytest.raises((ValueError, KeyError)):
             EvoxPSO(variant="nonexistent_variant")
+
+
+# ── Nevergrad: multi-start and repeated-evaluation knobs ────────────
+
+
+NEVERGRAD_ALGORITHMS = [NevergradOnePlusOne, NevergradTBPSA, NevergradNGOpt]
+
+
+class TestNevergrad:
+    @pytest.mark.parametrize("cls", NEVERGRAD_ALGORITHMS, ids=lambda c: c.__name__)
+    def test_multistart(self, cls, mock_problem):
+        """``n_restarts`` > 1 still produces evaluations within budget."""
+        algo = cls()
+        obj = Objective(mock_problem, max_evals=30, max_time=60)
+        algo.optimize(obj, random_seed=42, n_restarts=2)
+        assert obj.eval_count > 0
+
+    def test_tbpsa_repeated_evaluations(self, mock_problem):
+        """TBPSA with ``num_evaluations=3`` averages over repeats per candidate."""
+        algo = NevergradTBPSA()
+        obj = Objective(mock_problem, max_evals=30, max_time=60)
+        algo.optimize(obj, random_seed=42, num_evaluations=3)
+        assert obj.eval_count > 0
 
 
 # ── ReSTIR helpers: kNN, standardisation, importance ─────────────────

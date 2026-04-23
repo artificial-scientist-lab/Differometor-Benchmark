@@ -156,7 +156,7 @@ src/dfbench/
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
 │   ├── derivative_free/   # OmadsMADS, OmadsOrthoMADS
-│   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES
+│   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES, Nevergrad baselines
 │   ├── gradient_based/
 │   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
 │   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
