@@ -160,7 +160,8 @@ src/dfbench/
 │   ├── gradient_based/
 │   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
 │   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
-│   │   └── misc/          # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, …)
+│   │   ├── misc/          # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, …)
+│   │   └── custom_jax.py  # Native-JAX custom/hybrid batch (SGLD, ASAM, GD→L-BFGS, …)
 │   ├── surrogate_based/   # BotorchBO, BotorchTuRBO, ReSTIR
 │   └── generative/        # VAESampling
 ├── problems/
@@ -236,6 +237,21 @@ benchmark.print_summary(results)
 - `save_run_data`: Persists raw loss/params/time histories to NPZ files for later re-evaluation.
 
 See [Benchmarking](docs/Benchmarking.md) for full configuration options and [Metrics Reference](docs/Metrics-Reference.md) for what gets computed.
+
+### Native-JAX Custom/Hybrid Batch
+
+The gradient-based package now also includes native-JAX custom/hybrid classes:
+
+- `SGLDJAX`, `ASAMJAX`, `AdamToLBFGSJAX`, `EntropySGDJAX`, `SGHMCJAX`
+- `OGDJAX`, `OAdamJAX`, `PerturbedGDJAX`, `NoisyAdamJAX`
+- `GDRestartsJAX`, `GaussianSmoothingGDJAX`
+
+`ARCJAX` is currently exposed but intentionally raises `NotImplementedError`
+to fail loudly until a stable, benchmark-fair ARC implementation is available.
+
+All of the above default to unbounded optimization mode and rely on
+`Objective` for logging/budget tracking. For a ready-to-run benchmark example,
+see `scripts/voyager_native_jax_custom_batch.py`.
 
 ---
 

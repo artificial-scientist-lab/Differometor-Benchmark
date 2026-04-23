@@ -4,6 +4,9 @@ Organized into three sub-packages:
   - ``scipy``:  Wrappers around ``scipy.optimize.minimize``.
   - ``optax``:  Wrappers around Optax first-order optimizers.
   - ``misc``:   Algorithms with custom training loops.
+
+In addition, :mod:`custom_jax` provides hybrid / variance-reduced JAX
+algorithms (SGLD, ASAM, GD→L-BFGS hand-off, etc.).
 """
 
 from dfbench.algorithms.gradient_based.scipy import (  # noqa: F401
@@ -63,6 +66,20 @@ from dfbench.algorithms.gradient_based.misc import (  # noqa: F401
     OptaxLBFGS,
     SAGD,
 )
+from dfbench.algorithms.gradient_based.custom_jax import (  # noqa: F401
+    ARCJAX,
+    ASAMJAX,
+    AdamToLBFGSJAX,
+    EntropySGDJAX,
+    GDRestartsJAX,
+    GaussianSmoothingGDJAX,
+    NoisyAdamJAX,
+    OAdamJAX,
+    OGDJAX,
+    PerturbedGDJAX,
+    SGHMCJAX,
+    SGLDJAX,
+)
 
 __all__ = [
     # SciPy
@@ -119,4 +136,17 @@ __all__ = [
     "NAAdamGD",
     "OptaxLBFGS",
     "SAGD",
+    # Custom JAX hybrid algorithms
+    "SGLDJAX",
+    "ASAMJAX",
+    "AdamToLBFGSJAX",
+    "EntropySGDJAX",
+    "SGHMCJAX",
+    "ARCJAX",
+    "OGDJAX",
+    "OAdamJAX",
+    "PerturbedGDJAX",
+    "NoisyAdamJAX",
+    "GDRestartsJAX",
+    "GaussianSmoothingGDJAX",
 ]

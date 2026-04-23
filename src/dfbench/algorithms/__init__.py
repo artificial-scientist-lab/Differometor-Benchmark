@@ -17,6 +17,20 @@ from dfbench.algorithms.evolutionary.cmaes_sep_cma import CMAESSepCMA
 from dfbench.algorithms.evolutionary.evosax_es import EvosaxMAES, EvosaxLMMAES
 from dfbench.algorithms.evolutionary.jax_es import JAXOnePlusOneES, JAXMuLambdaES
 from dfbench.algorithms.gradient_based.misc.adam_gd import AdamGD
+from dfbench.algorithms.gradient_based.custom_jax import (
+    ARCJAX,
+    ASAMJAX,
+    AdamToLBFGSJAX,
+    EntropySGDJAX,
+    GDRestartsJAX,
+    GaussianSmoothingGDJAX,
+    NoisyAdamJAX,
+    OAdamJAX,
+    OGDJAX,
+    PerturbedGDJAX,
+    SGHMCJAX,
+    SGLDJAX,
+)
 from dfbench.algorithms.gradient_based.scipy.bfgs import BFGS
 from dfbench.algorithms.gradient_based.scipy.cobyla import COBYLA
 from dfbench.algorithms.gradient_based.scipy.cobyqa import COBYQA
@@ -90,6 +104,18 @@ __all__ = [
     "JAXOnePlusOneES",
     "JAXMuLambdaES",
     "AdamGD",
+    "SGLDJAX",
+    "ASAMJAX",
+    "AdamToLBFGSJAX",
+    "EntropySGDJAX",
+    "SGHMCJAX",
+    "ARCJAX",
+    "OGDJAX",
+    "OAdamJAX",
+    "PerturbedGDJAX",
+    "NoisyAdamJAX",
+    "GDRestartsJAX",
+    "GaussianSmoothingGDJAX",
     "BFGS",
     "COBYLA",
     "COBYQA",
