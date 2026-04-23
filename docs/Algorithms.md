@@ -400,6 +400,42 @@ optimizer.optimize(
 | `max_iterations` | `None` | Total ask/tell cap across restarts. |
 
 **Rationale — why include NGOpt?** It represents Nevergrad's best automatic guess for a given problem. Comparing it against hand-tuned algorithms reveals whether manual algorithm selection adds value.
+
+---
+
+## Powell-Style Trust-Region DFO (PDFO / Py-BOBYQA)
+
+Model-based derivative-free trust-region solvers by M. J. D. Powell.  All run in **bounded physical space** with multistart restarts.  Each call solves a quadratic model in a shrinking trust region; convergence is local but very precise on smooth landscapes.
+
+**Required packages** (install with `uv add pdfo Py-BOBYQA`):
+- `pdfo` — for `PDFOUOBYQA`, `PDFONEWUOA`, `PDFOLINCOA`
+- `Py-BOBYQA` — for `PyBOBYQA`
+
+```python
+from dfbench.algorithms import PDFOUOBYQA, PDFONEWUOA, PDFOLINCOA, PyBOBYQA
+```
+
+| Algorithm | Constraint support | Notes |
+|-----------|-------------------|-------|
+| `PDFOUOBYQA` | unconstrained | Quadratic interpolation, ``2n+1`` points. |
+| `PDFONEWUOA` | unconstrained | Powell's NEWUOA, sparser interpolation. |
+| `PDFOLINCOA` | bounds + linear | Reads `problem.linear_constraints` (`A_ub @ x <= b_ub`) when present. |
+| `PyBOBYQA`  | bounds | BOBYQA with optional softmax-style restart heuristics. |
+
+Common hyperparameters (passed at construction):
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `radius_init` | 10% of mean bound range | Initial trust-region radius. |
+| `radius_final` | `1e-6` | Convergence tolerance on radius. |
+| `npt` | `2*n+1` | Number of interpolation points (PDFO solvers). |
+| `n_restarts` | `1` | Multistart restarts within evaluation budget. |
+
+```python
+optimizer = PDFOLINCOA(radius_init=0.5, n_restarts=3)
+optimizer.optimize(problem_objective=obj, random_seed=42)
+```
+
 ---
 
 ## CMA-Family Algorithms (pycma / cmaes / evosax / native JAX)

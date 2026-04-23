@@ -155,7 +155,7 @@ src/dfbench/
 │   ├── objective.py       # Objective wrapper (central piece)
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
-│   ├── derivative_free/   # OmadsMADS, OmadsOrthoMADS
+│   ├── derivative_free/   # OmadsMADS, OmadsOrthoMADS, PDFO (UOBYQA/NEWUOA/LINCOA), PyBOBYQA
 │   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES, Nevergrad, CMA family
 │   ├── gradient_based/
 │   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
@@ -416,6 +416,9 @@ See [Objective API Reference](docs/Objective-API-Reference.md) for the complete 
 | `EvosaxLMMAES` | Evolutionary | Limited-Memory MA-ES for high dimensions (evosax) |
 | `JAXOnePlusOneES` | Evolutionary | (1+1)-ES with 1/5 rule, native JAX |
 | `JAXMuLambdaES` | Evolutionary | (μ,λ)-ES with truncation selection, native JAX |
+| `OmadsMADS`, `OmadsOrthoMADS` | Derivative-Free | MADS / OrthoMADS direct search (OMADS) |
+| `PDFOUOBYQA`, `PDFONEWUOA`, `PDFOLINCOA`, `PyBOBYQA` | Derivative-Free | Powell-style trust-region DFO (PDFO + Py-BOBYQA) |
+| `NevergradOnePlusOne`, `NevergradTBPSA`, `NevergradNGOpt` | Evolutionary | Nevergrad rugged-landscape baselines |
 | `BotorchBO` | Surrogate | Sample-efficient Bayesian Optimization |
 | `BotorchTuRBO` | Surrogate | Trust-region BO for high dimensions |
 | `ReSTIR` | Surrogate | GPU-native kNN surrogate, scales to 100k+ candidates |

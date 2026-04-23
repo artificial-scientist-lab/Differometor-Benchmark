@@ -96,7 +96,11 @@ from dfbench.algorithms import (
     OptaxSignum,
     OptaxSophia,
     OptaxYogi,
+    PDFOLINCOA,
+    PDFONEWUOA,
+    PDFOUOBYQA,
     PerturbedGDJAX,
+    PyBOBYQA,
     PyCMAActiveCMAES,
     PyCMABIPOP,
     PyCMACMAES,
@@ -254,6 +258,11 @@ REGISTRY: list[AlgoSpec] = [
     AlgoSpec(EvosaxLMMAES,     AlgorithmType.EVOLUTIONARY, unbounded=False),
     AlgoSpec(JAXOnePlusOneES,  AlgorithmType.EVOLUTIONARY, unbounded=False),
     AlgoSpec(JAXMuLambdaES,    AlgorithmType.EVOLUTIONARY, unbounded=False),
+    # -- derivative-free / Powell DFO ----------------------------------------
+    AlgoSpec(PDFOUOBYQA,   AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(PDFONEWUOA,   AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(PDFOLINCOA,   AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(PyBOBYQA,     AlgorithmType.EVOLUTIONARY, unbounded=False),
     # -- surrogate-based ------------------------------------------------------
     AlgoSpec(BotorchBO,    AlgorithmType.SURROGATE_BASED, unbounded=False,
              extra_kwargs=_botorch_kwargs),
