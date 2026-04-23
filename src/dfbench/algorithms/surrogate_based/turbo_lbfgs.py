@@ -25,12 +25,12 @@ from jaxtyping import Array, Float
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
 from dfbench.core.utils import t2j, inverse_sigmoid_bounding
-from dfbench.algorithms.surrogate_based.botorch_turbo import (
+from dfbench.algorithms.surrogate_based.botorch.botorch_turbo import (
     BotorchTuRBO,
     TurboState,
     update_turbo_state,
 )
-from dfbench.algorithms.surrogate_based._botorch_common import (
+from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     DEVICE,
     DTYPE,
     evaluate_objective,

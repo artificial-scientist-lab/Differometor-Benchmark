@@ -22,11 +22,11 @@ from dfbench.problems import VoyagerProblem
 from dfbench.benchmark import Benchmark, AlgorithmConfig
 
 # ── Always-available BoTorch algorithms ──────────────────────────────
-from dfbench.algorithms.surrogate_based.botorch_qnei import BotorchqNEI
-from dfbench.algorithms.surrogate_based.botorch_qkg import BotorchqKG
-from dfbench.algorithms.surrogate_based.botorch_rembo import REMBO
-from dfbench.algorithms.surrogate_based.botorch_gebo import GEBO
-from dfbench.algorithms.surrogate_based.botorch_linebo import LineBO
+from dfbench.algorithms.surrogate_based.botorch.botorch_qnei import BotorchqNEI
+from dfbench.algorithms.surrogate_based.botorch.botorch_qkg import BotorchqKG
+from dfbench.algorithms.surrogate_based.botorch.botorch_rembo import REMBO
+from dfbench.algorithms.surrogate_based.botorch.botorch_gebo import GEBO
+from dfbench.algorithms.surrogate_based.botorch.botorch_linebo import LineBO
 from dfbench.algorithms.surrogate_based.ax_baxus import BAxUS
 from dfbench.algorithms.surrogate_based.turbo_lbfgs import TuRBOLBFGS
 

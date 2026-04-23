@@ -80,7 +80,7 @@ class TestSAGD:
 
 class TestNAAdamGD:
     def test_anneal_sigma_positive(self):
-        from dfbench.algorithms.gradient_based.misc.na_adam_gd import _anneal_sigma
+        from dfbench.algorithms.gradient_based.na_adam_gd import _anneal_sigma
 
         for progress in [0.0, 0.1, 0.5, 0.9]:
             sigma = _anneal_sigma(
@@ -89,7 +89,7 @@ class TestNAAdamGD:
             assert sigma > 0, f"sigma={sigma} at progress={progress}"
 
     def test_anneal_sigma_exponential(self):
-        from dfbench.algorithms.gradient_based.misc.na_adam_gd import _anneal_sigma
+        from dfbench.algorithms.gradient_based.na_adam_gd import _anneal_sigma
 
         sigma = _anneal_sigma(
             0.5, sigma_start=0.1, sigma_end=0.001, schedule="exponential"

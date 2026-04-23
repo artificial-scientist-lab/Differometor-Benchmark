@@ -161,12 +161,15 @@ src/dfbench/
 │   ├── gradient_based/
 │   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
 │   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
-│   │   ├── misc/          # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, …)
-│   │   └── custom_jax.py  # Native-JAX custom/hybrid batch (SGLD, ASAM, GD→L-BFGS, …)
-│   ├── surrogate_based/   # BotorchBO, BotorchTuRBO, ReSTIR
-│   │                      # + BO batch: AxSAASBO, BAxUS, BotorchqNEI,
-│   │                      #   BotorchqKG, REMBO, GEBO, LineBO,
-│   │                      #   HEBO, SMAC, TuRBOLBFGS
+│   │   ├── custom_jax.py  # Native-JAX custom/hybrid batch (SGLD, ASAM, GD→L-BFGS, …)
+│   │   └── *.py           # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, NAAdamGD, OptaxLBFGS)
+│   ├── surrogate_based/
+│   │   ├── botorch/       # BotorchBO, BotorchTuRBO, BotorchqNEI, BotorchqKG,
+│   │   │                  #   REMBO, GEBO, LineBO  (+ shared _botorch_common.py)
+│   │   ├── ax_baxus.py / ax_saasbo.py     # Ax/BoTorch high-dim BO
+│   │   ├── hebo_bo.py / smac_bo.py        # External BO packages
+│   │   ├── turbo_lbfgs.py                  # TuRBO + L-BFGS refinement
+│   │   └── restir.py                       # GPU-native kNN surrogate
 │   └── generative/        # VAESampling
 ├── problems/
 │   ├── voyager/           # VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem
@@ -448,14 +451,14 @@ Execution scripts in `./scripts/`:
 - `voyager_scipy_benchmark.py`: SciPy gradient / trust / constrained batch
 
 Reference implementations worth reading:
-- `gradient_based/misc/adam_gd.py`: gradient-based pattern (custom loop)
+- `gradient_based/adam_gd.py`: gradient-based pattern (custom loop)
 - `gradient_based/optax/adam.py`: Optax wrapper pattern (minimal subclass)
 - `gradient_based/scipy/_common.py`: shared SciPy wrapper, caching, and budget handling
 - `evolutionary/random_search.py`: simplest batched example
 - `evolutionary/evox_es.py`: wrapping an external library (EvoX/PyTorch)
 - `evolutionary/pycma_cmaes.py`: wrapping pycma (ask/tell, restart strategies)
 - `evolutionary/jax_es.py`: native JAX ES without external library
-- `surrogate_based/botorch_bo.py`: surrogate-based with BoTorch
+- `surrogate_based/botorch/botorch_bo.py`: surrogate-based with BoTorch
 
 ---
 

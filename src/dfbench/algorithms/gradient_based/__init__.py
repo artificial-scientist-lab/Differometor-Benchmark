@@ -1,12 +1,13 @@
 """Gradient-based optimization algorithms.
 
-Organized into three sub-packages:
+Organized into two sub-packages:
   - ``scipy``:  Wrappers around ``scipy.optimize.minimize``.
   - ``optax``:  Wrappers around Optax first-order optimizers.
-  - ``misc``:   Algorithms with custom training loops.
 
-In addition, :mod:`custom_jax` provides hybrid / variance-reduced JAX
-algorithms (SGLD, ASAM, GD→L-BFGS hand-off, etc.).
+Flat modules in this package provide custom-loop algorithms
+(:mod:`adam_gd`, :mod:`lbfgs_gd`, :mod:`sa_gd`, :mod:`na_adam_gd`,
+:mod:`optax_lbfgs`) and a hybrid / variance-reduced JAX batch
+(:mod:`custom_jax`: SGLD, ASAM, GD→L-BFGS hand-off, etc.).
 """
 
 from dfbench.algorithms.gradient_based.scipy import (  # noqa: F401
@@ -59,13 +60,11 @@ from dfbench.algorithms.gradient_based.optax import (  # noqa: F401
     OptaxSignum,
     OptaxSM3,
 )
-from dfbench.algorithms.gradient_based.misc import (  # noqa: F401
-    AdamGD,
-    LBFGSGD,
-    NAAdamGD,
-    OptaxLBFGS,
-    SAGD,
-)
+from dfbench.algorithms.gradient_based.adam_gd import AdamGD  # noqa: F401
+from dfbench.algorithms.gradient_based.lbfgs_gd import LBFGSGD  # noqa: F401
+from dfbench.algorithms.gradient_based.na_adam_gd import NAAdamGD  # noqa: F401
+from dfbench.algorithms.gradient_based.optax_lbfgs import OptaxLBFGS  # noqa: F401
+from dfbench.algorithms.gradient_based.sa_gd import SAGD  # noqa: F401
 from dfbench.algorithms.gradient_based.custom_jax import (  # noqa: F401
     ARCJAX,
     ASAMJAX,

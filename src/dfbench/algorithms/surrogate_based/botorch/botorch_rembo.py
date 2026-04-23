@@ -24,7 +24,7 @@ from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.algorithms.surrogate_based._botorch_common import (
+from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     DEVICE,
     DTYPE,
     evaluate_objective,

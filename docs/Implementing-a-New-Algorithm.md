@@ -286,7 +286,7 @@ while not obj.budget_exceeded:
 
 > **Do NOT call** `obj._log()`, `obj._log_evals()`, or `obj._log_to_file()` directly — these are private methods. `log_evaluation()` delegates to `_log()` which coordinates all internal logging.
 
-See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/misc/lbfgs_gd.py` for a complete working example.
+See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/lbfgs_gd.py` for a complete working example.
 
 ---
 

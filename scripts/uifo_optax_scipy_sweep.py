@@ -1,14 +1,3 @@
-"""Sweep script: test every Optax and SciPy algorithm on UIFOProblem.
-
-Usage:
-    srun -p a100-galvani --gres=gpu:1 --time=0-04:10 python scripts/uifo_optax_scipy_sweep.py -a <algo_index> -s <seed>
-
-    -a / --algo   Index into the combined algorithm list (0-based).
-    -s / --seed   Run index / random seed (0–24).
-
-Run with ``-a list`` to print the full algorithm table without running.
-"""
-
 import argparse
 import sys
 

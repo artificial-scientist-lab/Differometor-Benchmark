@@ -1,12 +1,12 @@
-"""qNEI — Noisy Expected Improvement via BoTorch.
+"""qKG — Knowledge Gradient acquisition via BoTorch.
 
-Uses ``qLogNoisyExpectedImprovement`` (the numerically stable log variant)
-which accounts for observation noise in the acquisition function, making it
-more robust for real-world noisy objectives than standard qEI.
+Knowledge Gradient maximises the expected *increase in value of the best
+posterior mean* after observing a new point, providing a one-step Bayes-optimal
+lookahead policy.
 
 Reference:
-    Letham et al., "Noisy Expected Improvement", NeurIPS 2019.
-    Ament et al., "Unexpected Improvements to Expected Improvement", 2023.
+    Wu & Frazier, "The Parallel Knowledge Gradient Method for Batch Bayesian
+    Optimization", NeurIPS 2016.
 
 Operates in **bounded** parameter space.
 """
@@ -20,7 +20,7 @@ from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.algorithms.surrogate_based._botorch_common import (
+from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     DEVICE,
     DTYPE,
     evaluate_objective,
@@ -31,7 +31,7 @@ from dfbench.algorithms.surrogate_based._botorch_common import (
 )
 
 try:
-    from botorch.acquisition import qLogNoisyExpectedImprovement as qLogNEI_acqf
+    from botorch.acquisition import qKnowledgeGradient
     from botorch.optim import optimize_acqf
     from botorch.generation import gen_candidates_scipy
     from botorch.utils.transforms import normalize
@@ -41,27 +41,27 @@ except ImportError:
     _BOTORCH_AVAILABLE = False
 
 
-class BotorchqNEI(OptimizationAlgorithm):
-    """Noisy Expected Improvement BO via BoTorch.
+class BotorchqKG(OptimizationAlgorithm):
+    """Knowledge Gradient BO via BoTorch.
 
-    Wraps ``qLogNoisyExpectedImprovement`` which conditions on the training data
-    to compute the improvement relative to observed (noisy) best, rather than
-    assuming a noiseless baseline. Uses the log variant for numerical stability.
+    Uses ``qKnowledgeGradient`` for one-step Bayes-optimal lookahead.
+    Computationally more expensive per iteration than EI-family methods but
+    can be more sample-efficient.
 
     Operates in **bounded** parameter space.
 
     Attributes:
-        algorithm_str: ``"botorch_qnei"``
+        algorithm_str: ``"botorch_qkg"``
         algorithm_type: ``SURROGATE_BASED``
     """
 
-    algorithm_str: str = "botorch_qnei"
+    algorithm_str: str = "botorch_qkg"
     algorithm_type: AlgorithmType = AlgorithmType.SURROGATE_BASED
 
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for BotorchqNEI. Install with: "
+                "BoTorch is required for BotorchqKG. Install with: "
                 "uv pip install botorch"
             )
         self.device = DEVICE
@@ -75,10 +75,10 @@ class BotorchqNEI(OptimizationAlgorithm):
         n_initial: int = 10,
         batch_size: int = 1,
         max_iterations: int | None = None,
-        prune_baseline: bool = True,
+        num_fantasies: int = 16,
         **bo_kwargs,
     ) -> None:
-        """Run qNEI.
+        """Run knowledge-gradient BO.
 
         Args:
             problem_objective: Objective wrapper (mutated in place).
@@ -87,7 +87,7 @@ class BotorchqNEI(OptimizationAlgorithm):
             n_initial: Sobol initialisation budget.
             batch_size: Candidates per iteration.
             max_iterations: BO iterations after initialisation. Required.
-            prune_baseline: Whether to prune the baseline set for qNEI.
+            num_fantasies: Number of fantasy models for KG estimation.
             **bo_kwargs: Forwarded to ``optimize_acqf``.
         """
         if max_iterations is None:
@@ -104,16 +104,10 @@ class BotorchqNEI(OptimizationAlgorithm):
         u_bounds = unit_bounds_torch(dim, self.device, self.dtype)
 
         acqf_opts = {
-            "raw_samples": bo_kwargs.get("raw_samples", 512),
+            "raw_samples": bo_kwargs.get("raw_samples", 256),
             "num_restarts": bo_kwargs.get("num_restarts", 4),
             "retry_on_optimization_warning": False,
-            "options": {
-                "nonnegative": False,
-                "sample_around_best": True,
-                "sample_around_best_sigma": 0.1,
-                "maxiter": 300,
-                "batch_limit": 64,
-            },
+            "options": {"maxiter": 200, "batch_limit": 32},
         }
 
         # JIT warmup
@@ -144,10 +138,9 @@ class BotorchqNEI(OptimizationAlgorithm):
             model = fit_gp(train_X, train_Y)
             model.eval()
 
-            acqf = qLogNEI_acqf(
+            acqf = qKnowledgeGradient(
                 model,
-                X_baseline=train_X,
-                prune_baseline=prune_baseline,
+                num_fantasies=num_fantasies,
             )
             candidates, _ = optimize_acqf(
                 acqf,
