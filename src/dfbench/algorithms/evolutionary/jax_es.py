@@ -115,7 +115,9 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
             init_params: Starting point.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
-            sigma0: Initial step size.  Defaults to ``0.3 × mean(ub − lb)``.
+            sigma0: Initial step size as a fraction of each parameter's
+                own range ``(ub - lb)``.  Defaults to ``0.3`` (30% of
+                each dimension's range).
             sigma_min: Minimum allowed step size; stops on σ < σ_min.
             success_window: Number of steps between σ adaptation checks.
                 If ``None``, defaults to ``10 × n_params`` (at least 10).
@@ -139,7 +141,12 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
         else:
             x = jnp.clip(jnp.asarray(init_params), lb, ub)
 
-        sigma = float(sigma0 if sigma0 is not None else np.mean(0.3 * (np.asarray(ub) - np.asarray(lb))))
+        # sigma is a fraction of each parameter's own range so that
+        # heterogeneous bounds (e.g. length ∈ [1,4000] vs reflectivity ∈ [0,1])
+        # are handled correctly. A single global sigma would cause narrow-range
+        # parameters to always be clipped to their boundary values.
+        scale = ub - lb  # per-parameter range, shape (n,)
+        sigma = float(sigma0 if sigma0 is not None else 0.3)
         window = success_window if success_window is not None else max(10, 10 * n)
 
         # JIT warmup — single-point evaluation
@@ -160,7 +167,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
 
             rng, noise_rng = jax.random.split(rng)
             z = jax.random.normal(noise_rng, shape=(n,))
-            y = jnp.clip(x + sigma * z, lb, ub)
+            y = jnp.clip(x + sigma * scale * z, lb, ub)
 
             fy = obj.value(y)
             success = int(float(fy) <= float(fx))
@@ -255,8 +262,9 @@ class JAXMuLambdaES(OptimizationAlgorithm):
             init_params: Initial mean.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
-            sigma0: Initial isotropic step size.  Defaults to
-                ``0.3 × mean(ub - lb)``.
+            sigma0: Initial step size as a fraction of each parameter's
+                own range ``(ub - lb)``.  Defaults to ``0.3`` (30% of
+                each dimension's range).
             sigma_min: Minimum sigma; stops when sigma drops below this.
             mu: Number of survivors (parents for next generation).
                 Defaults to 10.
@@ -288,10 +296,12 @@ class JAXMuLambdaES(OptimizationAlgorithm):
         else:
             mean = jnp.clip(jnp.asarray(init_params), lb, ub)
 
-        sigma = float(
-            sigma0 if sigma0 is not None
-            else np.mean(0.3 * (np.asarray(ub) - np.asarray(lb)))
-        )
+        # sigma is a fraction of each parameter's own range so that
+        # heterogeneous bounds (e.g. length ∈ [1,4000] vs reflectivity ∈ [0,1])
+        # are handled correctly. A single global sigma would cause narrow-range
+        # parameters to always be clipped to their boundary values.
+        scale = ub - lb  # per-parameter range, shape (n,)
+        sigma = float(sigma0 if sigma0 is not None else 0.3)
 
         # Step-size adaptation parameters
         target_succ = mu / lam       # expected success fraction
@@ -300,9 +310,11 @@ class JAXMuLambdaES(OptimizationAlgorithm):
         p_succ = target_succ        # initialise cumulative success rate
         prev_mean_loss = float("inf")  # track improvement for adaptation
 
-        # JIT warmup with batch_size
+        # JIT warmup with batch_size — use midpoint (not zeros) so the
+        # warmup call lands within bounds for every parameter.
         batch_size = self._batch_size
-        _ = obj.vmap_value(jnp.zeros((min(batch_size, lam), n)))
+        midpoint = 0.5 * (lb + ub)
+        _ = obj.vmap_value(jnp.tile(midpoint[None, :], (min(batch_size, lam), 1)))
         obj.start_logging()
 
         iteration = 0
@@ -312,10 +324,11 @@ class JAXMuLambdaES(OptimizationAlgorithm):
             if sigma < sigma_min:
                 break
 
-            # Sample λ offspring
+            # Sample λ offspring with per-parameter scaling so sigma is a
+            # fraction of each dimension's own range.
             rng, noise_rng = jax.random.split(rng)
             noise = jax.random.normal(noise_rng, shape=(lam, n))
-            offspring = jnp.clip(mean[None, :] + sigma * noise, lb, ub)
+            offspring = jnp.clip(mean[None, :] + sigma * scale[None, :] * noise, lb, ub)
 
             # Evaluate via vmap in chunks of batch_size
             chunks = [obj.vmap_value(offspring[i : i + batch_size])
@@ -324,6 +337,11 @@ class JAXMuLambdaES(OptimizationAlgorithm):
 
             if obj.budget_exceeded:
                 break
+
+            # Replace any non-finite loss with a large finite penalty so
+            # truncation selection and step-size adaptation stay well-posed
+            # even when candidates land in constraint-violating regions.
+            losses = jnp.where(jnp.isfinite(losses), losses, jnp.float32(1e30))
 
             # Truncation selection: keep best μ (comma semantics)
             sorted_idx = jnp.argsort(losses)[:mu]
