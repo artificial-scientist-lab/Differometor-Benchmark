@@ -438,6 +438,48 @@ optimizer.optimize(problem_objective=obj, random_seed=42)
 
 ---
 
+## SciPy Classics — Nelder-Mead & Powell
+
+Two non-gradient SciPy classics, exposed as `dfbench` algorithms via the shared SciPy DFO wrapper.  Both run in **bounded physical space**.
+
+```python
+from dfbench.algorithms import NelderMead, Powell
+```
+
+| Algorithm | Method | Notes |
+|-----------|--------|-------|
+| `NelderMead` | `scipy.optimize.minimize(method="Nelder-Mead")` | Simplex search, supports bounds via SciPy ≥1.7. |
+| `Powell`     | `scipy.optimize.minimize(method="Powell")`      | Direction-set search, simple and robust on smooth losses. |
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `xatol` / `xtol` | `1e-6` | Convergence tolerance on `x`. |
+| `fatol` / `ftol` | `1e-6` | Convergence tolerance on `f(x)`. |
+| `n_restarts`     | `1`    | Multistart restarts within evaluation budget. |
+
+---
+
+## Global Search — BasinHopping & DualAnnealing
+
+SciPy's stochastic global optimizers, useful as rugged-landscape baselines.  Both wrap a local minimizer (defaults to L-BFGS-B) and explore via random perturbations.
+
+```python
+from dfbench.algorithms import BasinHopping, DualAnnealing
+```
+
+| Algorithm | Backend | Best for |
+|-----------|---------|----------|
+| `BasinHopping`  | `scipy.optimize.basinhopping`  | Local-minima escape via random hops. |
+| `DualAnnealing` | `scipy.optimize.dual_annealing` | Generalized simulated annealing with local refinement. |
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `step_size`     | `0.5`   | (BasinHopping) random hop magnitude in normalised space. |
+| `temperature`   | `5230.0`| (DualAnnealing) initial temperature. |
+| `local_method`  | `"L-BFGS-B"` | Inner local minimizer. |
+
+---
+
 ## CMA-Family Algorithms (pycma / cmaes / evosax / native JAX)
 
 Nine additional CMA-family algorithms added alongside the EvoX backend.  Each class names its backend explicitly in `algorithm_str` so benchmark runs can be distinguished.

@@ -1,6 +1,10 @@
 """Optimization algorithms."""
 
+from dfbench.algorithms.derivative_free.nelder_mead import NelderMead
 from dfbench.algorithms.derivative_free.omads_mads import OmadsMADS, OmadsOrthoMADS
+from dfbench.algorithms.derivative_free.powell import Powell
+from dfbench.algorithms.global_search.basin_hopping import BasinHopping
+from dfbench.algorithms.global_search.dual_annealing import DualAnnealing
 from dfbench.algorithms.evolutionary.evox_es import EvoxES
 from dfbench.algorithms.evolutionary.evox_pso import EvoxPSO
 from dfbench.algorithms.evolutionary.nevergrad.ngopt import NevergradNGOpt
@@ -90,8 +94,12 @@ from dfbench.algorithms.gradient_based.optax.sm3 import OptaxSM3
 from dfbench.algorithms.gradient_based.misc.optax_lbfgs import OptaxLBFGS
 
 __all__ = [
+    "BasinHopping",
+    "DualAnnealing",
+    "NelderMead",
     "OmadsMADS",
     "OmadsOrthoMADS",
+    "Powell",
     "EvoxES",
     "EvoxPSO",
     "NevergradNGOpt",
