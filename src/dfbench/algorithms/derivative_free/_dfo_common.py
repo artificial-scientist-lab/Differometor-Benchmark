@@ -26,6 +26,16 @@ from dfbench.core.objective import Objective
 _NAN_PENALTY = 1e30
 
 
+class _BudgetExhausted(Exception):
+    """Raised inside a DFO callback when the Objective budget is exhausted.
+
+    For pure-Python solvers (e.g. Py-BOBYQA) this propagates immediately and
+    terminates the optimisation loop.  For Fortran-backed solvers (PDFO/prima)
+    f2py stores the exception and re-raises it after the current Fortran call
+    returns, which also causes prima to abort early.
+    """
+
+
 def dfo_objective_wrapper(
     obj: Objective,
 ) -> callable:
@@ -36,14 +46,16 @@ def dfo_objective_wrapper(
     returns a Python float.
 
     NaN / Inf losses are replaced with ``_NAN_PENALTY`` so that DFO solvers
-    do not crash.  Budget-exceeded evaluations still return the penalty but
-    the Objective stops internal logging automatically.
+    do not crash.  When the Objective budget is exceeded the wrapper raises
+    ``_BudgetExhausted`` instead of calling the (expensive) physics evaluation.
 
     Returns:
         ``fun(x: np.ndarray) -> float``
     """
 
     def _fun(x: np.ndarray) -> float:
+        if obj.budget_exceeded:
+            raise _BudgetExhausted
         params = jnp.asarray(x)
         loss = obj.value(params)
         loss_f = float(loss)
@@ -126,7 +138,13 @@ def multistart_loop(
 
         try:
             solve_fn(x0)
+        except _BudgetExhausted:
+            break
         except Exception as exc:  # noqa: BLE001
+            if obj.budget_exceeded:
+                # Exception was likely triggered (directly or indirectly) by
+                # _BudgetExhausted propagating through the solver; stop quietly.
+                break
             # DFO solvers may raise on degenerate geometry, singular models,
             # etc.  Log and continue with next restart.
             print(f"[DFO restart {i+1}/{n_restarts}] solver raised {type(exc).__name__}: {exc}")

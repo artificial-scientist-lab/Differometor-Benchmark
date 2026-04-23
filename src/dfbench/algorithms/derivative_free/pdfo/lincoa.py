@@ -116,7 +116,7 @@ class PDFOLINCOA(OptimizationAlgorithm):
             elif obj.evals_left is not None:
                 maxfev = max(obj.evals_left, 2 * obj.n_params + 2)
             else:
-                maxfev = int(1e8)
+                maxfev = 500 * (obj.n_params + 1)
             pdfo.pdfo(
                 fun,
                 x0_clipped,

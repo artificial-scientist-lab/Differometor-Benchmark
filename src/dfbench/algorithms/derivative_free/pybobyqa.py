@@ -127,7 +127,7 @@ class PyBOBYQA(OptimizationAlgorithm):
             elif obj.evals_left is not None:
                 maxfun = max(obj.evals_left, 2 * obj.n_params + 2)
             else:
-                maxfun = int(1e8)
+                maxfun = 500 * (obj.n_params + 1)
 
             # Compute rhobeg respecting Py-BOBYQA constraints.
             # When scaling_within_bounds=True, Py-BOBYQA maps to [0, 1], so
