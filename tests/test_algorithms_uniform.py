@@ -43,6 +43,8 @@ from dfbench.algorithms import (
     NAAdamGD,
     NewtonCG,
     NonlinearCG,
+    OmadsMADS,
+    OmadsOrthoMADS,
     OptaxAdaBelief,
     OptaxAdaDelta,
     OptaxAdaGrad,
@@ -197,6 +199,8 @@ REGISTRY: list[AlgoSpec] = [
               "other EvoxES variants are exercised in their own tests.",
     ),
     AlgoSpec(EvoxPSO,      AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(OmadsMADS,      AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(OmadsOrthoMADS, AlgorithmType.EVOLUTIONARY, unbounded=False),
     # -- surrogate-based ------------------------------------------------------
     AlgoSpec(BotorchBO,    AlgorithmType.SURROGATE_BASED, unbounded=False,
              extra_kwargs=_botorch_kwargs),

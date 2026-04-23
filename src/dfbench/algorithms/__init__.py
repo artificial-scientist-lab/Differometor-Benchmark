@@ -1,5 +1,6 @@
 """Optimization algorithms."""
 
+from dfbench.algorithms.derivative_free.omads_mads import OmadsMADS, OmadsOrthoMADS
 from dfbench.algorithms.evolutionary.evox_es import EvoxES
 from dfbench.algorithms.evolutionary.evox_pso import EvoxPSO
 from dfbench.algorithms.evolutionary.random_search import RandomSearch
@@ -59,6 +60,8 @@ from dfbench.algorithms.gradient_based.optax.sm3 import OptaxSM3
 from dfbench.algorithms.gradient_based.misc.optax_lbfgs import OptaxLBFGS
 
 __all__ = [
+    "OmadsMADS",
+    "OmadsOrthoMADS",
     "EvoxES",
     "EvoxPSO",
     "RandomSearch",

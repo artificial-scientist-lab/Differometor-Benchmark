@@ -12,6 +12,7 @@ from dfbench.algorithms import (
     TrustNCG, TrustKrylov, TrustConstr,    # SciPy trust-region / constrained
     TNC, SLSQP, COBYQA, COBYLA, Dogleg, SR1,
     RandomSearch, EvoxPSO, EvoxES,           # evolutionary
+    OmadsMADS, OmadsOrthoMADS,               # direct search
     BotorchBO, BotorchTuRBO,                 # surrogate-based
     VAESampling,                              # generative
 )
@@ -27,6 +28,7 @@ Every algorithm declares an `algorithm_type` from the `AlgorithmType` enum:
 |------|-------------|------------------------|----------|
 | `GRADIENT_BASED` | `True` | `value_and_grad()` | Adam, SA-GD, NA-Adam, L-BFGS, 34 Optax optimizers |
 | `EVOLUTIONARY` | `False` | `vmap_value()` | Random Search, PSO, CMA-ES |
+| `EVOLUTIONARY` (direct search) | `False` | `value()` | MADS, OrthoMADS |
 | `SURROGATE_BASED` | `False` | `value()`, `vmap_value()` | Bayesian Optimization, TuRBO, ReSTIR |
 | `GENERATIVE` | varies | `value()`, `vmap_value()` | VAE Sampling |
 
@@ -250,6 +252,49 @@ optimizer.optimize(
 | `NoiseReuseES` | Noise Reuse Evolution Strategy |
 | `GuidedES` | Guided Evolution Strategy |
 | `ESMC` | Evolution Strategy with Monte Carlo |
+
+---
+
+## Direct Search Algorithms
+
+Derivative-free mesh-based algorithms that operate in **bounded physical space** and refine a mesh/poll structure around the incumbent point. These are local explorers for rugged landscapes — not global optimizers. Uses the [OMADS](https://github.com/Ahmed-Bayoumy/OMADS) library.
+
+### OmadsMADS (Mesh Adaptive Direct Search)
+
+Full MADS algorithm with search step (broad sampling) and poll step (structured directions). Each iteration first samples the mesh, then polls orthogonal directions. The mesh refines on failure and coarsens on success.
+
+```python
+optimizer = OmadsMADS(psize_init=1.0, tol=1e-9, ns=4)
+optimizer.optimize(
+    problem_objective=obj,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `psize_init` | `1.0` | Initial poll-step (frame) size. |
+| `tol` | `1e-9` | Convergence tolerance on mesh/frame size. |
+| `ns` | `4` | Number of search samples per search step. |
+
+---
+
+### OmadsOrthoMADS (Orthogonal MADS, poll only)
+
+Runs only the OrthoMADS poll step with orthogonal Householder directions. Leaner per-iteration cost than full MADS, tighter local convergence.
+
+```python
+optimizer = OmadsOrthoMADS(psize_init=1.0, tol=1e-9)
+optimizer.optimize(
+    problem_objective=obj,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `psize_init` | `1.0` | Initial poll-step (frame) size. |
+| `tol` | `1e-9` | Convergence tolerance on mesh/frame size. |
 
 ---
 
@@ -862,4 +907,6 @@ optimizer.optimize(problem_objective=obj, patience=500, random_seed=42)
 | `BotorchBO` | Surrogate | Sample-efficient, uncertainty-aware | Low evaluation budgets |
 | `BotorchTuRBO` | Surrogate | Local trust region, high-dim friendly | High-dimensional, expensive evals |
 | `ReSTIR` | Surrogate | Scalable kNN surrogate, GPU-native | Large candidate pools |
+| `OmadsMADS` | Direct Search | MADS search + poll, mesh refinement | Rugged-landscape local exploration |
+| `OmadsOrthoMADS` | Direct Search | OrthoMADS poll only, orthogonal dirs | Local refinement, predictable cost |
 | `VAESampling` | Generative | Latent-space compression | Very high-dimensional problems |

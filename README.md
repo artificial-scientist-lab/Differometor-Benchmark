@@ -155,6 +155,7 @@ src/dfbench/
 │   ├── objective.py       # Objective wrapper (central piece)
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
+│   ├── direct_search/     # OmadsMADS, OmadsOrthoMADS
 │   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES
 │   ├── gradient_based/
 │   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
