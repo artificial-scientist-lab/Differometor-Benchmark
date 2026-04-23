@@ -22,6 +22,10 @@ dependencies = [
     "torchvision>=0.24.1",
     "ruff>=0.14.8",
     "nevergrad>=1.0.12",
+    # CMA-family optional backends
+    "cma>=3.3.0",
+    "cmaes>=0.10.0",
+    "evosax>=0.1.6",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -156,7 +156,7 @@ src/dfbench/
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
 │   ├── derivative_free/   # OmadsMADS, OmadsOrthoMADS
-│   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES, Nevergrad baselines
+│   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES, Nevergrad, CMA family
 │   ├── gradient_based/
 │   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
 │   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
@@ -390,7 +390,16 @@ See [Objective API Reference](docs/Objective-API-Reference.md) for the complete 
 | `TNC`, `SLSQP`, `COBYQA`, `COBYLA` | Gradient | Bounded physical-space SciPy solvers |
 | `RandomSearch` | Evolutionary | Unbiased baseline, no hyperparameters |
 | `EvoxPSO` | Evolutionary | Swarm intelligence, many variants (CLPSO, CSO, ...) |
-| `EvoxES` | Evolutionary | CMA-ES, OpenES, XNES, and more |
+| `EvoxES` | Evolutionary | CMA-ES, OpenES, XNES, and more (EvoX backend) |
+| `PyCMACMAES` | Evolutionary | Vanilla CMA-ES (pycma backend) |
+| `PyCMAActiveCMAES` | Evolutionary | Active CMA-ES with negative weight updates (pycma) |
+| `PyCMAIPOP` | Evolutionary | IPOP-CMA-ES: increasing-population restarts (pycma) |
+| `PyCMABIPOP` | Evolutionary | BIPOP-CMA-ES: bi-population restart strategy (pycma) |
+| `CMAESSepCMA` | Evolutionary | sep-CMA-ES with diagonal covariance (cmaes package) |
+| `EvosaxMAES` | Evolutionary | Matrix Adaptation ES (evosax backend) |
+| `EvosaxLMMAES` | Evolutionary | Limited-Memory MA-ES for high dimensions (evosax) |
+| `JAXOnePlusOneES` | Evolutionary | (1+1)-ES with 1/5 rule, native JAX |
+| `JAXMuLambdaES` | Evolutionary | (μ,λ)-ES with truncation selection, native JAX |
 | `BotorchBO` | Surrogate | Sample-efficient Bayesian Optimization |
 | `BotorchTuRBO` | Surrogate | Trust-region BO for high dimensions |
 | `ReSTIR` | Surrogate | GPU-native kNN surrogate, scales to 100k+ candidates |
@@ -405,6 +414,7 @@ See [Algorithms](docs/Algorithms.md) for hyperparameter details and usage exampl
 Execution scripts in `./scripts/`:
 - `voyager_adam_gd.py`: single-algorithm run
 - `voyager_benchmark.py`: full benchmark with multiple algorithms
+- `voyager_cma_family.py`: all nine CMA-family algorithms on VoyagerProblem
 - `voyager_scipy_benchmark.py`: SciPy gradient / trust / constrained batch
 
 Reference implementations worth reading:
@@ -413,6 +423,8 @@ Reference implementations worth reading:
 - `gradient_based/scipy/_common.py`: shared SciPy wrapper, caching, and budget handling
 - `evolutionary/random_search.py`: simplest batched example
 - `evolutionary/evox_es.py`: wrapping an external library (EvoX/PyTorch)
+- `evolutionary/pycma_cmaes.py`: wrapping pycma (ask/tell, restart strategies)
+- `evolutionary/jax_es.py`: native JAX ES without external library
 - `surrogate_based/botorch_bo.py`: surrogate-based with BoTorch
 
 ---
