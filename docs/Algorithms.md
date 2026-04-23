@@ -12,7 +12,7 @@ from dfbench.algorithms import (
     TrustNCG, TrustKrylov, TrustConstr,    # SciPy trust-region / constrained
     TNC, SLSQP, COBYQA, COBYLA, Dogleg, SR1,
     RandomSearch, EvoxPSO, EvoxES,           # evolutionary
-    OmadsMADS, OmadsOrthoMADS,               # direct search
+    OmadsMADS, OmadsOrthoMADS,               # derivative-free direct search
     BotorchBO, BotorchTuRBO,                 # surrogate-based
     VAESampling,                              # generative
 )
