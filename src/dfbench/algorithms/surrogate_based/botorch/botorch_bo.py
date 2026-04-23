@@ -169,8 +169,8 @@ class BotorchBO(OptimizationAlgorithm):
 
         Args:
             problem_objective: The Objective instance wrapping the problem.
-            max_iterations: Maximum number of BO iterations (excluding initial samples).
-                Required parameter.
+            max_iterations: Optional cap on BO iterations (excluding initial samples).
+                When ``None`` the algorithm runs until ``obj.budget_exceeded``.
             init_params: Initial parameters to include in the training set.
                 If None, only Sobol samples are used. Defaults to None.
             random_seed: Random seed for reproducibility. Defaults to None.
@@ -181,9 +181,6 @@ class BotorchBO(OptimizationAlgorithm):
         """
         obj = problem_objective
         problem = obj.problem
-
-        if max_iterations is None:
-            raise ValueError("max_iterations is required")
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
@@ -254,7 +251,9 @@ class BotorchBO(OptimizationAlgorithm):
 
         # Main optimization loop
         iteration = 0
-        while not obj.budget_exceeded and iteration < max_iterations:
+        while not obj.budget_exceeded and (
+            max_iterations is None or iteration < max_iterations
+        ):
             # Fit GP model
             model = self._fit_model(train_X, train_Y)
             model.eval()

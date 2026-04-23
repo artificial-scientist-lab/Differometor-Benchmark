@@ -109,28 +109,26 @@ class BAxUS(OptimizationAlgorithm):
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
-        max_iterations: int | None = None,
         d_init: int | None = None,
         failure_tolerance: int | None = None,
         **bo_kwargs,
     ) -> None:
         """Run BAxUS.
 
+        Termination is driven entirely by the ``Objective``'s budget
+        (``max_evals`` / ``max_time``).
+
         Args:
             problem_objective: Objective wrapper (mutated in place).
-            init_params: Optional starting point (bounded space).
+            init_params: Optional starting point (bounded space). Currently unused.
             random_seed: Seed for reproducibility.
             n_initial: Sobol samples in each new subspace.
-            max_iterations: Total BO iterations across all subspaces. Required.
             d_init: Initial embedding dimensionality.
                 Defaults to ``min(5, dim)``.
             failure_tolerance: Successive failures before expanding subspace.
                 Defaults to ``max(dim // 2, 5)``.
             **bo_kwargs: Extra kwargs for acquisition optimisation.
         """
-        if max_iterations is None:
-            raise ValueError("max_iterations is required")
-
         obj = problem_objective
         problem = obj.problem
         D = problem.n_params
@@ -159,9 +157,8 @@ class BAxUS(OptimizationAlgorithm):
         obj.start_logging()
 
         d_e = d_init
-        iterations_done = 0
 
-        while not obj.budget_exceeded and iterations_done < max_iterations:
+        while not obj.budget_exceeded:
             # Create a new random embedding of current dimensionality
             A = self._make_embedding(D, d_e, rng).to(self.device, self.dtype)
 
@@ -194,11 +191,7 @@ class BAxUS(OptimizationAlgorithm):
             failures = 0
             best_in_subspace = Y_train.max().item()
 
-            while (
-                not obj.budget_exceeded
-                and iterations_done < max_iterations
-                and failures < failure_tolerance
-            ):
+            while not obj.budget_exceeded and failures < failure_tolerance:
                 # Fit GP in ambient normalised space on gathered data
                 model = fit_gp(X_train, Y_train)
                 model.eval()
@@ -225,7 +218,6 @@ class BAxUS(OptimizationAlgorithm):
                 )
 
                 Y_new, vm = evaluate_objective(candidates, bounds, obj)
-                iterations_done += 1
 
                 if vm.any():
                     Y_new_valid = Y_new[vm].unsqueeze(-1)

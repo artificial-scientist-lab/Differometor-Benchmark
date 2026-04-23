@@ -100,13 +100,11 @@ class REMBO(OptimizationAlgorithm):
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
             n_initial: Sobol initialisation in embedding space.
-            max_iterations: BO iterations after initialisation. Required.
+            max_iterations: Optional cap on BO iterations after initialisation.
+                When ``None`` the algorithm runs until ``obj.budget_exceeded``.
             d_embedding: Embedding dimensionality. Defaults to ``min(10, dim)``.
             **bo_kwargs: Extra kwargs for acquisition optimisation.
         """
-        if max_iterations is None:
-            raise ValueError("max_iterations is required")
-
         obj = problem_objective
         problem = obj.problem
         D = problem.n_params
@@ -157,7 +155,9 @@ class REMBO(OptimizationAlgorithm):
             raise ValueError("All initial evaluations returned NaN/Inf.")
 
         iteration = 0
-        while not obj.budget_exceeded and iteration < max_iterations:
+        while not obj.budget_exceeded and (
+            max_iterations is None or iteration < max_iterations
+        ):
             # Fit GP in embedding space
             model = fit_gp(Z_train, Y_train)
             model.eval()

@@ -55,23 +55,24 @@ class SMAC(OptimizationAlgorithm):
         problem_objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
-        max_iterations: int | None = None,
         n_initial: int = 10,
         **smac_kwargs,
     ) -> None:
         """Run SMAC.
 
+        Honours the ``Objective``'s budget (``max_evals`` / ``max_time``).
+        SMAC's own ``n_trials`` / ``walltime_limit`` are derived from those;
+        when both are unbounded a large sentinel is used and termination is
+        driven by ``obj.budget_exceeded`` (the target function returns ``inf``
+        once the budget is exhausted).
+
         Args:
             problem_objective: Objective wrapper (mutated in place).
-            init_params: Optional starting point (bounded).
+            init_params: Optional starting point (bounded). Currently unused.
             random_seed: Seed for reproducibility.
-            max_iterations: Total evaluations (Sobol + BO). Required.
             n_initial: Initial random configurations.
             **smac_kwargs: Forwarded to SMAC Scenario.
         """
-        if max_iterations is None:
-            raise ValueError("max_iterations is required")
-
         obj = problem_objective
         problem = obj.problem
         dim = problem.n_params
@@ -98,16 +99,26 @@ class SMAC(OptimizationAlgorithm):
             x_jax = jnp.asarray(x_np)
             return float(obj.value(x_jax))
 
+        # Derive SMAC's budget from the Objective's budget. SMAC requires a
+        # finite n_trials; when the Objective is unbounded use a large sentinel
+        # and rely on `_target` returning inf once `budget_exceeded` flips.
+        evals_left = obj.evals_left
+        n_trials = int(evals_left) if evals_left is not None else 10**6
+
+        scenario_kwargs = {
+            k: v
+            for k, v in smac_kwargs.items()
+            if k not in ("cs", "deterministic", "n_trials", "seed", "walltime_limit")
+        }
+        if obj.time_left is not None and "walltime_limit" not in scenario_kwargs:
+            scenario_kwargs["walltime_limit"] = float(obj.time_left)
+
         scenario = Scenario(
             cs,
             deterministic=True,
-            n_trials=n_initial + max_iterations,
+            n_trials=n_trials,
             seed=random_seed,
-            **{
-                k: v
-                for k, v in smac_kwargs.items()
-                if k not in ("cs", "deterministic", "n_trials", "seed")
-            },
+            **scenario_kwargs,
         )
 
         smac = HyperparameterOptimizationFacade(

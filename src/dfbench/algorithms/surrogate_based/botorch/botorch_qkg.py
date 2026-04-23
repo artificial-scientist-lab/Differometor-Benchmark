@@ -86,13 +86,11 @@ class BotorchqKG(OptimizationAlgorithm):
             random_seed: Seed for reproducibility.
             n_initial: Sobol initialisation budget.
             batch_size: Candidates per iteration.
-            max_iterations: BO iterations after initialisation. Required.
+            max_iterations: Optional cap on BO iterations after initialisation.
+                When ``None`` the algorithm runs until ``obj.budget_exceeded``.
             num_fantasies: Number of fantasy models for KG estimation.
             **bo_kwargs: Forwarded to ``optimize_acqf``.
         """
-        if max_iterations is None:
-            raise ValueError("max_iterations is required")
-
         obj = problem_objective
         problem = obj.problem
         dim = problem.n_params
@@ -134,7 +132,9 @@ class BotorchqKG(OptimizationAlgorithm):
             raise ValueError("All initial evaluations returned NaN/Inf.")
 
         iteration = 0
-        while not obj.budget_exceeded and iteration < max_iterations:
+        while not obj.budget_exceeded and (
+            max_iterations is None or iteration < max_iterations
+        ):
             model = fit_gp(train_X, train_Y)
             model.eval()
 

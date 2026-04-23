@@ -110,13 +110,11 @@ class LineBO(OptimizationAlgorithm):
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
             n_initial: Initial Sobol samples in full ambient space.
-            max_iterations: BO iterations (one line per iteration). Required.
+            max_iterations: Optional cap on BO iterations (one line per iteration).
+                When ``None`` the algorithm runs until ``obj.budget_exceeded``.
             line_samples: Number of 1-D Sobol points sampled along each line.
             **bo_kwargs: Extra kwargs for acquisition optimisation.
         """
-        if max_iterations is None:
-            raise ValueError("max_iterations is required")
-
         obj = problem_objective
         problem = obj.problem
         D = problem.n_params
@@ -150,7 +148,9 @@ class LineBO(OptimizationAlgorithm):
             raise ValueError("All initial evaluations returned NaN/Inf.")
 
         iteration = 0
-        while not obj.budget_exceeded and iteration < max_iterations:
+        while not obj.budget_exceeded and (
+            max_iterations is None or iteration < max_iterations
+        ):
             # Current best (in normalised space)
             center = X_train[Y_train.argmax().item()].clone()
 

@@ -87,14 +87,12 @@ class AxSAASBO(OptimizationAlgorithm):
             init_params: Optional starting point (bounded space).
             random_seed: Seed for reproducibility.
             n_initial: Sobol initialisation budget.
-            max_iterations: BO iterations after initialisation. Required.
+            max_iterations: Optional cap on BO iterations after initialisation.
+                When ``None`` the algorithm runs until ``obj.budget_exceeded``.
             num_warmup: NUTS warm-up samples for the fully-Bayesian GP.
             num_samples: NUTS posterior samples.
             **ax_kwargs: Forwarded to the Ax model bridge.
         """
-        if max_iterations is None:
-            raise ValueError("max_iterations is required")
-
         obj = problem_objective
         problem = obj.problem
         dim = problem.n_params
@@ -145,7 +143,10 @@ class AxSAASBO(OptimizationAlgorithm):
 
         obj.start_logging()
 
-        for _ in range(n_initial + max_iterations):
+        total_iters = (
+            n_initial + max_iterations if max_iterations is not None else 10**9
+        )
+        for _ in range(total_iters):
             if obj.budget_exceeded:
                 break
 

@@ -99,7 +99,9 @@ class TuRBOLBFGS(OptimizationAlgorithm):
             problem_objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
-            turbo_iterations: Max BO iterations for the TuRBO phase. Required.
+            turbo_iterations: Optional cap on BO iterations for the TuRBO phase.
+                When ``None`` the TuRBO phase runs until ``obj.budget_exceeded``
+                or a TuRBO restart triggers.
             n_initial: Sobol initialisation for TuRBO. Defaults to ``2 * dim``.
             turbo_batch_size: Candidates per TuRBO iteration.
             turbo_acqf: Acquisition function: ``"ts"`` or ``"ei"``.
@@ -107,9 +109,6 @@ class TuRBOLBFGS(OptimizationAlgorithm):
                 improvement.
             **kwargs: Additional TuRBO kwargs.
         """
-        if turbo_iterations is None:
-            raise ValueError("turbo_iterations is required")
-
         obj = problem_objective
         problem = obj.problem
         dim = problem.n_params
@@ -166,7 +165,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         while (
             not obj.budget_exceeded
             and not state.restart_triggered
-            and turbo_iter < turbo_iterations
+            and (turbo_iterations is None or turbo_iter < turbo_iterations)
         ):
             Y_mean = train_Y.mean()
             Y_std = train_Y.std().clamp(min=1e-6)

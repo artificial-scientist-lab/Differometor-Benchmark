@@ -57,22 +57,20 @@ class HEBO(OptimizationAlgorithm):
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         batch_size: int = 1,
-        max_iterations: int | None = None,
         **hebo_kwargs,
     ) -> None:
         """Run HEBO.
 
+        Termination is driven entirely by the ``Objective``'s budget
+        (``max_evals`` / ``max_time``).
+
         Args:
             problem_objective: Objective wrapper (mutated in place).
-            init_params: Optional starting point (bounded).
+            init_params: Optional starting point (bounded). Currently unused.
             random_seed: Seed for reproducibility.
             batch_size: Candidates per suggestion.
-            max_iterations: Total suggestion rounds. Required.
             **hebo_kwargs: Forwarded to HEBO optimizer.
         """
-        if max_iterations is None:
-            raise ValueError("max_iterations is required")
-
         obj = problem_objective
         problem = obj.problem
         dim = problem.n_params
@@ -105,10 +103,7 @@ class HEBO(OptimizationAlgorithm):
         _ = obj.vmap_value(jnp.zeros((1, dim)))
         obj.start_logging()
 
-        for _ in range(max_iterations):
-            if obj.budget_exceeded:
-                break
-
+        while not obj.budget_exceeded:
             suggestion: pd.DataFrame = hebo_opt.suggest(n_suggestions=batch_size)
 
             # Evaluate each candidate via the Objective

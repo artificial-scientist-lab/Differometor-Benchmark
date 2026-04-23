@@ -136,15 +136,13 @@ class GEBO(OptimizationAlgorithm):
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
             n_initial: Sobol initialisation budget.
-            max_iterations: BO iterations after initialisation. Required.
+            max_iterations: Optional cap on BO iterations after initialisation.
+                When ``None`` the algorithm runs until ``obj.budget_exceeded``.
             grad_refine_steps: Local gradient-descent refinement steps on each
                 acquired candidate before evaluation.
             grad_refine_lr: Step size for local gradient refinement.
             **bo_kwargs: Extra kwargs for acquisition optimisation.
         """
-        if max_iterations is None:
-            raise ValueError("max_iterations is required")
-
         obj = problem_objective
         problem = obj.problem
         D = problem.n_params
@@ -187,7 +185,9 @@ class GEBO(OptimizationAlgorithm):
             raise ValueError("All initial evaluations returned NaN/Inf.")
 
         iteration = 0
-        while not obj.budget_exceeded and iteration < max_iterations:
+        while not obj.budget_exceeded and (
+            max_iterations is None or iteration < max_iterations
+        ):
             model = fit_gp(X_train, Y_train)
             model.eval()
 

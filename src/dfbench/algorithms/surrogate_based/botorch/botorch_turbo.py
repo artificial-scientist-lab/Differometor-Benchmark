@@ -315,8 +315,9 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
         Args:
             problem_objective: The Objective instance wrapping the problem.
-            max_iterations: Maximum number of BO iterations per TuRBO instance.
-                Required parameter.
+            max_iterations: Optional cap on BO iterations per TuRBO instance.
+                When ``None`` the algorithm runs until ``obj.budget_exceeded``
+                (or a TuRBO restart triggers).
             init_params: Initial parameters to include in the training set.
             random_seed: Random seed for reproducibility.
             n_initial: Number of initial Sobol samples. Defaults to 2 * dim.
@@ -327,9 +328,6 @@ class BotorchTuRBO(OptimizationAlgorithm):
         """
         obj = problem_objective
         problem = obj.problem
-
-        if max_iterations is None:
-            raise ValueError("max_iterations is required")
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
@@ -396,7 +394,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
             while (
                 not obj.budget_exceeded
                 and not state.restart_triggered
-                and iteration < max_iterations
+                and (max_iterations is None or iteration < max_iterations)
             ):
                 # Normalize Y for GP fitting
                 Y_mean = train_Y.mean()
