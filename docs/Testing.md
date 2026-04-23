@@ -204,3 +204,30 @@ way `torch.compile` reorders work. Algorithms whose determinism we
 actually exercise are listed in `DETERMINISTIC_ALGORITHMS` in the
 uniform suite; if you add an algorithm whose seed reproducibly fixes
 the trajectory, add it there too.
+
+## Current status
+
+As of the latest sweep on `main`, the fast-test suite reports
+**1308 passed, 15 skipped, 11 xfailed** for
+`pytest tests/test_algorithms_uniform.py tests/test_algorithms_unit.py
+tests/test_bo_batch.py tests/test_dfo_algorithms.py`.
+
+The non-pass results all have a single root cause each:
+
+* **11 xfailed — all `EvoxES`.** The 11 uniform-suite test cases applied
+  to `EvoxES` are all marked xfail because the default variant
+  (CMA-ES) trips a `torch.compile` / dynamo aliasing bug inside
+  `evox` on torch >= 2.6. The bug is upstream; the other `EvoxES`
+  variants are exercised in their own dedicated tests.
+* **15 skipped** = **12 + 3**:
+  * **12** are `ARCJAX` across the same uniform-suite tests — `ARCJAX`
+    is intentionally exposed but raises `NotImplementedError`. Its
+    expected-failure behaviour is covered in
+    `tests/test_custom_jax_batch.py` instead.
+  * **3** are in `tests/test_bo_batch.py`, gated on optional
+    dependencies that are not installed in the default environment:
+    `ax-platform` (for `AxSAASBO`), `HEBO`, and `SMAC3`. Installing
+    those packages re-enables the corresponding tests.
+
+There are no unexpected failures; every skip and xfail carries an
+explanatory reason in the registry / `pytest.mark.skipif`.
