@@ -1,5 +1,14 @@
 import argparse
+import logging
 import sys
+import warnings
+
+# Silence BoTorch / GPyTorch / Ax / SMAC warning spam.
+warnings.filterwarnings("ignore")
+logging.captureWarnings(True)
+for _name in ("py.warnings", "botorch", "gpytorch", "linear_operator",
+              "ax", "smac", "ConfigSpace"):
+    logging.getLogger(_name).setLevel(logging.ERROR)
 
 from dfbench.problems import UIFOProblem
 from dfbench import Objective
@@ -8,10 +17,7 @@ from dfbench import Objective
 #    seven algorithm/* branches, grouped by family) ────────────────────
 
 from dfbench.algorithms import (
-    # Direct-search / MADS (mads branch)
-    OmadsMADS,
-    OmadsOrthoMADS,
-    # Nevergrad baselines (nevergrad branch)
+    # Nevergrad baselines
     NevergradOnePlusOne,
     NevergradTBPSA,
     NevergradNGOpt,
@@ -21,62 +27,6 @@ from dfbench.algorithms import (
     PyCMAIPOP,
     PyCMABIPOP,
     CMAESSepCMA,
-    EvosaxMAES,
-    EvosaxLMMAES,
-    JAXOnePlusOneES,
-    JAXMuLambdaES,
-    # Native-JAX custom/hybrid batch (jax branch; ARCJAX is intentionally
-    # not implemented and therefore omitted)
-    ASAMJAX,
-    AdamToLBFGSJAX,
-    EntropySGDJAX,
-    GDRestartsJAX,
-    GaussianSmoothingGDJAX,
-    NoisyAdamJAX,
-    OAdamJAX,
-    OGDJAX,
-    PerturbedGDJAX,
-    SGHMCJAX,
-    SGLDJAX,
-    # Powell-style trust-region DFO (powell-dfo branch)
-    PDFOUOBYQA,
-    PDFONEWUOA,
-    PDFOLINCOA,
-    PyBOBYQA,
-    # SciPy classics + global search (scipy-nongrad branch)
-    NelderMead,
-    Powell,
-    BasinHopping,
-    DualAnnealing,
-    # Bayesian Optimization batch (bo branch)
-    BAxUS,
-    AxSAASBO,
-    BotorchqNEI,
-    BotorchqKG,
-    REMBO,
-    GEBO,
-    LineBO,
-    TuRBOLBFGS,
-    HEBO,
-    SMAC,
-)
-
-ALGORITHMS = [
-    # Direct-search / MADS
-    OmadsMADS,
-    OmadsOrthoMADS,
-    # Nevergrad baselines
-    NevergradOnePlusOne,
-    NevergradTBPSA,
-    NevergradNGOpt,
-    # CMA family
-    PyCMACMAES,
-    PyCMAActiveCMAES,
-    PyCMAIPOP,
-    PyCMABIPOP,
-    CMAESSepCMA,
-    EvosaxMAES,
-    EvosaxLMMAES,
     JAXOnePlusOneES,
     JAXMuLambdaES,
     # Native-JAX custom/hybrid batch
@@ -95,7 +45,6 @@ ALGORITHMS = [
     PDFOUOBYQA,
     PDFONEWUOA,
     PDFOLINCOA,
-    PyBOBYQA,
     # SciPy classics + global search
     NelderMead,
     Powell,
@@ -103,15 +52,56 @@ ALGORITHMS = [
     DualAnnealing,
     # Bayesian Optimization batch
     BAxUS,
-    AxSAASBO,
     BotorchqNEI,
     BotorchqKG,
     REMBO,
     GEBO,
     LineBO,
     TuRBOLBFGS,
-    HEBO,
-    SMAC,
+)
+
+ALGORITHMS = [
+    # Nevergrad baselines
+    NevergradOnePlusOne,
+    NevergradTBPSA,
+    NevergradNGOpt,
+    # CMA family
+    PyCMACMAES,
+    PyCMAActiveCMAES,
+    PyCMAIPOP,
+    PyCMABIPOP,
+    CMAESSepCMA,
+    JAXOnePlusOneES,
+    JAXMuLambdaES,
+    # Native-JAX custom/hybrid batch
+    ASAMJAX,
+    AdamToLBFGSJAX,
+    EntropySGDJAX,
+    GDRestartsJAX,
+    GaussianSmoothingGDJAX,
+    NoisyAdamJAX,
+    OAdamJAX,
+    OGDJAX,
+    PerturbedGDJAX,
+    SGHMCJAX,
+    SGLDJAX,
+    # Powell-style trust-region DFO
+    PDFOUOBYQA,
+    PDFONEWUOA,
+    PDFOLINCOA,
+    # SciPy classics + global search
+    NelderMead,
+    Powell,
+    BasinHopping,
+    DualAnnealing,
+    # Bayesian Optimization batch
+    BAxUS,
+    BotorchqNEI,
+    BotorchqKG,
+    REMBO,
+    GEBO,
+    LineBO,
+    TuRBOLBFGS,
 ]
 
 # ── CLI ───────────────────────────────────────────────────────────────
@@ -123,9 +113,9 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument(
     "-a", "--algo", required=True,
-    help=f"Algorithm index (0–{len(ALGORITHMS) - 1}), or 'list' to print the table.",
+    help=f"Algorithm index (0-{len(ALGORITHMS) - 1}), or 'list' to print the table.",
 )
-parser.add_argument("-s", "--seed", type=int, default=0, help="Run seed (0–24).")
+parser.add_argument("-s", "--seed", type=int, default=0, help="Run seed (0-24).")
 args = parser.parse_args()
 
 if args.algo == "list":
@@ -137,7 +127,7 @@ if args.algo == "list":
 
 algo_idx = int(args.algo)
 if algo_idx < 0 or algo_idx >= len(ALGORITHMS):
-    print(f"Error: --algo must be 0–{len(ALGORITHMS) - 1}, got {algo_idx}")
+    print(f"Error: --algo must be 0-{len(ALGORITHMS) - 1}, got {algo_idx}")
     sys.exit(1)
 
 seed = args.seed
