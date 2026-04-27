@@ -15,7 +15,7 @@ from differometor.utils import (
     calculate_powers,
 )
 
-from ..base_problem import OpticalSetupProblem
+from ..base_problem import DEFAULT_SIGNAL_FLOOR, OpticalSetupProblem
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +210,7 @@ class UIFOProblem(OpticalSetupProblem):
         boundaries: dict[str, str] | None = None,
         power_penalty_fn=None,
         bounds_overrides: dict[str, tuple[float, float]] | None = None,
+        signal_floor: float = DEFAULT_SIGNAL_FLOOR,
     ):
         """Initialize the UIFO optimization problem.
 
@@ -234,6 +235,8 @@ class UIFOProblem(OpticalSetupProblem):
             bounds_overrides: Optional property-level bound overrides.
                 Example: ``{"tuning": (0, 45)}``.
                 Overrides must narrow default bounds.
+            signal_floor: Optional lower bound for detector signal
+                magnitudes before sensitivity normalization.
         """
         # --- Validate topology specification (exactly one path) ---
         has_seed = topology_seed is not None and topology_seed != 42
@@ -268,7 +271,12 @@ class UIFOProblem(OpticalSetupProblem):
         if has_seed:
             print(f"UIFOProblem topology seed: {topology_seed}")
 
-        super().__init__(name=name, n_frequencies=n_frequencies)
+        super().__init__(
+            name=name,
+            n_frequencies=n_frequencies,
+            signal_floor=signal_floor,
+        )
+        signal_floor = self._signal_floor
         if power_penalty_fn is not None:
             self._power_penalty_fn = power_penalty_fn
         self._size = size
@@ -295,7 +303,11 @@ class UIFOProblem(OpticalSetupProblem):
 
         # calculate the sensitivity values taking into account the three noise sources
         self._target_sensitivities = calculate_sensitivities(
-            simulation_results, self._sensitivity_function, self._frequencies
+            simulation_results,
+            self._sensitivity_function,
+            self._frequencies,
+            True,
+            signal_floor,
         )
 
         ### Create UIFO setup ###
@@ -440,7 +452,8 @@ class UIFOProblem(OpticalSetupProblem):
                 results,
                 self._sensitivity_function,
                 self._frequencies,
-                homodyne=self._homodyne,
+                self._homodyne,
+                signal_floor,
             )
 
             # calculate the light power at all components within the setup
@@ -478,7 +491,8 @@ class UIFOProblem(OpticalSetupProblem):
                 results,
                 self._sensitivity_function,
                 self._frequencies,
-                homodyne=self._homodyne,
+                self._homodyne,
+                signal_floor,
             )
 
             # calculate the light power at all components within the setup
@@ -541,6 +555,7 @@ class UIFOProblem(OpticalSetupProblem):
             "topology_string": self._topology_string,
             "n_params": self.n_params,
             "homodyne": self._homodyne,
+            "signal_floor": self._signal_floor,
             "power_penalty_fn": getattr(
                 self._power_penalty_fn, "__name__", str(self._power_penalty_fn)
             ),
@@ -579,7 +594,8 @@ class UIFOProblem(OpticalSetupProblem):
             results,
             self._sensitivity_function,
             self._frequencies,
-            homodyne=self._homodyne,
+            self._homodyne,
+            self._signal_floor,
         )
 
         return sensitivities

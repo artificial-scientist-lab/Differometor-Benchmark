@@ -45,6 +45,7 @@ Extends `ContinuousProblem` with optics-specific functionality shared by all Dif
 - **`calculate_sensitivity(params)`:** Computes the sensitivity curve for a given parameter vector — used for plotting, not optimization.
 - **`output_to_files(…)`:** Writes JSON parameter/loss files and PNG plots (loss curve + sensitivity curve vs. target).
 - **`bounds_overrides`:** All concrete problems accept optional property-level bound overrides (narrowing only).
+- **`signal_floor`:** All concrete problems floor detector signal magnitudes before sensitivity normalization. Defaults to `1e-20`.
 - **`print_bounds()`:** Prints the effective per-parameter bounds currently used by the problem.
 
 ---
@@ -69,6 +70,7 @@ problem = VoyagerProblem(n_frequencies=100)
 problem = VoyagerProblem(
    n_frequencies=100,
    bounds_overrides={"tuning": (0, 45)},
+   signal_floor=1e-20,
 )
 problem.print_bounds()
 ```
@@ -122,6 +124,7 @@ problem = VoyagerTuningProblem(n_frequencies=100)
 problem = VoyagerTuningProblem(
    n_frequencies=100,
    bounds_overrides={"tuning": (0, 45)},
+   signal_floor=1e-20,
 )
 problem.print_bounds()
 ```
@@ -159,7 +162,7 @@ All optimized parameters are mirror tuning angles in degrees:
 | Difficulty | Hard — loss < 0 is very difficult to achieve |
 
 ```python
-problem = ConstrainedVoyagerProblem(n_frequencies=100)
+problem = ConstrainedVoyagerProblem(n_frequencies=100, signal_floor=1e-20)
 ```
 
 #### Differences from `VoyagerProblem`
@@ -231,6 +234,7 @@ problem = UIFOProblem(
 | `centers` | `None` | Interior cell dict. Must be paired with `boundaries`. Mutually exclusive with `topology_seed` and `topology`. |
 | `boundaries` | `None` | Boundary cell dict. Must be paired with `centers`. Mutually exclusive with `topology_seed` and `topology`. |
 | `power_penalty_fn` | `squashed_relu_penalty` | Per-element penalty function `fn(value, threshold)`. See presets above. |
+| `signal_floor` | `1e-20` | Lower floor for detector signal magnitudes before sensitivity normalization. |
 
 > **Backwards compatibility:** `RandomUIFOProblem` is an alias for `UIFOProblem`.
 
