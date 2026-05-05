@@ -1,20 +1,16 @@
 """State-of-the-art Bayesian Optimization using BoTorch with batch acquisition."""
 
-import jax.numpy as jnp
 import numpy as np
 import torch
-from botorch.models import SingleTaskGP
-from botorch.fit import fit_gpytorch_mll
 from botorch.acquisition import qLogExpectedImprovement as qLogEI
-from botorch.optim import optimize_acqf
-from botorch.generation import gen_candidates_scipy
-from botorch.utils.transforms import unnormalize, normalize
-from gpytorch.mlls import ExactMarginalLogLikelihood
+from botorch.utils.transforms import normalize
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
-from dfbench.core.utils import t2j
 from dfbench.core.objective import Objective
+from dfbench.algorithms.utils.gp import fit_gp, optimize_acqfn
+from dfbench.algorithms.utils.misc import evaluate_y
+from dfbench.algorithms.utils.initial_design import create_initial_design
 
 
 class BotorchBO(OptimizationAlgorithm):
@@ -59,107 +55,14 @@ class BotorchBO(OptimizationAlgorithm):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = torch.float64
 
-    def _evaluate_y(
-        self,
-        X: Float[torch.Tensor, "... d"],
-        bounds: Float[torch.Tensor, "2 d"],
-        obj: Objective,
-        max_retries: int = 3,
-        perturbation_scale: float = 1e-6,
-    ) -> tuple[Float[torch.Tensor, "..."], Float[torch.Tensor, "..."]]:
-        """Evaluate objective function at given input(s) through Objective wrapper.
-
-        If NaN/Inf is encountered, attempts to perturb the point and retry.
-        Returns both values and a validity mask so invalid points can be
-        filtered from GP training data.
-
-        Args:
-            X: Input(s) in normalized [0,1] space.
-            bounds: Original bounds for unnormalization.
-            obj: Objective wrapper for evaluation tracking.
-            max_retries: Number of retries with perturbation for NaN values.
-            perturbation_scale: Scale of random perturbation for retries.
-
-        Returns:
-            Tuple of (negated objective values, validity mask).
-            Invalid entries have NaN values and False in mask.
-        """
-        unnormalized_X = unnormalize(X, bounds)
-        X_jax = t2j(unnormalized_X)
-
-        # Handle batch dimension - use Objective for tracking
-        if X_jax.ndim == 1:
-            Y_jax = obj.value(X_jax)
-            Y_torch = torch.tensor([Y_jax.item()], device=X.device, dtype=X.dtype)
-        else:
-            Y_jax = obj.vmap_value(X_jax)
-            Y_torch = torch.from_numpy(np.array(Y_jax)).to(
-                device=X.device, dtype=X.dtype
-            )
-
-        # Track validity
-        invalid_mask = torch.isnan(Y_torch) | torch.isinf(Y_torch)
-
-        # Retry invalid points with small perturbations
-        if torch.any(invalid_mask) and max_retries > 0:
-            invalid_indices = torch.where(invalid_mask)[0]
-            print(
-                f"Warning: {len(invalid_indices)} NaN/Inf values detected, retrying with perturbation..."
-            )
-
-            for idx in invalid_indices:
-                for retry in range(max_retries):
-                    X_perturbed = X[idx].clone()
-                    perturbation = (
-                        torch.randn_like(X_perturbed) * perturbation_scale * (retry + 1)
-                    )
-                    X_perturbed = torch.clamp(X_perturbed + perturbation, 0.0, 1.0)
-
-                    unnorm_perturbed = unnormalize(X_perturbed, bounds)
-                    X_jax_perturbed = t2j(unnorm_perturbed)
-                    Y_retry = obj.value(X_jax_perturbed)
-                    Y_retry_torch = torch.tensor(
-                        Y_retry.item(), device=X.device, dtype=X.dtype
-                    )
-
-                    if torch.isfinite(Y_retry_torch):
-                        Y_torch[idx] = Y_retry_torch
-                        invalid_mask[idx] = False
-                        break
-
-            remaining_invalid = torch.sum(invalid_mask).item()
-            if remaining_invalid > 0:
-                print(
-                    f"Warning: {remaining_invalid} points still invalid after retries"
-                )
-
-        valid_mask = ~invalid_mask
-        return -Y_torch, valid_mask  # Negate for maximization
-
-    def _fit_model(
-        self,
-        train_X: torch.Tensor,
-        train_Y: torch.Tensor,
-    ) -> SingleTaskGP:
-        """Fit GP model to current data.
-
-        Args:
-            train_X: Training inputs of shape (n, d).
-            train_Y: Training targets of shape (n, 1).
-
-        Returns:
-            Trained Gaussian Process model.
-        """
-        model = SingleTaskGP(train_X, train_Y)
-        mll = ExactMarginalLogLikelihood(model.likelihood, model)
-        fit_gpytorch_mll(mll)
-        return model
 
     def optimize(
         self,
         problem_objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "n_params"] | None = None,
+        num_restarts: int = 20,
+        raw_samples: int | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
         batch_size: int = 1,
@@ -206,11 +109,13 @@ class BotorchBO(OptimizationAlgorithm):
 
         obj.start_logging()
 
-        # Generate initial Sobol samples
-        sobol = torch.quasirandom.SobolEngine(
-            dimension=problem.n_params, scramble=True, seed=random_seed
-        )
-        train_X = sobol.draw(n=n_initial).to(dtype=self.dtype, device=self.device)
+        # Create initial design
+        train_X = create_initial_design(
+            dimensions=problem.n_params,
+            n_initial=n_initial,
+            random_seed=random_seed,
+            sampler="sobol",
+        ).to(device=self.device, dtype=self.dtype)
 
         # Include init_params if provided
         if init_params is not None:
@@ -223,7 +128,11 @@ class BotorchBO(OptimizationAlgorithm):
             train_X = torch.cat([init_X_norm, train_X], dim=0)
 
         # Evaluate initial samples
-        train_Y_raw, valid_mask = self._evaluate_y(train_X, problem_bounds_torch, obj)
+        train_Y_raw, valid_mask = evaluate_y(
+            X=train_X,
+            bounds=problem_bounds_torch,
+            obj=obj
+        )
         train_Y_raw = train_Y_raw.unsqueeze(-1)
 
         # Filter to only valid points for GP training
@@ -237,8 +146,6 @@ class BotorchBO(OptimizationAlgorithm):
 
         # Acquisition optimization options
         acqf_options = {
-            "raw_samples": bo_kwargs.get("raw_samples", 512),
-            "num_restarts": bo_kwargs.get("num_restarts", 4),
             "retry_on_optimization_warning": False,
             "options": {
                 "nonnegative": False,
@@ -255,21 +162,31 @@ class BotorchBO(OptimizationAlgorithm):
             max_iterations is None or iteration < max_iterations
         ):
             # Fit GP model
-            model = self._fit_model(train_X, train_Y)
+            model = fit_gp(train_X, train_Y)
             model.eval()
 
             # Optimize acquisition function
-            acqf = qLogEI(model, train_Y.max())
-            candidates, _ = optimize_acqf(
-                acqf,
+            # acqf = qLogNEI(
+            #     model=model,
+            #     X_baseline=train_X,
+            # )
+            acqf = qLogEI(
+                model=model,
+                best_f=train_Y.min(),
+            )
+
+            candidates, _ = optimize_acqfn(
+                acquisition_function=acqf,
                 bounds=unit_bounds,
                 q=batch_size,
-                gen_candidates=gen_candidates_scipy,
-                **acqf_options,
+                num_restarts=num_restarts,
+                raw_samples=raw_samples,
+                seed=random_seed,
+                acqf_options=acqf_options,
             )
 
             # Evaluate candidates
-            new_Y_raw, valid_mask_batch = self._evaluate_y(
+            new_Y_raw, valid_mask_batch = evaluate_y(
                 candidates, problem_bounds_torch, obj
             )
             new_Y_raw = new_Y_raw.unsqueeze(-1)

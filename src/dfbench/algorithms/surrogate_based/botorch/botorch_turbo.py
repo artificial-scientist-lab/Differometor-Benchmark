@@ -10,31 +10,24 @@ Reference:
 """
 
 import math
-import warnings
-
-import jax.numpy as jnp
 import numpy as np
 import torch
 from dataclasses import dataclass, field
 from botorch.models import SingleTaskGP
-from botorch.fit import fit_gpytorch_mll
-from botorch.acquisition import qLogExpectedImprovement as qLogEI
-from botorch.optim import optimize_acqf
+from botorch.acquisition import (
+    qLogExpectedImprovement as qLogEI
+)
 from botorch.generation import MaxPosteriorSampling
-from botorch.utils.transforms import unnormalize, normalize
-from botorch.exceptions.errors import ModelFittingError
-from botorch.exceptions.warnings import OptimizationWarning
-from gpytorch.mlls import ExactMarginalLogLikelihood
-from gpytorch.constraints import Interval
-from gpytorch.kernels import MaternKernel, ScaleKernel
-from gpytorch.likelihoods import GaussianLikelihood
-import gpytorch
+from botorch.utils.transforms import normalize
 from jaxtyping import Array, Float
 from typing import Literal
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
-from dfbench.core.utils import t2j
 from dfbench.core.objective import Objective
+
+from dfbench.algorithms.utils.gp import fit_gp, optimize_acqfn
+from dfbench.algorithms.utils.misc import evaluate_y
+from dfbench.algorithms.utils.initial_design import create_initial_design
 
 
 @dataclass
@@ -116,105 +109,6 @@ class BotorchTuRBO(OptimizationAlgorithm):
         self.dtype = torch.float64
         self.max_cholesky_size = float("inf")
 
-    def _evaluate_y(
-        self,
-        X: Float[torch.Tensor, "... d"],
-        bounds: Float[torch.Tensor, "2 d"],
-        obj: Objective,
-        max_retries: int = 3,
-        perturbation_scale: float = 1e-6,
-    ) -> tuple[Float[torch.Tensor, "..."], Float[torch.Tensor, "..."]]:
-        """Evaluate objective function at given input(s) through Objective wrapper."""
-        unnormalized_X = unnormalize(X, bounds)
-        X_jax = t2j(unnormalized_X)
-
-        if X_jax.ndim == 1:
-            Y_jax = obj.value(X_jax)
-            Y_torch = torch.tensor([Y_jax.item()], device=X.device, dtype=X.dtype)
-        else:
-            Y_jax = obj.vmap_value(X_jax)
-            Y_torch = torch.from_numpy(np.array(Y_jax)).to(
-                device=X.device, dtype=X.dtype
-            )
-
-        invalid_mask = torch.isnan(Y_torch) | torch.isinf(Y_torch)
-
-        if torch.any(invalid_mask) and max_retries > 0:
-            invalid_indices = torch.where(invalid_mask)[0]
-            for idx in invalid_indices:
-                for retry in range(max_retries):
-                    X_perturbed = X[idx].clone()
-                    perturbation = (
-                        torch.randn_like(X_perturbed) * perturbation_scale * (retry + 1)
-                    )
-                    X_perturbed = torch.clamp(X_perturbed + perturbation, 0.0, 1.0)
-
-                    unnorm_perturbed = unnormalize(X_perturbed, bounds)
-                    X_jax_perturbed = t2j(unnorm_perturbed)
-                    Y_retry = obj.value(X_jax_perturbed)
-                    Y_retry_torch = torch.tensor(
-                        Y_retry.item(), device=X.device, dtype=X.dtype
-                    )
-
-                    if torch.isfinite(Y_retry_torch):
-                        Y_torch[idx] = Y_retry_torch
-                        invalid_mask[idx] = False
-                        break
-
-        valid_mask = ~invalid_mask
-        return -Y_torch, valid_mask
-
-    def _fit_model(
-        self,
-        train_X: torch.Tensor,
-        train_Y: torch.Tensor,
-        use_turbo_constraints: bool = True,
-    ) -> SingleTaskGP:
-        """Fit GP model with TuRBO-specific kernel settings."""
-        dim = train_X.shape[-1]
-
-        def create_turbo_model():
-            likelihood = GaussianLikelihood(noise_constraint=Interval(1e-8, 1e-3))
-            covar_module = ScaleKernel(
-                MaternKernel(
-                    nu=2.5,
-                    ard_num_dims=dim,
-                    lengthscale_constraint=Interval(0.005, 4.0),
-                )
-            )
-            model = SingleTaskGP(
-                train_X,
-                train_Y,
-                covar_module=covar_module,
-                likelihood=likelihood,
-            )
-            mll = ExactMarginalLogLikelihood(model.likelihood, model)
-            return model, mll
-
-        def create_simple_model():
-            model = SingleTaskGP(train_X, train_Y)
-            mll = ExactMarginalLogLikelihood(model.likelihood, model)
-            return model, mll
-
-        with gpytorch.settings.max_cholesky_size(self.max_cholesky_size):
-            with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", category=OptimizationWarning)
-
-                if use_turbo_constraints:
-                    try:
-                        model, mll = create_turbo_model()
-                        fit_gpytorch_mll(mll)
-                        return model
-                    except ModelFittingError:
-                        pass
-
-                try:
-                    model, mll = create_simple_model()
-                    fit_gpytorch_mll(mll)
-                    return model
-                except ModelFittingError:
-                    model, _ = create_simple_model()
-                    return model
 
     def _generate_batch(
         self,
@@ -225,7 +119,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
         batch_size: int,
         n_candidates: int | None = None,
         num_restarts: int = 10,
-        raw_samples: int = 512,
+        raw_samples: int | None = None,
         acqf: Literal["ts", "ei"] = "ts",
     ) -> torch.Tensor:
         """Generate a new batch of candidate points within the trust region."""
@@ -263,6 +157,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
         tr_lb = torch.clamp(x_center - weights * state.length / 2.0, 0.0, 1.0)
         tr_ub = torch.clamp(x_center + weights * state.length / 2.0, 0.0, 1.0)
+        bounds = torch.stack([tr_lb, tr_ub])
 
         if acqf == "ts":
             sobol = torch.quasirandom.SobolEngine(dim, scramble=True)
@@ -288,16 +183,20 @@ class BotorchTuRBO(OptimizationAlgorithm):
                 X_next = thompson_sampling(X_cand, num_samples=batch_size)
 
         elif acqf == "ei":
-            ei = qLogEI(model, Y.max())
-            X_next, _ = optimize_acqf(
-                ei,
-                bounds=torch.stack([tr_lb, tr_ub]),
+            ei = qLogEI(
+                model=model,
+                best_f=Y.max(),
+            )
+            X_next, _ = optimize_acqfn(
+                acquisition_function=ei,
+                bounds=bounds,
                 q=batch_size,
                 num_restarts=num_restarts,
                 raw_samples=raw_samples,
             )
 
         return X_next
+
 
     def optimize(
         self,
@@ -307,6 +206,8 @@ class BotorchTuRBO(OptimizationAlgorithm):
         random_seed: int | None = None,
         n_initial: int | None = None,
         batch_size: int = 1,
+        num_restarts: int = 10,
+        raw_samples: int | None = None,
         acqf: Literal["ts", "ei"] = "ts",
         n_restarts: int = 1,
         **turbo_kwargs,
@@ -322,6 +223,8 @@ class BotorchTuRBO(OptimizationAlgorithm):
             random_seed: Random seed for reproducibility.
             n_initial: Number of initial Sobol samples. Defaults to 2 * dim.
             batch_size: Number of points to acquire per iteration. Defaults to 1.
+            num_restarts: Number of random restarts for multistart optimization.
+            raw_samples: Number of raw samples for initialization.
             acqf: Acquisition function type ("ts" or "ei"). Defaults to "ts".
             n_restarts: Number of TuRBO restarts. Defaults to 1.
             **turbo_kwargs: Additional keyword arguments.
@@ -347,8 +250,6 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
         # TuRBO-specific parameters
         n_candidates = turbo_kwargs.get("n_candidates", min(5000, max(2000, 200 * dim)))
-        num_restarts = turbo_kwargs.get("num_restarts", 10)
-        raw_samples = turbo_kwargs.get("raw_samples", 512)
         length_init = turbo_kwargs.get("length_init", 0.8)
         length_min = turbo_kwargs.get("length_min", 0.5**7)
         length_max = turbo_kwargs.get("length_max", 1.6)
@@ -361,16 +262,20 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
         def run_turbo_instance(init_X: torch.Tensor | None = None):
             """Run a single TuRBO instance until restart is triggered or budget exhausted."""
-            sobol = torch.quasirandom.SobolEngine(
-                dimension=dim, scramble=True, seed=random_seed
-            )
-            train_X = sobol.draw(n=n_initial).to(dtype=self.dtype, device=self.device)
+            
+            train_X = create_initial_design(
+                dimensions=problem.n_params,
+                n_initial=n_initial,
+                random_seed=random_seed,
+            ).to(device=self.device, dtype=self.dtype)
 
             if init_X is not None:
                 train_X = torch.cat([init_X, train_X], dim=0)
 
-            train_Y_raw, valid_mask = self._evaluate_y(
-                train_X, problem_bounds_torch, obj
+            train_Y_raw, valid_mask = evaluate_y(
+                X=train_X,
+                bounds=problem_bounds_torch,
+                obj=obj
             )
             train_Y_raw = train_Y_raw.unsqueeze(-1)
 
@@ -404,10 +309,15 @@ class BotorchTuRBO(OptimizationAlgorithm):
                 train_Y_normalized = (train_Y - Y_mean) / Y_std
 
                 # Fit GP and generate batch
-                model = self._fit_model(train_X, train_Y_normalized)
+                model = fit_gp(
+                    train_X=train_X,
+                    train_Y=train_Y_normalized,
+                    tr_modeling=True,
+                    use_turbo_constraints=True,
+                )
                 model.eval()
 
-                X_next = self._generate_batch(
+                X_next, _ = self._generate_batch(
                     state=state,
                     model=model,
                     X=train_X,
@@ -420,7 +330,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
                 )
 
                 # Evaluate new candidates
-                Y_next_raw, valid_mask_next = self._evaluate_y(
+                Y_next_raw, valid_mask_next = evaluate_y(
                     X_next, problem_bounds_torch, obj
                 )
                 Y_next_raw = Y_next_raw.unsqueeze(-1)
