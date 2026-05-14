@@ -23,6 +23,10 @@ source "$ENV_DIR/bin/activate"
 # External directory containing campaign .h5 files.
 DATA_DIR="/mnt/lustre/work/krenn/klz077/datasets/UIFOs"
 
+# Checkpoint path for saving the best model
+mkdir -p neural_surrogate/checkpoints
+CHECKPOINT_PATH="neural_surrogate/checkpoints/best_model.pt"
+
 LOSS_KEY="${LOSS_KEY:-loss_senspow}"
 EPOCHS="${EPOCHS:-250}"
 BATCH_SIZE="${BATCH_SIZE:-512}"
@@ -58,7 +62,8 @@ python -m neural_surrogate.pipeline \
   --seed 1 \
   --val-fraction "$VAL_FRACTION" \
   --device "$DEVICE" \
-  --multi-gpu "$MULTI_GPU"
+  --multi-gpu "$MULTI_GPU" \
+  --checkpoint-path "$CHECKPOINT_PATH"
 
 end=$(date +%s)
 runtime=$((end - start))
