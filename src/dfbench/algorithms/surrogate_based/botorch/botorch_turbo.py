@@ -321,7 +321,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
         n_initial: int | None = None,
         acquisition_batch_size: int = 1,
         acqf: Literal["ts", "ei"] = "ts",
-        n_restarts: int = 1,
+        n_restarts: int | None = None,
         **turbo_kwargs,
     ) -> None:
         """Run TuRBO optimization with adaptive trust regions.
@@ -337,7 +337,9 @@ class BotorchTuRBO(OptimizationAlgorithm):
             acquisition_batch_size: Number of points to acquire per iteration.
                 Defaults to 1.
             acqf: Acquisition function type ("ts" or "ei"). Defaults to "ts".
-            n_restarts: Number of TuRBO restarts. Defaults to 1.
+            n_restarts: Maximum number of TuRBO restarts. When ``None``,
+                restart until the objective budget is exhausted. Defaults to
+                ``None``.
             **turbo_kwargs: Additional keyword arguments.
         """
         if acquisition_batch_size < 1:
@@ -468,7 +470,9 @@ class BotorchTuRBO(OptimizationAlgorithm):
         # Main optimization with restarts
         restart_count = 0
 
-        while not obj.budget_exceeded and restart_count < n_restarts:
+        while not obj.budget_exceeded and (
+            n_restarts is None or restart_count < n_restarts
+        ):
             init_X = None
             if restart_count == 0 and init_params is not None:
                 init_X_unnorm = torch.tensor(
