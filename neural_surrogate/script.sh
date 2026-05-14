@@ -2,7 +2,7 @@
 #SBATCH --job-name ns_uifo
 #SBATCH --output neural_surrogate/logs/%x-%j.out
 #SBATCH --error neural_surrogate/logs/%x-%j.err
-#SBATCH --partition a100-galvani
+#SBATCH --partition 2080-galvani
 #SBATCH --gpus=8
 #SBATCH --mem-per-gpu=30G
 #SBATCH --cpus-per-task=8
@@ -58,7 +58,7 @@ python -m neural_surrogate.pipeline \
   --seed 1 \
   --val-fraction "$VAL_FRACTION" \
   --device "cuda" \
-  --multi-gpu True
+  --multi-gpu "data-parallel"
 
 end=$(date +%s)
 runtime=$((end - start))
