@@ -144,6 +144,9 @@ def train_vae(
                 break
 
             x = batch[0].to(device)
+            if x.shape[0] < 2:
+                continue
+
             optimizer.zero_grad()
 
             recon_x, mu, logvar = model(x)
@@ -231,6 +234,12 @@ class VAESampling(OptimizationAlgorithm):
                 break
 
             chunk_size = self.batch_size
+            if obj._max_evals is not None:
+                evals_for_sampling = int(
+                    np.floor(obj._max_evals * sampling_budget_fraction)
+                )
+                evals_left_for_sampling = evals_for_sampling - obj.eval_count
+                chunk_size = min(chunk_size, evals_left_for_sampling)
             if max_samples is not None:
                 chunk_size = min(chunk_size, max_samples - samples_collected)
             if obj.evals_left is not None:
