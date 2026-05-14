@@ -45,7 +45,7 @@ class TurboState:
     """
 
     dim: int
-    batch_size: int
+    acquisition_batch_size: int
     length: float = 0.8
     length_min: float = 0.5**7
     length_max: float = 1.6
@@ -57,8 +57,14 @@ class TurboState:
     restart_triggered: bool = False
 
     def __post_init__(self) -> None:
+        if self.acquisition_batch_size < 1:
+            raise ValueError("acquisition_batch_size must be at least 1.")
+
         self.failure_tolerance = math.ceil(
-            max(4.0 / self.batch_size, float(self.dim) / self.batch_size)
+            max(
+                4.0 / self.acquisition_batch_size,
+                float(self.dim) / self.acquisition_batch_size,
+            )
         )
 
 
@@ -106,15 +112,19 @@ class BotorchTuRBO(OptimizationAlgorithm):
     algorithm_str: str = "botorch_turbo"
     algorithm_type: AlgorithmType = AlgorithmType.SURROGATE_BASED
 
-    def __init__(self) -> None:
+    def __init__(self, batch_size: int = 1) -> None:
         """Initialize BoTorch TuRBO Optimization.
 
-        No configuration parameters needed - all settings are provided
-        at optimization time via the optimize() method.
+        Args:
+            batch_size: Number of candidates evaluated per ``vmap_value`` call.
         """
+        if batch_size < 1:
+            raise ValueError("batch_size must be at least 1.")
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = torch.float64
         self.max_cholesky_size = float("inf")
+        self.batch_size = batch_size
 
     def _evaluate_y(
         self,
@@ -132,7 +142,10 @@ class BotorchTuRBO(OptimizationAlgorithm):
             Y_jax = obj.value(X_jax)
             Y_torch = torch.tensor([Y_jax.item()], device=X.device, dtype=X.dtype)
         else:
-            Y_jax = obj.vmap_value(X_jax)
+            y_chunks = []
+            for start in range(0, X_jax.shape[0], self.batch_size):
+                y_chunks.append(obj.vmap_value(X_jax[start : start + self.batch_size]))
+            Y_jax = jnp.concatenate(y_chunks)
             Y_torch = torch.from_numpy(np.array(Y_jax)).to(
                 device=X.device, dtype=X.dtype
             )
@@ -222,7 +235,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
         model: SingleTaskGP,
         X: torch.Tensor,
         Y: torch.Tensor,
-        batch_size: int,
+        acquisition_batch_size: int,
         n_candidates: int | None = None,
         num_restarts: int = 10,
         raw_samples: int = 512,
@@ -285,14 +298,14 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
             thompson_sampling = MaxPosteriorSampling(model=model, replacement=False)
             with torch.no_grad():
-                X_next = thompson_sampling(X_cand, num_samples=batch_size)
+                X_next = thompson_sampling(X_cand, num_samples=acquisition_batch_size)
 
         elif acqf == "ei":
             ei = qLogEI(model, Y.max())
             X_next, _ = optimize_acqf(
                 ei,
                 bounds=torch.stack([tr_lb, tr_ub]),
-                q=batch_size,
+                q=acquisition_batch_size,
                 num_restarts=num_restarts,
                 raw_samples=raw_samples,
             )
@@ -306,7 +319,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int | None = None,
-        batch_size: int = 1,
+        acquisition_batch_size: int = 1,
         acqf: Literal["ts", "ei"] = "ts",
         n_restarts: int = 1,
         **turbo_kwargs,
@@ -321,11 +334,15 @@ class BotorchTuRBO(OptimizationAlgorithm):
             init_params: Initial parameters to include in the training set.
             random_seed: Random seed for reproducibility.
             n_initial: Number of initial Sobol samples. Defaults to 2 * dim.
-            batch_size: Number of points to acquire per iteration. Defaults to 1.
+            acquisition_batch_size: Number of points to acquire per iteration.
+                Defaults to 1.
             acqf: Acquisition function type ("ts" or "ei"). Defaults to "ts".
             n_restarts: Number of TuRBO restarts. Defaults to 1.
             **turbo_kwargs: Additional keyword arguments.
         """
+        if acquisition_batch_size < 1:
+            raise ValueError("acquisition_batch_size must be at least 1.")
+
         obj = problem_objective
         problem = obj.problem
 
@@ -355,7 +372,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
         success_tolerance = turbo_kwargs.get("success_tolerance", 10)
 
         # Warmup JIT (vmap_value is used for batch evaluation in _evaluate_y)
-        obj.warmup_vmap_value(batch_size=batch_size)
+        obj.warmup_vmap_value(batch_size=self.batch_size)
 
         obj.start_logging()
 
@@ -382,7 +399,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
             state = TurboState(
                 dim=dim,
-                batch_size=batch_size,
+                acquisition_batch_size=acquisition_batch_size,
                 length=length_init,
                 length_min=length_min,
                 length_max=length_max,
@@ -412,7 +429,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
                     model=model,
                     X=train_X,
                     Y=train_Y_normalized,
-                    batch_size=batch_size,
+                    acquisition_batch_size=acquisition_batch_size,
                     n_candidates=n_candidates,
                     num_restarts=num_restarts,
                     raw_samples=raw_samples,

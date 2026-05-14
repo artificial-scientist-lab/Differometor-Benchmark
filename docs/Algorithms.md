@@ -621,12 +621,12 @@ These algorithms build a surrogate model of the loss landscape and use it to sel
 Standard Bayesian Optimization using a Gaussian Process surrogate and batch Expected Improvement acquisition (qLogEI).
 
 ```python
-optimizer = BotorchBO()
+optimizer = BotorchBO(batch_size=1)
 optimizer.optimize(
     problem_objective=obj,
     max_iterations=100,      # required
     n_initial=10,            # Sobol samples before fitting GP
-    batch_size=1,            # points per acquisition
+    acquisition_batch_size=1,
     random_seed=42,
 )
 ```
@@ -635,7 +635,8 @@ optimizer.optimize(
 |----------------|---------|-------------|
 | `max_iterations` | *required* | BO iterations (excluding initial samples). |
 | `n_initial` | `10` | Initial Sobol quasi-random samples. |
-| `batch_size` | `1` | Points acquired per iteration. |
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `acquisition_batch_size` | `1` | Points acquired per iteration. |
 
 **Implementation detail:** Parameters are internally normalized to $[0, 1]$. The GP is fit on negated losses (BoTorch maximizes by convention). NaN/Inf evaluations are retried with small perturbations up to `max_retries` times.
 
@@ -646,12 +647,12 @@ optimizer.optimize(
 Implements TuRBO-1 from [Eriksson et al. 2019](https://proceedings.neurips.cc/paper/2019/hash/6c990b7aca7bc7e0d4b91ac0c4ed2f54-Abstract.html). Maintains a local trust region that expands on success and shrinks on failure, making it effective for high-dimensional problems where global BO struggles.
 
 ```python
-optimizer = BotorchTuRBO()
+optimizer = BotorchTuRBO(batch_size=5)
 optimizer.optimize(
     problem_objective=obj,
     max_iterations=100,
     n_initial=20,
-    batch_size=5,
+    acquisition_batch_size=5,
     random_seed=42,
 )
 ```
@@ -660,7 +661,8 @@ optimizer.optimize(
 |----------------|---------|-------------|
 | `max_iterations` | *required* | TuRBO iterations. |
 | `n_initial` | `20` | Initial Sobol samples. |
-| `batch_size` | `5` | Points per acquisition. |
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `acquisition_batch_size` | `1` | Points per acquisition. |
 
 **Trust region mechanics:**
 - After `success_tolerance` consecutive improvements → region **doubles** in size.
@@ -956,13 +958,13 @@ optimizer.optimize(
 Two-phase approach: (1) train a Variational Autoencoder on high-quality samples to learn a compressed latent space, then (2) run Bayesian Optimization in that latent space.
 
 ```python
-optimizer = VAESampling()
+optimizer = VAESampling(batch_size=64)
 optimizer.optimize(
     problem_objective=obj,
     max_iterations=50,
     vae_training_samples=1000,
     vae_epochs=100,
-    batch_size=64,
+    vae_train_batch_size=64,
     random_seed=42,
 )
 ```
@@ -971,7 +973,8 @@ optimizer.optimize(
 |----------------|---------|-------------|
 | `vae_training_samples` | `1000` | Samples for VAE training. |
 | `vae_epochs` | `100` | Training epochs with cyclic KL annealing. |
-| `batch_size` | `64` | Mini-batch size for VAE training. |
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `vae_train_batch_size` | `32` | Mini-batch size for VAE training. |
 | `max_iterations` | *required* | BO iterations in latent space. |
 
 **Architecture details:**

@@ -14,14 +14,14 @@ obj = Objective(
     save_params_history=True,
 )
 
-optimizer = VAESampling()
+optimizer = VAESampling(batch_size=64)
 
 optimizer.optimize(
     problem_objective=obj,
     max_iterations=50,
     vae_training_samples=1000,
     vae_epochs=100,
-    batch_size=64,
+    vae_train_batch_size=64,
     hidden_dim=256,
     num_blocks=4,
     use_objective_guidance=True,

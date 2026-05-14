@@ -157,7 +157,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
 
         state = TurboState(
             dim=dim,
-            batch_size=turbo_batch_size,
+            acquisition_batch_size=turbo_batch_size,
             best_value=train_Y.max().item(),
         )
 
@@ -179,7 +179,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
                 model=model,
                 X=train_X,
                 Y=train_Y_norm,
-                batch_size=turbo_batch_size,
+                acquisition_batch_size=turbo_batch_size,
                 acqf=turbo_acqf,
             )
 

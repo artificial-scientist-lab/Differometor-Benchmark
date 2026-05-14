@@ -14,13 +14,13 @@ obj = Objective(
     save_params_history=True,
 )
 
-optimizer = BotorchBO()
+optimizer = BotorchBO(batch_size=1)
 
 optimizer.optimize(
     problem_objective=obj,
     max_iterations=200,
     n_initial=10,
-    batch_size=1,
+    acquisition_batch_size=1,
     random_seed=42,
 )
 

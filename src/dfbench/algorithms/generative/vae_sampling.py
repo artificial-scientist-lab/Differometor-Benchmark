@@ -179,13 +179,26 @@ class VAESampling(OptimizationAlgorithm):
     algorithm_str: str = "vae_sampling"
     algorithm_type: AlgorithmType = AlgorithmType.GENERATIVE
 
-    def __init__(self) -> None:
+    def __init__(self, batch_size: int = 1) -> None:
         """Initialize VAESampling optimizer.
 
-        No algorithm-specific configuration needed at initialization.
-        All parameters are passed to optimize().
+        Args:
+            batch_size: Number of candidates evaluated per ``vmap_value`` call.
         """
+        if batch_size < 1:
+            raise ValueError("batch_size must be at least 1.")
+
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.batch_size = batch_size
+
+    def _evaluate_candidates(
+        self, obj: Objective, candidates: Float[Array, "n d"]
+    ) -> Float[Array, "n"]:
+        """Evaluate candidates through ``vmap_value`` using constructor batch size."""
+        losses = []
+        for start in range(0, candidates.shape[0], self.batch_size):
+            losses.append(obj.vmap_value(candidates[start : start + self.batch_size]))
+        return jnp.concatenate(losses)
 
     def optimize(
         self,
@@ -195,10 +208,10 @@ class VAESampling(OptimizationAlgorithm):
         random_seed: int | None = None,
         vae_training_samples: int = 1000,
         vae_epochs: int = 100,
-        batch_size: int = 1,
         latent_dim_factor: int = 10,
         hidden_dim: int = 256,
         num_blocks: int = 4,
+        vae_train_batch_size: int = 32,
         use_objective_guidance: bool = True,
         top_k: int = 20,
         n_initial: int = 20,
@@ -214,10 +227,10 @@ class VAESampling(OptimizationAlgorithm):
             random_seed: Random seed for reproducibility.
             vae_training_samples: Number of samples to generate for VAE training.
             vae_epochs: Number of epochs to train VAE.
-            batch_size: Batch size for evaluation and training.
             latent_dim_factor: Factor to determine latent dimension (d // latent_dim_factor + 1).
             hidden_dim: Hidden dimension for VAE architecture.
             num_blocks: Number of residual blocks in VAE.
+            vae_train_batch_size: Mini-batch size for VAE training.
             use_objective_guidance: If True, evaluate samples and train on top performers.
                                    If False, train on random samples without evaluation.
             top_k: Number of top-performing samples to select for VAE training
@@ -226,6 +239,9 @@ class VAESampling(OptimizationAlgorithm):
             acqf_raw_samples: Number of raw samples for acquisition optimization.
             acqf_num_restarts: Number of restarts for acquisition optimization.
         """
+        if vae_train_batch_size < 1:
+            raise ValueError("vae_train_batch_size must be at least 1.")
+
         obj = problem_objective
         problem = obj.problem
 
@@ -244,6 +260,8 @@ class VAESampling(OptimizationAlgorithm):
         )
         vae.to(self._device)
 
+        obj.warmup_vmap_value(batch_size=self.batch_size)
+
         obj.start_logging()
 
         # === VAE Training Phase ===
@@ -257,16 +275,7 @@ class VAESampling(OptimizationAlgorithm):
             # Evaluate candidates
             candidates_jax = t2j(candidates_torch.cpu())
 
-            # Process in batches
-            num_candidates = candidates_jax.shape[0]
-            eval_losses_list = []
-            for i in range(0, num_candidates, batch_size):
-                batch = candidates_jax[i : i + batch_size]
-                # Track evaluations through Objective (vmap_value handles all tracking)
-                batch_losses = obj.vmap_value(batch)
-                eval_losses_list.append(batch_losses)
-
-            eval_losses = jnp.concatenate(eval_losses_list)
+            eval_losses = self._evaluate_candidates(obj, candidates_jax)
 
             # Select top performers
             top_indices = jnp.argsort(eval_losses)[:top_k]
@@ -275,7 +284,7 @@ class VAESampling(OptimizationAlgorithm):
 
             # Train VAE on best samples
             dataset = TensorDataset(best_samples_torch)
-            loader = DataLoader(dataset, batch_size=32, shuffle=True)
+            loader = DataLoader(dataset, batch_size=vae_train_batch_size, shuffle=True)
 
             vae.train()
             train_vae(
@@ -288,7 +297,7 @@ class VAESampling(OptimizationAlgorithm):
                 torch.randn(vae_training_samples, input_dim, device=self._device) * 1.65
             )
             dataset = TensorDataset(data)
-            loader = DataLoader(dataset, batch_size=32, shuffle=True)
+            loader = DataLoader(dataset, batch_size=vae_train_batch_size, shuffle=True)
 
             vae.train()
             train_vae(
@@ -322,12 +331,10 @@ class VAESampling(OptimizationAlgorithm):
 
         # Evaluate initial samples through Objective
         train_x_jax = t2j(train_x_decoded.cpu())
-        train_y_list = []
-        for i in range(n_initial):
-            loss_val = obj.value(train_x_jax[i])
-            train_y_list.append(float(loss_val))
+        train_y = self._evaluate_candidates(obj, train_x_jax)
 
-        train_y_torch = torch.tensor(train_y_list, dtype=dtype).unsqueeze(-1)
+        train_y_torch = torch.from_numpy(np.array(train_y)).to(dtype=dtype)
+        train_y_torch = train_y_torch.unsqueeze(-1)
         train_y_torch = -train_y_torch  # Negate for maximization
 
         # Filter out invalid values
@@ -385,7 +392,8 @@ class VAESampling(OptimizationAlgorithm):
 
             # Evaluate through Objective
             candidates_x_jax = t2j(candidates_x.cpu())
-            candidate_loss = obj.value(candidates_x_jax[0])
+            candidate_losses = self._evaluate_candidates(obj, candidates_x_jax)
+            candidate_loss = candidate_losses[0]
 
             if not jnp.isfinite(candidate_loss):
                 continue
