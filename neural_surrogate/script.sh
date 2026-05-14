@@ -25,12 +25,12 @@ DATA_DIR="/mnt/lustre/work/krenn/klz077/datasets/UIFOs"
 
 LOSS_KEY="${LOSS_KEY:-loss_senspow}"
 EPOCHS="${EPOCHS:-250}"
-BATCH_SIZE="${BATCH_SIZE:-64}"
+BATCH_SIZE="${BATCH_SIZE:-512}"
 LR="${LR:-1e-3}"
 TOPOLOGY_DIM="${TOPOLOGY_DIM:-128}"
 SEED="${SEED:-0}"
 VAL_FRACTION="${VAL_FRACTION:-0.2}"
-DEVICE="${DEVICE:-auto}"
+DEVICE="${DEVICE:-cuda}"
 MULTI_GPU="${MULTI_GPU:-data-parallel}"
 
 echo "Environment: $ENV_DIR"
@@ -57,8 +57,8 @@ python -m neural_surrogate.pipeline \
   --topology-dim "$TOPOLOGY_DIM" \
   --seed 1 \
   --val-fraction "$VAL_FRACTION" \
-  --device "cuda" \
-  --multi-gpu "data-parallel"
+  --device "$DEVICE" \
+  --multi-gpu "$MULTI_GPU"
 
 end=$(date +%s)
 runtime=$((end - start))

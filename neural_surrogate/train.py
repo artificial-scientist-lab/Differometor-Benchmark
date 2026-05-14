@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import torch
+import logging
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
@@ -14,6 +15,8 @@ try:
 except ImportError:  # Allows running this file directly during quick experiments.
     from eval import evaluate, move_batch_to_device
 
+train_logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 @dataclass
 class TrainConfig:
@@ -93,6 +96,7 @@ def fit(
     best_val_loss = float("inf")
 
     for _ in range(config.epochs):
+        train_logger.info(f"Starting epoch {_+1}/{config.epochs}...")
         train_loss = train_epoch(
             model=model,
             dataloader=train_loader,
@@ -106,12 +110,14 @@ def fit(
         if val_loader is None:
             continue
 
+        train_logger.info("Running validation")
         metrics = evaluate(model, val_loader, loss_fn=loss_fn, device=device)
         history.val_loss.append(metrics["loss"])
         history.val_mse.append(metrics["mse"])
 
         if config.checkpoint_path is not None and metrics["loss"] < best_val_loss:
             best_val_loss = metrics["loss"]
+            train_logger.info("New best validation loss found. Saving checkpoint.")
             save_checkpoint(model, config.checkpoint_path)
 
     return history
@@ -121,6 +127,7 @@ def save_checkpoint(model: nn.Module, path: str | Path) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), path)
+    train_logger.info(f"Checkpoint saved to {path}")
 
 
 def load_checkpoint(

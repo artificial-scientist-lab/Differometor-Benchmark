@@ -53,6 +53,7 @@ def run_pipeline(
     val_fraction: float = 0.2,
     device: str = "auto",
     multi_gpu: str = "off",
+    checkpoint_path: str | Path | None = None,
 ) -> dict[str, float]:
     torch.manual_seed(seed)
     train_device = resolve_device(device)
@@ -100,6 +101,7 @@ def run_pipeline(
             lr=lr,
             grad_clip_norm=1.0,
             device=train_device,
+            checkpoint_path=checkpoint_path,
         ),
     )
     metrics = evaluate(model, eval_loader, device=train_device)
@@ -207,7 +209,18 @@ def main() -> None:
         choices=("off", "data-parallel"),
         help="Use torch.nn.DataParallel across all visible GPUs.",
     )
+    parser.add_argument(
+        "--checkpoint-path",
+        type=Path,
+        default=None,
+        help="If specified, saves the best model checkpoint to this path.",
+    )
     args = parser.parse_args()
+
+    if isinstance(args.data, str):
+        args.data = Path(args.data)
+    if isinstance(args.checkpoint_path, str):
+        args.checkpoint_path = Path(args.checkpoint_path)
 
     metrics = run_pipeline(
         args.data,
@@ -220,6 +233,7 @@ def main() -> None:
         val_fraction=args.val_fraction,
         device=args.device,
         multi_gpu=args.multi_gpu,
+        checkpoint_path=args.checkpoint_path,
     )
     for key, value in metrics.items():
         print(f"{key}: {value:.9g}")
