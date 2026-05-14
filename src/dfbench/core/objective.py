@@ -95,6 +95,7 @@ class Objective:
     **Random sampling**
 
         - ``set_seed(seed)``             – set JAX PRNG seed for reproducibility.
+        - ``random_params(n)``           – samples from the active parameter space.
         - ``random_params_bounded(n)``   – uniform samples inside parameter bounds.
         - ``random_params_unbounded(n)`` – samples mapped to unbounded space via
             inverse mapping (default: inverse-sigmoid).  For custom mappings
@@ -942,6 +943,30 @@ class Objective:
         self._rng_key = jax.random.PRNGKey(seed)
 
     # --------- Random parameter sampling ---------
+
+    def random_params(
+        self,
+        n_samples: int = 1,
+        rng_key=None,
+    ) -> Float[Array, "n_samples n_params"] | Float[Array, "n_params"]:
+        """Generate random parameters in the active objective space.
+
+        Returns unbounded samples when ``self.unbounded`` is True, otherwise
+        returns bounded samples. This is the preferred helper for algorithms
+        that should follow the space selected by ``prepare()`` / ``set_space_mode()``.
+
+        Args:
+            n_samples: Number of parameter vectors to generate. Defaults to 1.
+            rng_key: Optional JAX random key. If None, uses the Objective's
+                internal key when available.
+
+        Returns:
+            Array of shape (n_samples, n_params) if n_samples > 1,
+            or (n_params,) if n_samples == 1.
+        """
+        if self.unbounded:
+            return self.random_params_unbounded(n_samples=n_samples, rng_key=rng_key)
+        return self.random_params_bounded(n_samples=n_samples, rng_key=rng_key)
 
     def random_params_bounded(
         self,

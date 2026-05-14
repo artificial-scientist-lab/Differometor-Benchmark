@@ -20,11 +20,11 @@ optimizer.optimize(
     problem_objective=obj,
     max_iterations=50,
     vae_training_samples=1000,
+    sampling_budget_fraction=0.25,
     vae_epochs=100,
     vae_train_batch_size=64,
     hidden_dim=256,
     num_blocks=4,
-    use_objective_guidance=True,
     random_seed=42,
 )
 

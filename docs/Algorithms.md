@@ -963,6 +963,7 @@ optimizer.optimize(
     problem_objective=obj,
     max_iterations=50,
     vae_training_samples=1000,
+    sampling_budget_fraction=0.25,
     vae_epochs=100,
     vae_train_batch_size=64,
     random_seed=42,
@@ -971,7 +972,8 @@ optimizer.optimize(
 
 | Hyperparameter | Default | Description |
 |----------------|---------|-------------|
-| `vae_training_samples` | `1000` | Samples for VAE training. |
+| `vae_training_samples` | `1000` | Maximum objective-evaluated samples for VAE training (`None` means budget-fraction only). |
+| `sampling_budget_fraction` | `0.25` | Stop VAE sampling when this fraction of the tightest Objective budget is consumed, leaving the rest for latent BO. |
 | `vae_epochs` | `100` | Training epochs with cyclic KL annealing. |
 | `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
 | `vae_train_batch_size` | `32` | Mini-batch size for VAE training. |
@@ -980,6 +982,7 @@ optimizer.optimize(
 **Architecture details:**
 - ResNet-style VAE with residual blocks, batch normalization, and Mish activations.
 - Latent dimension = `n_params / 10` (compressed 10×).
+- VAE training samples are drawn with `obj.random_params()` in the active unbounded Objective space and ranked by evaluated loss.
 - Cyclic $\beta$-annealing for stable training.
 - After training, BO uses `qLogEI` acquisition in the learned latent space.
 

@@ -384,6 +384,7 @@ while not obj.budget_exceeded:        # main loop condition
         break                          # early stopping
 
 # Random parameter generation
+params = obj.random_params()                      # active bounded/unbounded space
 params = obj.random_params_bounded()              # shape: (n_params,)
 batch = obj.random_params_bounded(n_samples=100)  # shape: (100, n_params)
 params = obj.random_params_unbounded()            # for unbounded space

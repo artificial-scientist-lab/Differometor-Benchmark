@@ -1,8 +1,9 @@
 """VAE-based optimization with Bayesian Optimization in learned latent space.
 
 This module implements a two-phase optimization approach:
-1. VAE Training Phase: Trains a Variational Autoencoder on high-quality samples
-   (either objective-guided or random) to learn a compressed latent representation
+1. VAE Training Phase: Samples candidates from the active Objective space,
+    evaluates them, and trains a Variational Autoencoder on high-quality samples
+    to learn a compressed latent representation
 2. BO Phase: Performs Bayesian Optimization in the learned latent space using
    Gaussian Process surrogate models and batch Expected Improvement acquisition
 
@@ -10,7 +11,6 @@ The VAE learns a low-dimensional (d/10) latent space that captures the structure
 of high-quality solutions, making optimization more efficient in high dimensions.
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import torch
@@ -18,6 +18,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 from jaxtyping import Array, Float
+from typing import Callable
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_mll
 from botorch.acquisition import qLogExpectedImprovement as qLogEI
@@ -27,7 +28,6 @@ from botorch.utils.transforms import unnormalize
 from gpytorch.mlls import ExactMarginalLogLikelihood
 
 from dfbench.core.utils import t2j, j2t
-from dfbench.core.problem import ContinuousProblem
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 from dfbench.core.objective import Objective
 
@@ -124,6 +124,7 @@ def train_vae(
     epochs: int = 100,
     device: str = "cpu",
     verbose: bool = False,
+    stop_training: Callable[[], bool] | None = None,
 ) -> None:
     """Train the VAE with cyclic KL annealing."""
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-4)
@@ -131,11 +132,17 @@ def train_vae(
     model.train()
 
     for epoch in range(epochs):
+        if stop_training is not None and stop_training():
+            break
+
         total_loss = 0
         cycle_len = 20
         beta = min(1.0, (epoch % cycle_len) / (cycle_len * 0.5))
 
         for batch in dataloader:
+            if stop_training is not None and stop_training():
+                break
+
             x = batch[0].to(device)
             optimizer.zero_grad()
 
@@ -156,9 +163,10 @@ def train_vae(
 class VAESampling(OptimizationAlgorithm):
     """VAE-based optimization with Bayesian Optimization in learned latent space.
 
-    Implements a two-phase optimization approach:
-    1. VAE Training Phase: Trains a Variational Autoencoder on high-quality samples
-       (either objective-guided or random) to learn a compressed latent representation
+        Implements a two-phase optimization approach:
+        1. VAE Training Phase: Samples candidates through ``Objective.random_params()``,
+             evaluates them, and trains a Variational Autoencoder on high-quality samples
+             to learn a compressed latent representation
     2. BO Phase: Performs Bayesian Optimization in the learned latent space using
        Gaussian Process surrogate models and batch Expected Improvement acquisition
 
@@ -200,19 +208,64 @@ class VAESampling(OptimizationAlgorithm):
             losses.append(obj.vmap_value(candidates[start : start + self.batch_size]))
         return jnp.concatenate(losses)
 
+    def _sample_training_data(
+        self,
+        obj: Objective,
+        max_samples: int | None,
+        sampling_budget_fraction: float,
+    ) -> tuple[Float[Array, "n d"], Float[Array, "n"]]:
+        """Sample and evaluate VAE training candidates within the budget split."""
+        if max_samples is None and obj.evals_left is None and obj.time_left is None:
+            raise ValueError(
+                "vae_training_samples=None requires an Objective eval or time budget."
+            )
+
+        candidates_list = []
+        losses_list = []
+        samples_collected = 0
+
+        while not obj.budget_exceeded:
+            if obj.budget_progress_fraction >= sampling_budget_fraction:
+                break
+            if max_samples is not None and samples_collected >= max_samples:
+                break
+
+            chunk_size = self.batch_size
+            if max_samples is not None:
+                chunk_size = min(chunk_size, max_samples - samples_collected)
+            if obj.evals_left is not None:
+                chunk_size = min(chunk_size, obj.evals_left)
+            if chunk_size < 1:
+                break
+
+            candidates = obj.random_params(n_samples=chunk_size)
+            candidates = jnp.atleast_2d(candidates)
+            losses = obj.vmap_value(candidates)
+
+            candidates_list.append(candidates)
+            losses_list.append(losses)
+            samples_collected += chunk_size
+
+        if not candidates_list:
+            raise ValueError(
+                "No VAE training samples were evaluated before budget exhaustion."
+            )
+
+        return jnp.concatenate(candidates_list), jnp.concatenate(losses_list)
+
     def optimize(
         self,
         problem_objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
-        vae_training_samples: int = 1000,
+        vae_training_samples: int | None = 1000,
+        sampling_budget_fraction: float = 0.25,
         vae_epochs: int = 100,
         latent_dim_factor: int = 10,
         hidden_dim: int = 256,
         num_blocks: int = 4,
         vae_train_batch_size: int = 32,
-        use_objective_guidance: bool = True,
         top_k: int = 20,
         n_initial: int = 20,
         acqf_raw_samples: int = 512,
@@ -225,14 +278,15 @@ class VAESampling(OptimizationAlgorithm):
             max_iterations: Maximum number of BO iterations in latent space (required).
             init_params: Initial parameters to seed optimization (unused).
             random_seed: Random seed for reproducibility.
-            vae_training_samples: Number of samples to generate for VAE training.
+            vae_training_samples: Optional cap on samples to evaluate for VAE
+                training. If None, sampling is controlled only by budget.
+            sampling_budget_fraction: Stop the sampling phase once this fraction
+                of the tightest Objective budget is consumed.
             vae_epochs: Number of epochs to train VAE.
             latent_dim_factor: Factor to determine latent dimension (d // latent_dim_factor + 1).
             hidden_dim: Hidden dimension for VAE architecture.
             num_blocks: Number of residual blocks in VAE.
             vae_train_batch_size: Mini-batch size for VAE training.
-            use_objective_guidance: If True, evaluate samples and train on top performers.
-                                   If False, train on random samples without evaluation.
             top_k: Number of top-performing samples to select for VAE training
                 during the objective-guided sampling phase.
             n_initial: Number of initial Sobol samples for BO phase.
@@ -241,6 +295,12 @@ class VAESampling(OptimizationAlgorithm):
         """
         if vae_train_batch_size < 1:
             raise ValueError("vae_train_batch_size must be at least 1.")
+        if vae_training_samples is not None and vae_training_samples < 1:
+            raise ValueError("vae_training_samples must be None or at least 1.")
+        if not 0.0 < sampling_budget_fraction < 1.0:
+            raise ValueError("sampling_budget_fraction must be between 0 and 1.")
+        if top_k < 1:
+            raise ValueError("top_k must be at least 1.")
 
         obj = problem_objective
         problem = obj.problem
@@ -265,44 +325,32 @@ class VAESampling(OptimizationAlgorithm):
         obj.start_logging()
 
         # === VAE Training Phase ===
-        if use_objective_guidance:
-            # Mode 1: Objective-Guided Training
-            # Generate candidates
-            candidates_torch = (
-                torch.randn(vae_training_samples, input_dim, device=self._device) * 1.65
-            )
+        candidates_jax, eval_losses = self._sample_training_data(
+            obj=obj,
+            max_samples=vae_training_samples,
+            sampling_budget_fraction=sampling_budget_fraction,
+        )
 
-            # Evaluate candidates
-            candidates_jax = t2j(candidates_torch.cpu())
+        top_count = min(top_k, candidates_jax.shape[0])
+        top_indices = jnp.argsort(eval_losses)[:top_count]
+        best_samples_jax = candidates_jax[top_indices]
+        best_samples_torch = j2t(best_samples_jax).float().to(self._device)
 
-            eval_losses = self._evaluate_candidates(obj, candidates_jax)
+        dataset = TensorDataset(best_samples_torch)
+        loader = DataLoader(dataset, batch_size=vae_train_batch_size, shuffle=True)
 
-            # Select top performers
-            top_indices = jnp.argsort(eval_losses)[:top_k]
-            best_samples_jax = candidates_jax[top_indices]
-            best_samples_torch = j2t(best_samples_jax).to(self._device)
+        vae.train()
+        train_vae(
+            vae,
+            loader,
+            epochs=vae_epochs,
+            device=self._device,
+            verbose=False,
+            stop_training=lambda: obj.budget_exceeded,
+        )
 
-            # Train VAE on best samples
-            dataset = TensorDataset(best_samples_torch)
-            loader = DataLoader(dataset, batch_size=vae_train_batch_size, shuffle=True)
-
-            vae.train()
-            train_vae(
-                vae, loader, epochs=vae_epochs, device=self._device, verbose=False
-            )
-
-        else:
-            # Mode 2: Pure Random Sampling
-            data = (
-                torch.randn(vae_training_samples, input_dim, device=self._device) * 1.65
-            )
-            dataset = TensorDataset(data)
-            loader = DataLoader(dataset, batch_size=vae_train_batch_size, shuffle=True)
-
-            vae.train()
-            train_vae(
-                vae, loader, epochs=vae_epochs, device=self._device, verbose=False
-            )
+        if obj.budget_exceeded:
+            return
 
         # === Bayesian Optimization in Latent Space ===
 
@@ -323,6 +371,11 @@ class VAESampling(OptimizationAlgorithm):
         sobol = torch.quasirandom.SobolEngine(
             dimension=latent_dim, scramble=True, seed=random_seed
         )
+        if obj.evals_left is not None:
+            n_initial = min(n_initial, obj.evals_left)
+        if n_initial < 1:
+            return
+
         train_z_norm = sobol.draw(n=n_initial).to(dtype=dtype)
         train_z = unnormalize(train_z_norm, z_bounds)
 
