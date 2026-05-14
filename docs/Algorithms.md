@@ -958,7 +958,7 @@ optimizer.optimize(
 Two-phase approach: (1) train a Variational Autoencoder on high-quality samples to learn a compressed latent space, then (2) run Bayesian Optimization in that latent space.
 
 ```python
-optimizer = VAESampling(batch_size=64)
+optimizer = VAESampling(batch_size_sampling=5, batch_size_bo=1)
 optimizer.optimize(
     problem_objective=obj,
     max_iterations=50,
@@ -967,7 +967,6 @@ optimizer.optimize(
     vae_epochs=100,
     vae_train_batch_size=64,
     top_k=0.02,
-    bo_batch_size=16,
     random_seed=42,
 )
 ```
@@ -977,10 +976,10 @@ optimizer.optimize(
 | `vae_training_samples` | `1000` | Maximum objective-evaluated samples for VAE training (`None` means budget-fraction only). |
 | `sampling_budget_fraction` | `0.25` | Stop VAE sampling when this fraction of the tightest Objective budget is consumed, leaving the rest for latent BO. |
 | `vae_epochs` | `100` | Training epochs with cyclic KL annealing. |
-| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `batch_size_sampling` | `1` | Sampling-phase candidates per `vmap_value` call (constructor). |
+| `batch_size_bo` | `1` | Latent BO candidates per GP fit and BO-phase candidates per `vmap_value` call (constructor). |
 | `vae_train_batch_size` | `32` | Mini-batch size for VAE training. |
 | `top_k` | `0.02` | Fraction of the sampled candidates used for VAE training after ranking by objective loss. |
-| `bo_batch_size` | `16` | Latent BO candidates proposed per GP fit. |
 | `max_iterations` | `None` | BO iterations in latent space. `None` runs until the Objective budget is exhausted. |
 
 **Architecture details:**

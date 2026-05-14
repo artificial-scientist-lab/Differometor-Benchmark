@@ -190,25 +190,33 @@ class VAESampling(OptimizationAlgorithm):
     algorithm_str: str = "vae_sampling"
     algorithm_type: AlgorithmType = AlgorithmType.GENERATIVE
 
-    def __init__(self, batch_size: int = 1) -> None:
+    def __init__(self, batch_size_sampling: int = 1, batch_size_bo: int = 1) -> None:
         """Initialize VAESampling optimizer.
 
         Args:
-            batch_size: Number of candidates evaluated per ``vmap_value`` call.
+            batch_size_sampling: Number of sampling-phase candidates evaluated per
+                ``vmap_value`` call.
+            batch_size_bo: Number of latent BO candidates proposed per GP fit and
+                evaluated per ``vmap_value`` call during the BO phase.
         """
-        if batch_size < 1:
-            raise ValueError("batch_size must be at least 1.")
+        if batch_size_sampling < 1:
+            raise ValueError("batch_size_sampling must be at least 1.")
+        if batch_size_bo < 1:
+            raise ValueError("batch_size_bo must be at least 1.")
 
         self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.batch_size = batch_size
+        self.batch_size_sampling = batch_size_sampling
+        self.batch_size_bo = batch_size_bo
 
     def _evaluate_candidates(
         self, obj: Objective, candidates: Float[Array, "n d"]
     ) -> Float[Array, "n"]:
-        """Evaluate candidates through ``vmap_value`` using constructor batch size."""
+        """Evaluate BO candidates through ``vmap_value`` in BO-sized chunks."""
         losses = []
-        for start in range(0, candidates.shape[0], self.batch_size):
-            losses.append(obj.vmap_value(candidates[start : start + self.batch_size]))
+        for start in range(0, candidates.shape[0], self.batch_size_bo):
+            losses.append(
+                obj.vmap_value(candidates[start : start + self.batch_size_bo])
+            )
         return jnp.concatenate(losses)
 
     def _sample_training_data(
@@ -233,7 +241,7 @@ class VAESampling(OptimizationAlgorithm):
             if max_samples is not None and samples_collected >= max_samples:
                 break
 
-            chunk_size = self.batch_size
+            chunk_size = self.batch_size_sampling
             if obj._max_evals is not None:
                 evals_for_sampling = int(
                     np.floor(obj._max_evals * sampling_budget_fraction)
@@ -277,7 +285,6 @@ class VAESampling(OptimizationAlgorithm):
         vae_train_batch_size: int = 32,
         top_k: float = 0.02,
         n_initial: int = 20,
-        bo_batch_size: int = 16,
         acqf_raw_samples: int = 512,
         acqf_num_restarts: int = 4,
     ) -> None:
@@ -300,7 +307,6 @@ class VAESampling(OptimizationAlgorithm):
             top_k: Fraction of top-performing samples to select for VAE training
                 after the objective-guided sampling phase.
             n_initial: Number of initial Sobol samples for BO phase.
-            bo_batch_size: Number of latent BO candidates proposed per GP fit.
             acqf_raw_samples: Number of raw samples for acquisition optimization.
             acqf_num_restarts: Number of restarts for acquisition optimization.
         """
@@ -312,8 +318,6 @@ class VAESampling(OptimizationAlgorithm):
             raise ValueError("sampling_budget_fraction must be between 0 and 1.")
         if not 0.0 < top_k <= 1.0:
             raise ValueError("top_k must be a fraction in (0, 1].")
-        if bo_batch_size < 1:
-            raise ValueError("bo_batch_size must be at least 1.")
 
         obj = problem_objective
         problem = obj.problem
@@ -333,7 +337,9 @@ class VAESampling(OptimizationAlgorithm):
         )
         vae.to(self._device)
 
-        obj.warmup_vmap_value(batch_size=self.batch_size)
+        obj.warmup_vmap_value(batch_size=self.batch_size_sampling)
+        if self.batch_size_bo != self.batch_size_sampling:
+            obj.warmup_vmap_value(batch_size=self.batch_size_bo)
 
         obj.start_logging()
 
@@ -443,7 +449,7 @@ class VAESampling(OptimizationAlgorithm):
             # Optimize acquisition function
             acqf = qLogEI(gp, train_y_torch.max())
 
-            current_bo_batch_size = bo_batch_size
+            current_bo_batch_size = self.batch_size_bo
             if obj.evals_left is not None:
                 current_bo_batch_size = min(current_bo_batch_size, obj.evals_left)
             if current_bo_batch_size < 1:
