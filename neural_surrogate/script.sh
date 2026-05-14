@@ -3,8 +3,8 @@
 #SBATCH --output neural_surrogate/logs/%x-%j.out
 #SBATCH --error neural_surrogate/logs/%x-%j.err
 #SBATCH --partition a100-galvani
-#SBATCH --gpus=4
-#SBATCH --mem-per-gpu=16G
+#SBATCH --gpus=8
+#SBATCH --mem-per-gpu=30G
 #SBATCH --cpus-per-task=8
 #SBATCH --time=1-00:00:00
 
@@ -17,11 +17,11 @@ echo "Started at: $(date)"
 mkdir -p neural_surrogate/logs
 
 # External environment to load on the cluster.
-ENV_DIR="${ENV_DIR:-/home/soham/repos/envs/dfbench_env}"
+ENV_DIR="/mnt/lustre/home/krenn/klz468/repos/envs/dfbench_env"
 source "$ENV_DIR/bin/activate"
 
 # External directory containing campaign .h5 files.
-DATA_DIR="${DATA_DIR:-/path/to/external/neural_surrogate_data}"
+DATA_DIR="/mnt/lustre/work/krenn/klz077/datasets/UIFOs"
 
 LOSS_KEY="${LOSS_KEY:-loss_senspow}"
 EPOCHS="${EPOCHS:-250}"
@@ -55,10 +55,10 @@ python -m neural_surrogate.pipeline \
   --batch-size "$BATCH_SIZE" \
   --lr "$LR" \
   --topology-dim "$TOPOLOGY_DIM" \
-  --seed "$SEED" \
+  --seed 1 \
   --val-fraction "$VAL_FRACTION" \
-  --device "$DEVICE" \
-  --multi-gpu "$MULTI_GPU"
+  --device "cuda" \
+  --multi-gpu True
 
 end=$(date +%s)
 runtime=$((end - start))
