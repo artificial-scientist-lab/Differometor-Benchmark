@@ -966,6 +966,8 @@ optimizer.optimize(
     sampling_budget_fraction=0.25,
     vae_epochs=100,
     vae_train_batch_size=64,
+    top_k=0.02,
+    bo_batch_size=16,
     random_seed=42,
 )
 ```
@@ -977,14 +979,16 @@ optimizer.optimize(
 | `vae_epochs` | `100` | Training epochs with cyclic KL annealing. |
 | `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
 | `vae_train_batch_size` | `32` | Mini-batch size for VAE training. |
-| `max_iterations` | *required* | BO iterations in latent space. |
+| `top_k` | `0.02` | Fraction of the sampled candidates used for VAE training after ranking by objective loss. |
+| `bo_batch_size` | `16` | Latent BO candidates proposed per GP fit. |
+| `max_iterations` | `None` | BO iterations in latent space. `None` runs until the Objective budget is exhausted. |
 
 **Architecture details:**
 - ResNet-style VAE with residual blocks, batch normalization, and Mish activations.
 - Latent dimension = `n_params / 10` (compressed 10×).
-- VAE training samples are drawn with `obj.random_params()` in the active unbounded Objective space and ranked by evaluated loss.
+- VAE training samples are drawn with `obj.random_params()` in the active unbounded Objective space, ranked by evaluated loss, and filtered to the best `top_k` fraction.
 - Cyclic $\beta$-annealing for stable training.
-- After training, BO uses `qLogEI` acquisition in the learned latent space.
+- After training, BO uses batched `qLogEI` acquisition in the learned latent space.
 
 **Rationale — why compress to latent space?** High-dimensional BO suffers from the curse of dimensionality. The VAE learns which parameter combinations matter, projecting the search into a much lower-dimensional space where the GP surrogate is more effective.
 

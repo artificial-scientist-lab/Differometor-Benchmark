@@ -275,8 +275,9 @@ class VAESampling(OptimizationAlgorithm):
         hidden_dim: int = 256,
         num_blocks: int = 4,
         vae_train_batch_size: int = 32,
-        top_k: int = 20,
+        top_k: float = 0.02,
         n_initial: int = 20,
+        bo_batch_size: int = 16,
         acqf_raw_samples: int = 512,
         acqf_num_restarts: int = 4,
     ) -> None:
@@ -296,9 +297,10 @@ class VAESampling(OptimizationAlgorithm):
             hidden_dim: Hidden dimension for VAE architecture.
             num_blocks: Number of residual blocks in VAE.
             vae_train_batch_size: Mini-batch size for VAE training.
-            top_k: Number of top-performing samples to select for VAE training
-                during the objective-guided sampling phase.
+            top_k: Fraction of top-performing samples to select for VAE training
+                after the objective-guided sampling phase.
             n_initial: Number of initial Sobol samples for BO phase.
+            bo_batch_size: Number of latent BO candidates proposed per GP fit.
             acqf_raw_samples: Number of raw samples for acquisition optimization.
             acqf_num_restarts: Number of restarts for acquisition optimization.
         """
@@ -308,8 +310,10 @@ class VAESampling(OptimizationAlgorithm):
             raise ValueError("vae_training_samples must be None or at least 1.")
         if not 0.0 < sampling_budget_fraction < 1.0:
             raise ValueError("sampling_budget_fraction must be between 0 and 1.")
-        if top_k < 1:
-            raise ValueError("top_k must be at least 1.")
+        if not 0.0 < top_k <= 1.0:
+            raise ValueError("top_k must be a fraction in (0, 1].")
+        if bo_batch_size < 1:
+            raise ValueError("bo_batch_size must be at least 1.")
 
         obj = problem_objective
         problem = obj.problem
@@ -340,7 +344,8 @@ class VAESampling(OptimizationAlgorithm):
             sampling_budget_fraction=sampling_budget_fraction,
         )
 
-        top_count = min(top_k, candidates_jax.shape[0])
+        top_count = max(2, int(np.ceil(candidates_jax.shape[0] * top_k)))
+        top_count = min(top_count, candidates_jax.shape[0])
         top_indices = jnp.argsort(eval_losses)[:top_count]
         best_samples_jax = candidates_jax[top_indices]
         best_samples_torch = j2t(best_samples_jax).float().to(self._device)
@@ -438,10 +443,16 @@ class VAESampling(OptimizationAlgorithm):
             # Optimize acquisition function
             acqf = qLogEI(gp, train_y_torch.max())
 
+            current_bo_batch_size = bo_batch_size
+            if obj.evals_left is not None:
+                current_bo_batch_size = min(current_bo_batch_size, obj.evals_left)
+            if current_bo_batch_size < 1:
+                break
+
             candidates_norm, _ = optimize_acqf(
                 acqf,
                 bounds=unit_bounds,
-                q=1,
+                q=current_bo_batch_size,
                 gen_candidates=gen_candidates_scipy,
                 **acqf_options,
             )
@@ -455,14 +466,16 @@ class VAESampling(OptimizationAlgorithm):
             # Evaluate through Objective
             candidates_x_jax = t2j(candidates_x.cpu())
             candidate_losses = self._evaluate_candidates(obj, candidates_x_jax)
-            candidate_loss = candidate_losses[0]
 
-            if not jnp.isfinite(candidate_loss):
+            candidates_y = torch.from_numpy(-np.array(candidate_losses)).to(dtype=dtype)
+            candidates_y = candidates_y.unsqueeze(-1)
+            valid_mask = torch.isfinite(candidates_y.squeeze(-1))
+
+            if not torch.any(valid_mask):
                 continue
 
-            candidates_y = torch.tensor(
-                [-float(candidate_loss)], dtype=dtype
-            ).unsqueeze(-1)
+            candidates_norm = candidates_norm[valid_mask]
+            candidates_y = candidates_y[valid_mask]
 
             # Update training data
             train_z_norm = torch.cat([train_z_norm, candidates_norm], dim=0)
