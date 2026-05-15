@@ -24,3 +24,5 @@ results/
 notebooks/
 .DS_Store
 data/
+checkpoints/
+*.pt
