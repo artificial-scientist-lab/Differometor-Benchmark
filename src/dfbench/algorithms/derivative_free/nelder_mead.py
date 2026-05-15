@@ -69,7 +69,7 @@ class NelderMead(OptimizationAlgorithm):
             params = init_params
 
         # JIT warmup
-        _ = obj.value(params)
+        obj.warmup_value()
 
         obj.start_logging()
 

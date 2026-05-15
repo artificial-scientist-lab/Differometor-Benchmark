@@ -90,7 +90,7 @@ class PDFOUOBYQA(OptimizationAlgorithm):
             return raw_fun(xc)
 
         # JIT warmup
-        _ = obj.value(jnp.asarray(clip_to_bounds(np.zeros(obj.n_params), obj)))
+        obj.warmup_value()
 
         obj.start_logging()
 

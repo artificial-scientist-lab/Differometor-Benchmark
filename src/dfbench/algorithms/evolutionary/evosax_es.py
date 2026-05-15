@@ -224,7 +224,7 @@ class EvosaxMAES(OptimizationAlgorithm):
 
         # JIT warmup before timing starts
         batch_size = self._batch_size
-        _ = obj.vmap_value(jnp.zeros((min(batch_size, pop_size), n)))
+        obj.warmup_vmap_value(batch_size=min(batch_size, pop_size))
         obj.start_logging()
 
         rng, loop_rng = jax.random.split(rng)
@@ -326,7 +326,7 @@ class EvosaxLMMAES(OptimizationAlgorithm):
         state = strategy.init(init_rng, mean0, es_params)
 
         batch_size = self._batch_size
-        _ = obj.vmap_value(jnp.zeros((min(batch_size, pop_size), n)))
+    obj.warmup_vmap_value(batch_size=min(batch_size, pop_size))
         obj.start_logging()
 
         rng, loop_rng = jax.random.split(rng)

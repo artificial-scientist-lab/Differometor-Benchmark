@@ -98,9 +98,9 @@ class BasinHopping(OptimizationAlgorithm):
 
         # JIT warmup
         if uses_grad:
-            _ = obj.value_and_grad(params)
+            obj.warmup_value_and_grad()
         else:
-            _ = obj.value(params)
+            obj.warmup_value()
 
         obj.start_logging()
 

@@ -87,7 +87,7 @@ class SMAC(OptimizationAlgorithm):
             cs.add(CS_Float(f"x{i}", bounds=(float(lb[i]), float(ub[i]))))
 
         # JIT warmup
-        _ = obj.vmap_value(jnp.zeros((1, dim)))
+        obj.warmup_vmap_value(batch_size=1)
         obj.start_logging()
 
         # Target function called by SMAC

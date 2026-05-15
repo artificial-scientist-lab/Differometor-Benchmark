@@ -288,8 +288,7 @@ class OmadsMADS(OptimizationAlgorithm):
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         # JIT warmup
-        warmup_params = obj.random_params_bounded()
-        _ = obj.value(warmup_params)
+        obj.warmup_value()
 
         obj.start_logging()
 
@@ -369,8 +368,7 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         # JIT warmup
-        warmup_params = obj.random_params_bounded()
-        _ = obj.value(warmup_params)
+        obj.warmup_value()
 
         obj.start_logging()
 

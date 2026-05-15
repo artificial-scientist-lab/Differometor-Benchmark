@@ -161,7 +161,7 @@ class GEBO(OptimizationAlgorithm):
         }
 
         # JIT warmup — use value_and_grad for this algo
-        _ = obj.value_and_grad(jnp.zeros(D))
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         # Initial Sobol

@@ -100,7 +100,7 @@ class HEBO(OptimizationAlgorithm):
         )
 
         # JIT warmup
-        _ = obj.vmap_value(jnp.zeros((1, dim)))
+        obj.warmup_vmap_value(batch_size=1)
         obj.start_logging()
 
         while not obj.budget_exceeded:

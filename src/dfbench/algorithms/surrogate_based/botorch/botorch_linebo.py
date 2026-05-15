@@ -125,7 +125,7 @@ class LineBO(OptimizationAlgorithm):
         bounds = get_problem_bounds_torch(problem, self.device, self.dtype)
 
         # JIT warmup
-        _ = obj.vmap_value(jnp.zeros((1, D)))
+        obj.warmup_vmap_value(batch_size=1)
         obj.start_logging()
 
         # Initial Sobol in full ambient space

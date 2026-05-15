@@ -81,8 +81,7 @@ class NevergradNGOpt(OptimizationAlgorithm):
         budget_per_restart = max_iterations // n_restarts if max_iterations else None
 
         # JIT warmup
-        _warmup = jnp.zeros(n_params)
-        _ = obj.value(_warmup)
+        obj.warmup_value()
 
         obj.start_logging()
 

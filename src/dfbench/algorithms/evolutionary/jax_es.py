@@ -150,7 +150,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
         window = success_window if success_window is not None else max(10, 10 * n)
 
         # JIT warmup — single-point evaluation
-        _ = obj.value(x)
+        obj.warmup_value()
         obj.start_logging()
 
         # Evaluate starting point
@@ -310,11 +310,9 @@ class JAXMuLambdaES(OptimizationAlgorithm):
         p_succ = target_succ        # initialise cumulative success rate
         prev_mean_loss = float("inf")  # track improvement for adaptation
 
-        # JIT warmup with batch_size — use midpoint (not zeros) so the
-        # warmup call lands within bounds for every parameter.
+        # JIT warmup with the same effective batch size used in-loop.
         batch_size = self._batch_size
-        midpoint = 0.5 * (lb + ub)
-        _ = obj.vmap_value(jnp.tile(midpoint[None, :], (min(batch_size, lam), 1)))
+        obj.warmup_vmap_value(batch_size=min(batch_size, lam))
         obj.start_logging()
 
         iteration = 0

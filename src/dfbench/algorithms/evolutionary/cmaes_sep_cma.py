@@ -146,7 +146,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
         actual_pop = optimizer.population_size
 
         # JIT warmup before timing starts
-        _ = obj.vmap_value(jnp.zeros((min(batch_size, actual_pop), n)))
+        obj.warmup_vmap_value(batch_size=min(batch_size, actual_pop))
         obj.start_logging()
 
         iteration = 0

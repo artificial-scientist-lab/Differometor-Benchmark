@@ -85,7 +85,7 @@ class OptaxLookahead(OptaxAlgorithm):
         opt_state = optimizer.init(la_params)
 
         # JIT warmup
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
 
         obj.start_logging()
 
