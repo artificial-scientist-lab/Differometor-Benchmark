@@ -35,14 +35,13 @@ def evaluate(
     loss_fn: nn.Module | None = None,
     device: torch.device | str | None = None,
 ) -> dict[str, float]:
-    """Evaluate a model and return average loss plus MSE."""
+    """Evaluate a model and return average loss."""
     device = device or next(model.parameters()).device
-    loss_fn = loss_fn or nn.MSELoss()
+    loss_fn = loss_fn
     was_training = model.training
     model.eval()
 
     total_loss = 0.0
-    total_mse = 0.0
     total_examples = 0
 
     for batch in dataloader:
@@ -52,7 +51,6 @@ def evaluate(
 
         batch_size = x.shape[0]
         total_loss += float(loss_fn(prediction, y).item()) * batch_size
-        total_mse += float(nn.functional.mse_loss(prediction, y).item()) * batch_size
         total_examples += batch_size
 
     if was_training:
@@ -62,7 +60,6 @@ def evaluate(
         return {"loss": 0.0, "mse": 0.0}
     return {
         "loss": total_loss / total_examples,
-        "mse": total_mse / total_examples,
     }
 
 

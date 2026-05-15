@@ -78,14 +78,13 @@ def fit(
     train_loader: DataLoader,
     val_loader: DataLoader | None = None,
     config: TrainConfig | None = None,
-    loss_fn: nn.Module | None = None,
     optimizer: torch.optim.Optimizer | None = None,
 ) -> TrainHistory:
     """Fit a model and optionally evaluate/checkpoint after each epoch."""
     config = config or TrainConfig()
     device = torch.device(config.device)
     model.to(device)
-    loss_fn = loss_fn or nn.MSELoss()
+    loss_fn = nn.MSELoss()
     optimizer = optimizer or torch.optim.AdamW(
         model.parameters(),
         lr=config.lr,
@@ -105,6 +104,7 @@ def fit(
             device=device,
             grad_clip_norm=config.grad_clip_norm,
         )
+        train_logger.info(f"Epoch {_+1} train loss: {train_loss:.6f}")
         history.train_loss.append(train_loss)
 
         if val_loader is None:
@@ -112,8 +112,8 @@ def fit(
 
         train_logger.info("Running validation")
         metrics = evaluate(model, val_loader, loss_fn=loss_fn, device=device)
+        train_logger.info(f"Epoch {_+1} validation loss: {metrics['loss']:.6f}")
         history.val_loss.append(metrics["loss"])
-        history.val_mse.append(metrics["mse"])
 
         if config.checkpoint_path is not None and metrics["loss"] < best_val_loss:
             best_val_loss = metrics["loss"]

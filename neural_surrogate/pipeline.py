@@ -6,11 +6,15 @@ import argparse
 import sys
 import warnings
 from pathlib import Path
+import logging
 
 import torch
 from torch.utils.data import DataLoader, random_split
 
 warnings.filterwarnings("ignore", message="CUDA initialization:.*")
+
+pipeline_logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 try:
     from .encodings import make_campaign_dataset
@@ -59,6 +63,8 @@ def run_pipeline(
     train_device = resolve_device(device)
 
     h5_files = find_h5_files(data_path)
+
+    pipeline_logger.info(f"Found {len(h5_files)} H5 file(s) for training:")
     dataset = make_campaign_dataset(
         h5_files,
         topology_strategy="hashing",
@@ -68,6 +74,8 @@ def run_pipeline(
     )
     if len(dataset) == 0:
         raise RuntimeError("No trainable samples found in the H5 campaign data.")
+    
+    pipeline_logger.info(f"Created dataset containing {len(dataset)} samples with input dimension {dataset.encoder.input_dim}.")
 
     train_dataset, eval_dataset = split_dataset(
         dataset,
@@ -121,7 +129,6 @@ def run_pipeline(
         "prediction": predicted,
         "absolute_error": absolute_error,
         "eval_loss": metrics["loss"],
-        "eval_mse": metrics["mse"],
     }
 
 
