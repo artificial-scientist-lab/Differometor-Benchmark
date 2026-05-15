@@ -40,7 +40,7 @@ class Powell(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         xtol: float = 1e-8,
@@ -49,13 +49,13 @@ class Powell(OptimizationAlgorithm):
         """Run Powell conjugate-direction optimization.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Starting point. If *None*, sampled uniformly in bounds.
             random_seed: Seed for reproducibility (controls initial point).
             xtol: Relative parameter tolerance for convergence.
             ftol: Relative function-value tolerance for convergence.
         """
-        obj = problem_objective
+        obj = objective
 
         random_seed, _key = self.prepare(
             obj, unbounded=False, random_seed=random_seed

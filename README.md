@@ -200,7 +200,7 @@ obj = Objective(problem, max_time=120, max_evals=50000, verbose=1)
 # The algorithm receives the Objective and mutates it in place
 optimizer = AdamGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,
     patience=1000,
     random_seed=42,
@@ -274,7 +274,7 @@ The interface is designed to make this as simple as possible. You write the opti
 
 1. Subclass `OptimizationAlgorithm`
 2. Declare `algorithm_str` and `algorithm_type`
-3. Implement `optimize(problem_objective, ...) → None`
+3. Implement `optimize(objective, ...) → None`
 4. Use `Objective` for all function evaluations
 5. The `Objective` is mutated in place, thereby no return is needed
 
@@ -305,7 +305,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
@@ -313,7 +313,7 @@ class MyAlgorithm(OptimizationAlgorithm):
         **kwargs,
     ) -> None:
         # 1. Setup + seed all RNGs
-        obj = problem_objective
+        obj = objective
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)  # for frameworks beyond np/jax
 

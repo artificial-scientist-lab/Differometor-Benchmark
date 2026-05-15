@@ -314,7 +314,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
@@ -327,7 +327,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
         """Run TuRBO optimization with adaptive trust regions.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             max_iterations: Optional cap on BO iterations per TuRBO instance.
                 When ``None`` the algorithm runs until ``obj.budget_exceeded``
                 (or a TuRBO restart triggers).
@@ -345,7 +345,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
         if acquisition_batch_size < 1:
             raise ValueError("acquisition_batch_size must be at least 1.")
 
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)

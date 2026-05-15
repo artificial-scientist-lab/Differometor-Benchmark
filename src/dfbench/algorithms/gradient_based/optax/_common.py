@@ -117,7 +117,7 @@ class OptaxAlgorithm(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         patience: int | None = None,
@@ -128,7 +128,7 @@ class OptaxAlgorithm(OptimizationAlgorithm):
         """Run a standard single-evaluation-per-step Optax loop.
 
         Args:
-            problem_objective: Pre-configured Objective.
+            objective: Pre-configured Objective.
             init_params: Starting point.  ``None`` → random unbounded.
             random_seed: Seed for reproducibility.
             patience: Early-stop after this many evals without improvement.
@@ -136,7 +136,7 @@ class OptaxAlgorithm(OptimizationAlgorithm):
             grad_clip_norm: Max global gradient norm (None to disable).
             **kwargs: Forwarded to ``_make_optimizer``.
         """
-        obj = problem_objective
+        obj = objective
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         if init_params is None:

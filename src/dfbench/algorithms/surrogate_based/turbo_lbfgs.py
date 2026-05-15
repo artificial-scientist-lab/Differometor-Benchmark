@@ -81,7 +81,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         # TuRBO phase
@@ -96,7 +96,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         """Run TuRBO→L-BFGS.
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
             turbo_iterations: Optional cap on BO iterations for the TuRBO phase.
@@ -109,7 +109,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
                 improvement.
             **kwargs: Additional TuRBO kwargs.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
         dim = problem.n_params
 

@@ -53,7 +53,7 @@ class HEBO(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         batch_size: int = 1,
@@ -65,13 +65,13 @@ class HEBO(OptimizationAlgorithm):
         (``max_evals`` / ``max_time``).
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded). Currently unused.
             random_seed: Seed for reproducibility.
             batch_size: Candidates per suggestion.
             **hebo_kwargs: Forwarded to HEBO optimizer.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
         dim = problem.n_params
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)

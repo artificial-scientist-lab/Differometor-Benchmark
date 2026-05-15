@@ -65,7 +65,7 @@ Standard Adam optimizer with gradient clipping.
 ```python
 optimizer = AdamGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,      # Adam learning rate
     patience=1000,           # stop after N iters without improvement
     random_seed=42,
@@ -88,7 +88,7 @@ Based on [arXiv:2107.07558](https://arxiv.org/abs/2107.07558). Combines gradient
 ```python
 optimizer = SAGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,
     patience=1000,
     T0=15.0,                  # initial temperature
@@ -116,7 +116,7 @@ Adam with decaying Gaussian noise injection for exploration.
 ```python
 optimizer = NAAdamGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,
     patience=1000,
     noise_std_start=0.3,      # initial noise σ
@@ -152,7 +152,7 @@ L-BFGS optimizer from Optax. Uses second-order curvature information for faster 
 ```python
 optimizer = LBFGSGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     patience=500,
     random_seed=42,
 )
@@ -209,7 +209,7 @@ Simplest baseline. Draws uniform random samples within bounds and evaluates them
 ```python
 optimizer = RandomSearch(batch_size=100)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=None,
     random_seed=42,
 )
@@ -230,7 +230,7 @@ Uses the [EvoX](https://github.com/EMI-Group/evox) library's PSO implementations
 ```python
 optimizer = EvoxPSO(batch_size=5, variant="CLPSO")
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     pop_size=200,
     n_generations=10000,
     random_seed=42,
@@ -270,7 +270,7 @@ Uses EvoX's evolution strategy implementations. Similar structure to EvoxPSO but
 ```python
 optimizer = EvoxES(batch_size=5, variant="CMAES")
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     pop_size=100,
     n_generations=10000,
     random_seed=42,
@@ -307,7 +307,7 @@ Full MADS algorithm with search step (broad sampling) and poll step (structured 
 ```python
 optimizer = OmadsMADS(psize_init=1.0, tol=1e-9, ns=4)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     random_seed=42,
 )
 ```
@@ -327,7 +327,7 @@ Runs only the OrthoMADS poll step with orthogonal Householder directions. Leaner
 ```python
 optimizer = OmadsOrthoMADS(psize_init=1.0, tol=1e-9)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     random_seed=42,
 )
 ```
@@ -350,7 +350,7 @@ Lightweight (1+1)-ES: maintains a single candidate, perturbs it with Gaussian no
 ```python
 optimizer = NevergradOnePlusOne()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     n_restarts=3,
     random_seed=42,
 )
@@ -370,7 +370,7 @@ Test-Based Population-Size Adaptation. A noise-robust baseline that dynamically 
 ```python
 optimizer = NevergradTBPSA()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     n_restarts=1,
     num_evaluations=3,    # average 3 evaluations per candidate
     random_seed=42,
@@ -394,7 +394,7 @@ Nevergrad's automatic algorithm-selection meta-optimizer. Internally chooses and
 ```python
 optimizer = NevergradNGOpt()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     n_restarts=1,
     random_seed=42,
 )
@@ -439,7 +439,7 @@ Common hyperparameters (passed at construction):
 
 ```python
 optimizer = PDFOLINCOA(radius_init=0.5, n_restarts=3)
-optimizer.optimize(problem_objective=obj, random_seed=42)
+optimizer.optimize(objective=obj, random_seed=42)
 ```
 
 ---
@@ -623,7 +623,7 @@ Standard Bayesian Optimization using a Gaussian Process surrogate and batch Expe
 ```python
 optimizer = BotorchBO(batch_size=1)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=100,      # required
     n_initial=10,            # Sobol samples before fitting GP
     acquisition_batch_size=1,
@@ -649,7 +649,7 @@ Implements TuRBO-1 from [Eriksson et al. 2019](https://proceedings.neurips.cc/pa
 ```python
 optimizer = BotorchTuRBO(batch_size=5)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     n_initial=20,
     acquisition_batch_size=5,
     random_seed=42,
@@ -681,7 +681,7 @@ from dfbench.algorithms.surrogate_based.restir import MyAlgorithm as ReSTIR
 
 optimizer = ReSTIR(batch_size=100)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     n_initial_samples=1000,
     n_knn_samples=100_000,
     k_neighbors=10,
@@ -710,7 +710,7 @@ Reference: Eriksson & Jankowiak, *High-Dimensional Bayesian Optimization with Sp
 ```python
 optimizer = AxSAASBO()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     num_warmup=256,
@@ -737,7 +737,7 @@ Reference: Papenmeier et al., *Increasing the Scope as You Learn*, NeurIPS 2022.
 ```python
 optimizer = BAxUS()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     d_init=5,
@@ -763,7 +763,7 @@ Reference: Letham et al., *Noisy Expected Improvement*, NeurIPS 2019.
 ```python
 optimizer = BotorchqNEI()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     batch_size=1,
@@ -789,7 +789,7 @@ Reference: Wu & Frazier, *The Parallel Knowledge Gradient Method*, NeurIPS 2016.
 ```python
 optimizer = BotorchqKG()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     num_fantasies=16,
@@ -814,7 +814,7 @@ Reference: Wang et al., *Bayesian Optimization in a Billion Dimensions via Rando
 ```python
 optimizer = REMBO()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     d_embedding=10,
@@ -839,7 +839,7 @@ Reference: Wu et al., *Bayesian Optimization with Gradients*, NeurIPS 2017.
 ```python
 optimizer = GEBO()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     grad_refine_steps=3,
@@ -866,7 +866,7 @@ Reference: Kirschner et al., *Adaptive and Safe Bayesian Optimization in High Di
 ```python
 optimizer = LineBO()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     line_samples=20,
@@ -889,7 +889,7 @@ Two-phase hybrid: Phase 1 runs TuRBO in bounded space to locate a basin; Phase 2
 ```python
 optimizer = TuRBOLBFGS()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     turbo_iterations=50,
     n_initial=20,
     lbfgs_patience=200,
@@ -915,7 +915,7 @@ Reference: Cowen-Rivers et al., *An Empirical Study of Assumptions in Bayesian O
 ```python
 optimizer = HEBO()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=60,
     batch_size=1,
     random_seed=42,
@@ -938,7 +938,7 @@ Reference: Lindauer et al., *SMAC3*, JMLR 2022.
 ```python
 optimizer = SMAC()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     random_seed=42,
@@ -961,7 +961,7 @@ Two-phase approach: (1) train a Variational Autoencoder on high-quality samples 
 ```python
 optimizer = VAESampling(batch_size_sampling=5, batch_size_bo=1)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     vae_training_samples=1000,
     sampling_budget_fraction=0.25,
@@ -1032,7 +1032,7 @@ Standard Adam optimizer ([Kingma & Ba, 2015](https://arxiv.org/abs/1412.6980)).
 
 ```python
 optimizer = OptaxAdam()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1043,7 +1043,7 @@ Adam with decoupled weight decay ([Loshchilov & Hutter, 2019](https://arxiv.org/
 
 ```python
 optimizer = OptaxAdamW()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1058,7 +1058,7 @@ AdaBelief — adapts step sizes based on *belief* in the gradient ([Zhuang et al
 
 ```python
 optimizer = OptaxAdaBelief()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1069,7 +1069,7 @@ Memory-efficient factored Adam ([Shazeer & Stern, 2018](https://arxiv.org/abs/18
 
 ```python
 optimizer = OptaxAdafactor()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1080,7 +1080,7 @@ AMSGrad variant of Adam that maintains the maximum of past squared gradients ([R
 
 ```python
 optimizer = OptaxAMSGrad()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1091,7 +1091,7 @@ Adaptive gradient method — per-parameter learning rates decay based on accumul
 
 ```python
 optimizer = OptaxAdaGrad()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1102,7 +1102,7 @@ AdaDelta — learning-rate-free adaptive method using running averages ([Zeiler,
 
 ```python
 optimizer = OptaxAdaDelta()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1113,7 +1113,7 @@ AdaMax — $L^\infty$ variant of Adam ([Kingma & Ba, 2015](https://arxiv.org/abs
 
 ```python
 optimizer = OptaxAdaMax()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1124,7 +1124,7 @@ AdaMax with decoupled weight decay.
 
 ```python
 optimizer = OptaxAdaMaxW()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1139,7 +1139,7 @@ Adaptive Nesterov momentum algorithm ([Xie et al., 2023](https://arxiv.org/abs/2
 
 ```python
 optimizer = OptaxAdan()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1150,7 +1150,7 @@ Evolved sign momentum optimizer — discovered via meta-learning ([Chen et al., 
 
 ```python
 optimizer = OptaxLion()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1161,7 +1161,7 @@ Layer-wise Adaptive Moments for Batch training ([You et al., 2020](https://arxiv
 
 ```python
 optimizer = OptaxLAMB()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1172,7 +1172,7 @@ Nesterov-accelerated Adam ([Dozat, 2016](https://openreview.net/forum?id=OM0jvwB
 
 ```python
 optimizer = OptaxNadam()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1183,7 +1183,7 @@ Nadam with decoupled weight decay.
 
 ```python
 optimizer = OptaxNadamW()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1198,7 +1198,7 @@ RMSProp — root mean square propagation ([Hinton, 2012](https://www.cs.toronto.
 
 ```python
 optimizer = OptaxRMSProp()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1209,7 +1209,7 @@ RProp — resilient backpropagation with sign-based updates ([Riedmiller & Braun
 
 ```python
 optimizer = OptaxRProp()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1220,7 +1220,7 @@ Rectified Adam — variance-rectified adaptive learning rate ([Liu et al., 2020]
 
 ```python
 optimizer = OptaxRAdam()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1230,9 +1230,9 @@ optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
 Vanilla SGD, SGD with Momentum, and Nesterov Accelerated Gradient. All three live in the same file (`optax_sgd.py`) and share the standard loop.
 
 ```python
-OptaxSGD().optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
-OptaxSGDM().optimize(problem_objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
-OptaxNAG().optimize(problem_objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
+OptaxSGD().optimize(objective=obj, learning_rate=0.1, random_seed=42)
+OptaxSGDM().optimize(objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
+OptaxNAG().optimize(objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Applies to | Description |
@@ -1247,7 +1247,7 @@ SGD with decaying Gaussian noise injection.
 
 ```python
 optimizer = OptaxNoisySGD()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, eta=0.01, gamma=0.55, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, eta=0.01, gamma=0.55, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1265,7 +1265,7 @@ Polyak step-size SGD — adapts step size using $\text{step} = (f(x) - f^*) / \l
 
 ```python
 optimizer = OptaxPolyakSGD()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, f_min=0.0, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, f_min=0.0, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1283,7 +1283,7 @@ Sharpness-Aware Minimization — seeks flat minima by perturbing towards the wor
 
 ```python
 optimizer = OptaxSAM()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, rho=0.05, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, rho=0.05, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1301,7 +1301,7 @@ Sophia optimizer — lightweight second-order method using diagonal Hessian EMA 
 
 ```python
 optimizer = OptaxSophia()
-optimizer.optimize(problem_objective=obj, learning_rate=1e-3, gamma=0.01, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=1e-3, gamma=0.01, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1322,7 +1322,7 @@ Lookahead wrapper — slow-weight averaging around a fast inner optimizer ([Zhan
 ```python
 optimizer = OptaxLookahead()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,
     inner_optimizer_name="adam",  # adam | adamw | sgd | rmsprop | lion
     sync_period=6,
@@ -1345,7 +1345,7 @@ Schedule-Free Adam — removes the need for an explicit LR schedule by maintaini
 
 ```python
 optimizer = OptaxScheduleFreeAdam()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, warmup_steps=200, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, warmup_steps=200, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1360,7 +1360,7 @@ Yogi optimizer — controls adaptive learning-rate increase more conservatively 
 
 ```python
 optimizer = OptaxYogi()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1371,7 +1371,7 @@ NovoGrad — layer-wise gradient normalization optimizer ([Ginsburg et al., 2019
 
 ```python
 optimizer = OptaxNovoGrad()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1381,8 +1381,8 @@ optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
 Optimistic GD and Optimistic Adam.
 
 ```python
-OptaxOGD().optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
-OptaxOAdam().optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+OptaxOGD().optimize(objective=obj, learning_rate=0.1, random_seed=42)
+OptaxOAdam().optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1392,8 +1392,8 @@ OptaxOAdam().optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
 Sign-based optimizers — update with the sign of the gradient.
 
 ```python
-OptaxSignSGD().optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
-OptaxSignum().optimize(problem_objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
+OptaxSignSGD().optimize(objective=obj, learning_rate=0.1, random_seed=42)
+OptaxSignum().optimize(objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Applies to | Description |
@@ -1408,7 +1408,7 @@ SM3 — memory-efficient adaptive optimizer for sparse gradients ([Anil et al., 
 
 ```python
 optimizer = OptaxSM3()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1421,7 +1421,7 @@ L-BFGS optimizer via Optax. Uses second-order curvature information for faster c
 
 ```python
 optimizer = OptaxLBFGS()
-optimizer.optimize(problem_objective=obj, patience=500, random_seed=42)
+optimizer.optimize(objective=obj, patience=500, random_seed=42)
 ```
 
 ---

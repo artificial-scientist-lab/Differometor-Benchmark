@@ -272,7 +272,7 @@ class VAESampling(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
@@ -291,7 +291,7 @@ class VAESampling(OptimizationAlgorithm):
         """Run VAE training followed by Bayesian Optimization in latent space.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             max_iterations: Maximum number of BO iterations in latent space (required).
             init_params: Initial parameters to seed optimization (unused).
             random_seed: Random seed for reproducibility.
@@ -319,7 +319,7 @@ class VAESampling(OptimizationAlgorithm):
         if not 0.0 < top_k <= 1.0:
             raise ValueError("top_k must be a fraction in (0, 1].")
 
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)

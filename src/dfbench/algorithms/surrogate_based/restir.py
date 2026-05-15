@@ -140,7 +140,7 @@ class ReSTIR(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
@@ -161,7 +161,7 @@ class ReSTIR(OptimizationAlgorithm):
         for actual evaluation.
 
         Args:
-            problem_objective: Pre-configured Objective instance. Use this for all
+            objective: Pre-configured Objective instance. Use this for all
                 function evaluations - it handles tracking automatically.
             max_iterations: Maximum number of algorithm iterations (not evaluations).
                 If None, runs until budget is exceeded.
@@ -177,7 +177,7 @@ class ReSTIR(OptimizationAlgorithm):
             gd_learning_rate: Learning rate for Optax Adam updates during GD refinement.
         """
         # 1. Setup
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)

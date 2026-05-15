@@ -17,7 +17,7 @@ obj = Objective(
 optimizer = EvoxES(batch_size=50, variant="CMAES")
 
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=2000,
     pop_size=100,
     random_seed=42,

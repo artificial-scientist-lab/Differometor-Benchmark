@@ -417,7 +417,7 @@ class Benchmark:
                 kwargs["random_seed"] = run_seeds[i_run]
 
             # Run optimization acts on Objective
-            config.algorithm.optimize(problem_objective=obj, **kwargs)
+            config.algorithm.optimize(objective=obj, **kwargs)
 
             # Extract data
             run_data = RunData.from_objective(obj)

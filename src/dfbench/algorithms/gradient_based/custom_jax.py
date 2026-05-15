@@ -99,7 +99,7 @@ class SGLDJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.05,
@@ -109,7 +109,7 @@ class SGLDJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.05,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -161,7 +161,7 @@ class ASAMJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
@@ -172,7 +172,7 @@ class ASAMJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.02,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -233,7 +233,7 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         adam_learning_rate: float = 0.1,
@@ -243,7 +243,7 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         lbfgs_patience: int | None = None,
         **lbfgs_kwargs,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
         _, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
@@ -331,7 +331,7 @@ class EntropySGDJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.03,
@@ -343,7 +343,7 @@ class EntropySGDJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.03,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -400,7 +400,7 @@ class SGHMCJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.01,
@@ -411,7 +411,7 @@ class SGHMCJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.05,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -464,7 +464,7 @@ class ARCJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         **kwargs,
@@ -492,7 +492,7 @@ class OGDJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.05,
@@ -501,7 +501,7 @@ class OGDJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.02,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -554,7 +554,7 @@ class OAdamJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
@@ -564,7 +564,7 @@ class OAdamJAX(OptimizationAlgorithm):
         restart_from_best: bool = True,
         **adam_kwargs,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -623,7 +623,7 @@ class PerturbedGDJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.05,
@@ -634,7 +634,7 @@ class PerturbedGDJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.02,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -683,7 +683,7 @@ class NoisyAdamJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
@@ -694,7 +694,7 @@ class NoisyAdamJAX(OptimizationAlgorithm):
         restart_from_best: bool = True,
         **adam_kwargs,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -747,7 +747,7 @@ class GDRestartsJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.05,
@@ -756,7 +756,7 @@ class GDRestartsJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.03,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -802,7 +802,7 @@ class GaussianSmoothingGDJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.03,
@@ -813,7 +813,7 @@ class GaussianSmoothingGDJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.02,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params

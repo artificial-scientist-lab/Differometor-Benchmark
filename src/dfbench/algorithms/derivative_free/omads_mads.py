@@ -240,7 +240,7 @@ class OmadsMADS(OptimizationAlgorithm):
         >>> problem = VoyagerProblem()
         >>> obj = Objective(problem, max_evals=500, verbose=1, print_every=50)
         >>> optimizer = OmadsMADS(psize_init=1.0, tol=1e-9, ns=4)
-        >>> optimizer.optimize(problem_objective=obj, random_seed=42)
+        >>> optimizer.optimize(objective=obj, random_seed=42)
         >>> print(f"Best loss: {obj.best_loss:.6f}")
     """
 
@@ -267,7 +267,7 @@ class OmadsMADS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         max_iterations: int | None = None,
@@ -276,7 +276,7 @@ class OmadsMADS(OptimizationAlgorithm):
         """Run MADS optimization (search + poll).
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Ignored (OMADS manages its own starting point from
                 Objective's best_params or a random bounded sample).
             random_seed: Random seed for reproducibility. If None, generated.
@@ -284,7 +284,7 @@ class OmadsMADS(OptimizationAlgorithm):
                 Objective's ``max_evals`` / ``max_time``.
             **kwargs: Unused.
         """
-        obj = problem_objective
+        obj = objective
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         # JIT warmup
@@ -323,7 +323,7 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
         >>> problem = VoyagerProblem()
         >>> obj = Objective(problem, max_evals=500, verbose=1, print_every=50)
         >>> optimizer = OmadsOrthoMADS(psize_init=1.0, tol=1e-9)
-        >>> optimizer.optimize(problem_objective=obj, random_seed=42)
+        >>> optimizer.optimize(objective=obj, random_seed=42)
         >>> print(f"Best loss: {obj.best_loss:.6f}")
     """
 
@@ -347,7 +347,7 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         max_iterations: int | None = None,
@@ -356,7 +356,7 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
         """Run OrthoMADS optimization (poll only).
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Ignored (OMADS manages its own starting point from
                 Objective's best_params or a random bounded sample).
             random_seed: Random seed for reproducibility. If None, generated.
@@ -364,7 +364,7 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
                 Objective's ``max_evals`` / ``max_time``.
             **kwargs: Unused.
         """
-        obj = problem_objective
+        obj = objective
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         # JIT warmup

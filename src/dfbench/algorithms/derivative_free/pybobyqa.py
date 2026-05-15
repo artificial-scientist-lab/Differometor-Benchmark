@@ -90,7 +90,7 @@ class PyBOBYQA(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         max_iterations: int | None = None,
@@ -102,7 +102,7 @@ class PyBOBYQA(OptimizationAlgorithm):
                 "Py-BOBYQA is required.  Install with: pip install Py-BOBYQA"
             ) from exc
 
-        obj = problem_objective
+        obj = objective
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         lower, upper = solver_bounds_np(obj)

@@ -40,7 +40,7 @@ class BotorchBO(OptimizationAlgorithm):
         >>> problem = VoyagerProblem()
         >>> optimizer = BotorchBO(batch_size=5)
         >>> objective = optimizer.optimize(
-        ...     problem_objective=objective,
+        ...     objective=objective,
         ...     max_iterations=100,
         ...     n_initial=10,
         ...     acquisition_batch_size=5,
@@ -164,7 +164,7 @@ class BotorchBO(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
@@ -175,7 +175,7 @@ class BotorchBO(OptimizationAlgorithm):
         """Run Bayesian Optimization with batch acquisition.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             max_iterations: Optional cap on BO iterations (excluding initial samples).
                 When ``None`` the algorithm runs until ``obj.budget_exceeded``.
             init_params: Initial parameters to include in the training set.
@@ -190,7 +190,7 @@ class BotorchBO(OptimizationAlgorithm):
         if acquisition_batch_size < 1:
             raise ValueError("acquisition_batch_size must be at least 1.")
 
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)

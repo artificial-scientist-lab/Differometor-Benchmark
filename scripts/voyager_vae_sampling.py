@@ -8,18 +8,17 @@ problem = ConstrainedVoyagerProblem()
 
 obj = Objective(
     problem,
-    max_evals=10_000,
+    max_time=120,
     verbose=1,
-    print_every=100,
-    save_params_history=True,
+    print_every=1,
 )
 
-optimizer = VAESampling(batch_size=64)
+optimizer = VAESampling(batch_size_sampling=64, batch_size_bo=1)
 
 optimizer.optimize(
-    problem_objective=obj,
-    max_iterations=50,
-    vae_training_samples=1000,
+    objective=obj,
+    max_iterations=None,
+    vae_training_samples=None,
     sampling_budget_fraction=0.25,
     vae_epochs=100,
     vae_train_batch_size=64,
@@ -30,5 +29,3 @@ optimizer.optimize(
 
 print(f"\nBest loss: {obj.best_loss:.6f}")
 print(f"Total evaluations: {obj.eval_count}")
-
-obj.save_run_data(optimizer.algorithm_str, hyper_param_str="standard")

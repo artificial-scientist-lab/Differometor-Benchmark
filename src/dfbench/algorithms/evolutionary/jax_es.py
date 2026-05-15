@@ -100,7 +100,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -111,7 +111,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
         """Run (1+1)-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Starting point.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
@@ -126,7 +126,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
             max_iterations: Maximum number of offspring evaluations.  ``None``
                 means unlimited (budget governs stopping).
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -246,7 +246,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -258,7 +258,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
         """Run (μ,λ)-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
@@ -281,7 +281,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
                 f"(μ,λ)-ES requires mu < lam, got mu={mu}, lam={lam}."
             )
 
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)

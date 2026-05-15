@@ -66,7 +66,7 @@ class LBFGSGD(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         patience: int | None = None,
@@ -87,7 +87,7 @@ class LBFGSGD(OptimizationAlgorithm):
         downstream time-based analysis.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             init_params: Initial parameters. If None, initialize randomly
                 (using random_seed) in unbounded space.
             random_seed: Seed for reproducibility. If None, uses system
@@ -95,7 +95,7 @@ class LBFGSGD(OptimizationAlgorithm):
             patience: Stop after this many iterations without improvement.
             **lbfgs_kwargs: Passed to ``optax.lbfgs()``.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)

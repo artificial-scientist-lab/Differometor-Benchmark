@@ -33,7 +33,7 @@ for name, optimizer, extra_kwargs in configs:
     )
 
     optimizer.optimize(
-        problem_objective=obj,
+        objective=obj,
         random_seed=SEED,
         **extra_kwargs,
     )

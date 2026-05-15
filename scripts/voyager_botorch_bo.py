@@ -17,7 +17,7 @@ obj = Objective(
 optimizer = BotorchBO(batch_size=1)
 
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=200,
     n_initial=10,
     acquisition_batch_size=1,

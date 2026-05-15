@@ -29,7 +29,7 @@ obj_mads = Objective(
 optimizer_mads = OmadsMADS(psize_init=1.0, tol=1e-9, ns=4)
 
 optimizer_mads.optimize(
-    problem_objective=obj_mads,
+    objective=obj_mads,
     random_seed=42,
 )
 
@@ -51,7 +51,7 @@ obj_ortho = Objective(
 optimizer_ortho = OmadsOrthoMADS(psize_init=1.0, tol=1e-9)
 
 optimizer_ortho.optimize(
-    problem_objective=obj_ortho,
+    objective=obj_ortho,
     random_seed=42,
 )
 

@@ -65,7 +65,7 @@ class BasinHopping(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         T: float = 1.0,
@@ -74,14 +74,14 @@ class BasinHopping(OptimizationAlgorithm):
         """Run Basin-Hopping global optimisation.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Starting point. If *None*, sampled uniformly in bounds.
             random_seed: Seed for reproducibility.
             T: Temperature parameter for the Metropolis acceptance criterion.
             stepsize: Relative step size for the random perturbation (fraction
                 of the bound range per dimension).
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _key = self.prepare(

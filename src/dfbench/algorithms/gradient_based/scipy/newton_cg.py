@@ -25,7 +25,7 @@ class NewtonCG(ScipyMinimizeAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         xtol: float = 1e-5,
@@ -39,7 +39,7 @@ class NewtonCG(ScipyMinimizeAlgorithm):
         exact gradients plus Hessian-vector products to SciPy.
 
         Args:
-            problem_objective: Objective to mutate in place with evaluation logs.
+            objective: Objective to mutate in place with evaluation logs.
             init_params: Initial point in unbounded space. If None, sampled via
                 :meth:`Objective.random_params_unbounded`.
             random_seed: Seed used when sampling ``init_params``.
@@ -50,7 +50,7 @@ class NewtonCG(ScipyMinimizeAlgorithm):
                 via ``options=...``.
         """
         self._run_scipy_minimize(
-            problem_objective,
+            objective,
             init_params,
             random_seed,
             tol,

@@ -15,7 +15,7 @@ for run in range(n_runs):
     problem = ConstrainedVoyagerProblem()
     obj = Objective(problem, max_evals=n_samples)
     algorithm = RandomSearch(batch_size=125)
-    algorithm.optimize(problem_objective=obj, random_seed=seed_start + run)
+    algorithm.optimize(objective=obj, random_seed=seed_start + run)
     best_losses.append(float(obj.best_loss))
 
 best_losses = np.array(best_losses)

@@ -61,7 +61,7 @@ class TestOptimizationAlgorithmABC:
                 pass
 
             def optimize(
-                self, problem_objective, init_params=None, random_seed=None, **kw
+                self, objective, init_params=None, random_seed=None, **kw
             ):
                 pass
 
@@ -84,7 +84,7 @@ class TestOptimizationAlgorithmABC:
                 pass
 
             def optimize(
-                self, problem_objective, init_params=None, random_seed=None, **kw
+                self, objective, init_params=None, random_seed=None, **kw
             ):
                 pass
 

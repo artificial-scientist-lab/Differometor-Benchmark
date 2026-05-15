@@ -34,7 +34,7 @@ class AdamGD(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         patience: int | None = None,
@@ -48,14 +48,14 @@ class AdamGD(OptimizationAlgorithm):
         the number of gradient steps.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             init_params: Initial parameters. If None, initialize randomly (using random_seed).
             random_seed: Seed for init param generation.
             learning_rate: Adam learning rate.
             patience: Stop after this many iterations without improvement.
             **adam_kwargs: Passed to optax.adam().
         """
-        obj = problem_objective
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
 

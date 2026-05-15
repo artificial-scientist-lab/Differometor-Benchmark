@@ -68,7 +68,7 @@ An algorithm defines *how* to search. Every algorithm subclasses `OptimizationAl
 |--------------------|---------|
 | `algorithm_str` | Unique identifier (e.g. `"adam_gd"`, `"evox_cmaes"`) |
 | `algorithm_type` | One of `GRADIENT_BASED`, `EVOLUTIONARY`, `SURROGATE_BASED`, `GENERATIVE` |
-| `optimize(problem_objective, …)` | Main entry point — receives a pre-configured `Objective`, runs the loop, returns it |
+| `optimize(objective, …)` | Main entry point — receives a pre-configured `Objective`, runs the loop, returns it |
 
 Algorithms **never** create their own `Objective`; they receive one from the caller (or from the `Benchmark` harness). This inversion of control ensures the harness can set budget limits, select seeds, and configure history storage uniformly.
 

@@ -34,8 +34,8 @@ class _DummyAlgorithm(OptimizationAlgorithm):
     def __init__(self):
         pass
 
-    def optimize(self, problem_objective, init_params=None, random_seed=None, **kwargs):
-        obj = problem_objective
+    def optimize(self, objective, init_params=None, random_seed=None, **kwargs):
+        obj = objective
         seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         obj.start_logging()
         while not obj.budget_exceeded:

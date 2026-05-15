@@ -188,7 +188,7 @@ class PyCMACMAES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: np.ndarray | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -198,7 +198,7 @@ class PyCMACMAES(OptimizationAlgorithm):
         """Run CMA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean vector.  Sampled uniformly in bounds
                 when ``None``.
             random_seed: Seed for reproducibility.
@@ -208,7 +208,7 @@ class PyCMACMAES(OptimizationAlgorithm):
             max_iterations: Maximum number of CMA generations.  ``None``
                 means unlimited (budget and convergence govern stopping).
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -285,7 +285,7 @@ class PyCMAActiveCMAES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: np.ndarray | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -295,7 +295,7 @@ class PyCMAActiveCMAES(OptimizationAlgorithm):
         """Run active CMA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean vector.  Sampled uniformly in bounds
                 when ``None``.
             random_seed: Seed for reproducibility.
@@ -304,7 +304,7 @@ class PyCMAActiveCMAES(OptimizationAlgorithm):
                 ``4 + floor(3·ln n)``.
             max_iterations: Maximum CMA generations.  ``None`` = unlimited.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -380,7 +380,7 @@ class PyCMAIPOP(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: np.ndarray | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -391,7 +391,7 @@ class PyCMAIPOP(OptimizationAlgorithm):
         """Run IPOP-CMA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean for the *first* run.  Subsequent
                 restarts always use fresh random points.
             random_seed: Seed for reproducibility.
@@ -406,7 +406,7 @@ class PyCMAIPOP(OptimizationAlgorithm):
             max_iterations_per_restart: Cap on CMA generations per restart
                 (independent of the overall budget).  ``None`` = unlimited.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -498,7 +498,7 @@ class PyCMABIPOP(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: np.ndarray | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -509,7 +509,7 @@ class PyCMABIPOP(OptimizationAlgorithm):
         """Run BIPOP-CMA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean for the first run only.
             random_seed: Seed for reproducibility.
             sigma0: Base step size.  Defaults to ``0.3`` (dimensionless fraction of the unit cube; search runs in ``[0, 1]^n`` and is mapped to physical bounds at evaluation).
@@ -521,7 +521,7 @@ class PyCMABIPOP(OptimizationAlgorithm):
             max_iterations_per_restart: Per-restart generation cap.
                 ``None`` = unlimited.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)

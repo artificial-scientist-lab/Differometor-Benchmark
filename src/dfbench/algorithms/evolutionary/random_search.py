@@ -26,7 +26,7 @@ class RandomSearch(OptimizationAlgorithm):
         >>> obj = Objective(problem, unbounded=False, max_time=120)
         >>> optimizer = RandomSearch(batch_size=1)
         >>> result = optimizer.optimize(
-        ...     problem_objective=obj,
+        ...     objective=obj,
         ...     max_iterations=100,
         ... )
     """
@@ -48,18 +48,18 @@ class RandomSearch(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         random_seed: int | None = None,
     ) -> None:
         """Run Random Search optimization.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             max_iterations: Maximum number of batches to evaluate. If None, runs until budget exceeded.
             random_seed (int | None): Random seed for reproducibility. Defaults to None.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)

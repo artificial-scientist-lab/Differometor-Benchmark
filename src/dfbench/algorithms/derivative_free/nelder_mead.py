@@ -39,7 +39,7 @@ class NelderMead(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         xatol: float = 1e-8,
@@ -49,7 +49,7 @@ class NelderMead(OptimizationAlgorithm):
         """Run Nelder-Mead simplex optimization.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Starting point. If *None*, sampled uniformly in bounds.
             random_seed: Seed for reproducibility (controls initial point).
             xatol: Absolute parameter tolerance for convergence.
@@ -57,7 +57,7 @@ class NelderMead(OptimizationAlgorithm):
             adaptive: Adapt simplex parameters to dimensionality (recommended
                 for n > 1).
         """
-        obj = problem_objective
+        obj = objective
 
         random_seed, _key = self.prepare(
             obj, unbounded=False, random_seed=random_seed

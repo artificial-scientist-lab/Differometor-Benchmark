@@ -43,7 +43,7 @@ class OptaxPolyakSGD(OptaxAlgorithm):
 
     def optimize(
         self,
-        problem_objective,
+        objective,
         init_params=None,
         random_seed=None,
         patience=None,
@@ -52,7 +52,7 @@ class OptaxPolyakSGD(OptaxAlgorithm):
         **kwargs,
     ):
         """Polyak SGD loop — passes loss to ``optimizer.update``."""
-        obj = problem_objective
+        obj = objective
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         if init_params is None:

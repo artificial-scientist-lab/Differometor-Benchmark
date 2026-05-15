@@ -315,7 +315,7 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
 
     def _run_scipy_minimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None,
         random_seed: int | None,
         tol: float | None,
@@ -323,7 +323,7 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
         *,
         hessian_update_strategy: object | None = None,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         self.prepare(
             obj, unbounded=self.scipy_config.unbounded, random_seed=random_seed
         )

@@ -10,7 +10,7 @@ Every algorithm must:
 
 1. **Subclass** `OptimizationAlgorithm`
 2. **Declare** `algorithm_str` and `algorithm_type`
-3. **Implement** `optimize(problem_objective, …) → None`
+3. **Implement** `optimize(objective, …) → None`
 4. **Use `Objective`** for all function evaluations
     - *Unless* you use your own JIT-compiled loop — then manually log calls via `Objective.log_evaluation(...)` afterwards. This adds negligible overhead relative to the objective function.
 
@@ -71,7 +71,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
@@ -83,7 +83,7 @@ class MyAlgorithm(OptimizationAlgorithm):
         """Run the optimization.
         
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             max_iterations: Max algorithm iterations (not evals). None = budget only.
                 For algorithms where each iteration performs exactly one evaluation
                 (e.g. gradient-based methods), omit this parameter —
@@ -94,7 +94,7 @@ class MyAlgorithm(OptimizationAlgorithm):
             patience: Stop after N iterations without improvement.
         """
         # ─── 1. Setup references ───
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         # Sets unbounded mode, algorithm_str, seeds np/JAX, returns resolved seed + JAX key
@@ -171,7 +171,7 @@ The base class `OptimizationAlgorithm.optimize()` contains a commented blueprint
 ### 1. Setup references
 
 ```python
-obj = problem_objective
+obj = objective
 problem = obj.problem
 random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 ```
@@ -383,7 +383,7 @@ params = optax.apply_updates(params, updates)
 - [ ] Algorithm subclasses `OptimizationAlgorithm`
 - [ ] `algorithm_str` is set to a unique identifier
 - [ ] `algorithm_type` is set correctly
-- [ ] `optimize()` accepts `problem_objective: Objective` as first arg
+- [ ] `optimize()` accepts `objective: Objective` as first arg
 - [ ] `optimize()` returns `None` (the `Objective` is mutated in place)
 - [ ] All evaluations go through `Objective` (no direct `problem.objective_function()` calls)
 - [ ] JIT warmup happens before `obj.start_logging()`
