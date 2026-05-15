@@ -322,7 +322,7 @@ class MyAlgorithm(OptimizationAlgorithm):
             params = init_params
 
         # 4. JIT warmup (before start_logging, compilation time is free)
-        _ = obj.vmap_value(params)
+        obj.warmup_vmap_value(batch_size=self.batch_size)
 
         # 5. Start the clock
         obj.start_logging()
@@ -351,7 +351,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 - **`optimize()` receives a pre-configured `Objective`**, the algorithm does not create it.
 - **`prepare()`** configures `unbounded`, `algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. For PyTorch-based algorithms, call `torch.manual_seed(random_seed)` afterwards.
 - **Choose `unbounded`:** Set to `True` if your algorithm benefits from smooth unconstrained space (via sigmoid transform). Most evolutionary and surrogate methods use `False` (bounded space).
-- **JIT warmup before `start_logging()`**, compilation time doesn't count against the budget. The no-arg `warmup_*()` helpers run the matching path twice on deterministic params.
+- **JIT warmup before `start_logging()`**, compilation time doesn't count against the budget. Use the matching `warmup_*()` helper; the single-point helpers take no arguments, while batched helpers take the batch size you will use during optimization.
 - **`budget_exceeded`** checks both time and eval limits, please use it as your loop condition.
 
 ### Evaluation Methods

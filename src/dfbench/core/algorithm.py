@@ -123,14 +123,15 @@ class OptimizationAlgorithm(ABC):
         else:
             params = init_params
 
-        # 4. JIT warmup (optional but recommended, else much time is lost during the first evaluation)
-        _ = obj.value(params)
-        _ = obj.value_and_grad(params)  # For gradientients and loss
-        _ = obj.grad(params)  # Loss won't get logged
-        # Or for batched:
-        _ = obj.vmap_value()
-        _ = obj.vmap_value_and_grad()
-        _ = obj.vmap_grad()
+        # 4. JIT warmup (optional but recommended, else much time is lost during
+        # the first evaluation). Warm up only the paths your algorithm will use.
+        obj.warmup_value()  # loss-only single-point evaluation
+        obj.warmup_value_and_grad()  # single-point loss + gradient
+        obj.warmup_grad()  # gradient-only single-point evaluation
+        # Or for batched algorithms:
+        obj.warmup_vmap_value(batch_size=10)
+        obj.warmup_vmap_value_and_grad(batch_size=10)
+        obj.warmup_vmap_grad(batch_size=10)
 
         # 5. Start logging
         obj.start_logging()
