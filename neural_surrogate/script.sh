@@ -36,10 +36,16 @@ TOPOLOGY_DIM="${TOPOLOGY_DIM:-128}"
 SEED="${SEED:-0}"
 VAL_FRACTION="${VAL_FRACTION:-0.2}"
 DEVICE="${DEVICE:-cuda}"
-MULTI_GPU="${MULTI_GPU:-data-parallel}"
+MULTI_GPU="${MULTI_GPU:-ddp}"
 TOPOLOGY_STRATEGY="${TOPOLOGY_STRATEGY:-hashing}"
 PARAMETER_STRATEGY="${PARAMETER_STRATEGY:-bounds}"
-DATASET_WORKERS="${DATASET_WORKERS:-${SLURM_CPUS_PER_TASK:-30}}"
+GPUS_PER_NODE="${SLURM_GPUS_ON_NODE:-${SLURM_GPUS_PER_NODE:-8}}"
+if [[ "$MULTI_GPU" == "ddp" ]]; then
+  DEFAULT_DATASET_WORKERS=$(( (${SLURM_CPUS_PER_TASK:-30} + GPUS_PER_NODE - 1) / GPUS_PER_NODE ))
+else
+  DEFAULT_DATASET_WORKERS="${SLURM_CPUS_PER_TASK:-30}"
+fi
+DATASET_WORKERS="${DATASET_WORKERS:-$DEFAULT_DATASET_WORKERS}"
 INVERSE_CHECKPOINT_PATH="${INVERSE_CHECKPOINT_PATH:-$CHECKPOINT_PATH/${TOPOLOGY_STRATEGY}_${PARAMETER_STRATEGY}_checkpoint.pt}"
 INVERSE_OUTPUT_PATH="${INVERSE_OUTPUT_PATH:-neural_surrogate/inverse_design_result.json}"
 INVERSE_STEPS="${INVERSE_STEPS:-1000}"
@@ -68,21 +74,28 @@ echo "Checkpoint path: $CHECKPOINT_PATH"
 start=$(date +%s)
 
 if [[ "$RUN_MODE" == "train" ]]; then
-  python -m neural_surrogate.pipeline \
-    --data "$DATA_DIR" \
-    --loss-key "$LOSS_KEY" \
-    --epochs "$EPOCHS" \
-    --batch-size "$BATCH_SIZE" \
-    --lr "$LR" \
-    --topology-dim "$TOPOLOGY_DIM" \
-    --seed "$SEED" \
-    --val-fraction "$VAL_FRACTION" \
-    --device "$DEVICE" \
-    --multi-gpu "$MULTI_GPU" \
-    --checkpoint-path "$CHECKPOINT_PATH" \
-    --topology-strategy "$TOPOLOGY_STRATEGY" \
-    --parameter-strategy "$PARAMETER_STRATEGY" \
+  train_args=(
+    --data "$DATA_DIR"
+    --loss-key "$LOSS_KEY"
+    --epochs "$EPOCHS"
+    --batch-size "$BATCH_SIZE"
+    --lr "$LR"
+    --topology-dim "$TOPOLOGY_DIM"
+    --seed "$SEED"
+    --val-fraction "$VAL_FRACTION"
+    --device "$DEVICE"
+    --multi-gpu "$MULTI_GPU"
+    --checkpoint-path "$CHECKPOINT_PATH"
+    --topology-strategy "$TOPOLOGY_STRATEGY"
+    --parameter-strategy "$PARAMETER_STRATEGY"
     --dataset-workers "$DATASET_WORKERS"
+  )
+  if [[ "$MULTI_GPU" == "ddp" ]]; then
+    torchrun --standalone --nproc_per_node "$GPUS_PER_NODE" \
+      -m neural_surrogate.pipeline "${train_args[@]}"
+  else
+    python -m neural_surrogate.pipeline "${train_args[@]}"
+  fi
 elif [[ "$RUN_MODE" == "inverse" ]]; then
   inverse_args=(
     --data "$DATA_DIR"

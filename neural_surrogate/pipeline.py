@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import warnings
 from pathlib import Path
 import logging
 
 import torch
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader, random_split
+from torch.utils.data.distributed import DistributedSampler
 
 warnings.filterwarnings("ignore", message="CUDA initialization:.*")
 
@@ -63,11 +67,15 @@ def run_pipeline(
     dataset_workers: int = 0,
 ) -> dict[str, float]:
     torch.manual_seed(seed)
-    train_device = resolve_device(device)
+    ddp = multi_gpu == "ddp"
+    rank, local_rank, world_size = setup_distributed(ddp)
+    train_device = resolve_device(device, local_rank=local_rank if ddp else None)
+    is_main = rank == 0
 
     h5_files = find_h5_files(data_path)
 
-    pipeline_logger.info(f"Found {len(h5_files)} H5 file(s) for training.")
+    if is_main:
+        pipeline_logger.info(f"Found {len(h5_files)} H5 file(s) for training.")
     dataset = make_campaign_dataset(
         h5_files,
         topology_strategy=topology_strategy,
@@ -79,18 +87,35 @@ def run_pipeline(
     if len(dataset) == 0:
         raise RuntimeError("No trainable samples found in the H5 campaign data.")
     
-    pipeline_logger.info(
-        "Created dataset containing %s samples with input dimension %s.",
-        len(dataset),
-        dataset.encoder.input_dim,
-    )
+    if is_main:
+        pipeline_logger.info(
+            "Created dataset containing %s samples with input dimension %s.",
+            len(dataset),
+            dataset.encoder.input_dim,
+        )
 
     train_dataset, eval_dataset = split_dataset(
         dataset,
         seed=seed,
         val_fraction=val_fraction,
     )
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_sampler = (
+        DistributedSampler(
+            train_dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=True,
+            seed=seed,
+        )
+        if ddp
+        else None
+    )
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=train_sampler is None,
+        sampler=train_sampler,
+    )
     eval_loader = DataLoader(eval_dataset, batch_size=batch_size, shuffle=False)
 
     model = TransformerEncoderSurrogate(
@@ -106,50 +131,93 @@ def run_pipeline(
         )
     )
     model.to(train_device)
-    model = maybe_parallelize_model(model, train_device, multi_gpu)
-
-    fit(
-        model=model,
-        train_loader=train_loader,
-        val_loader=eval_loader,
-        topology_strategy=topology_strategy,
-        parameter_strategy=parameter_strategy,
-        config=TrainConfig(
-            epochs=epochs,
-            lr=lr,
-            grad_clip_norm=1.0,
-            device=train_device,
-            checkpoint_path=checkpoint_path,
-        ),
+    model = maybe_parallelize_model(
+        model,
+        train_device,
+        multi_gpu,
+        local_rank=local_rank,
     )
-    metrics = evaluate(model, eval_loader, device=train_device)
 
-    first = dataset[0]
-    predicted = float(predict(model, first["x"].unsqueeze(0), device=train_device).item())
-    target = float(first["y"].item())
-    absolute_error = abs(predicted - target)
+    try:
+        fit(
+            model=model,
+            train_loader=train_loader,
+            val_loader=eval_loader,
+            topology_strategy=topology_strategy,
+            parameter_strategy=parameter_strategy,
+            config=TrainConfig(
+                epochs=epochs,
+                lr=lr,
+                grad_clip_norm=1.0,
+                device=train_device,
+                checkpoint_path=checkpoint_path,
+                rank=rank,
+            ),
+        )
+        if ddp:
+            dist.barrier()
 
-    return {
-        "samples": float(len(dataset)),
-        "train_samples": float(len(train_dataset)),
-        "val_samples": float(len(eval_dataset)),
-        "input_dim": float(dataset.encoder.input_dim),
-        "gpu_count": float(torch.cuda.device_count() if train_device.type == "cuda" else 0),
-        "target": target,
-        "prediction": predicted,
-        "absolute_error": absolute_error,
-        "eval_loss": metrics["loss"],
-        "topology_strategy": topology_strategy,
-        "parameter_strategy": parameter_strategy,
-    }
+        if not is_main:
+            return {}
+
+        eval_model = model.module if isinstance(model, DistributedDataParallel) else model
+        metrics = evaluate(eval_model, eval_loader, device=train_device)
+
+        first = dataset[0]
+        predicted = float(
+            predict(eval_model, first["x"].unsqueeze(0), device=train_device).item()
+        )
+        target = float(first["y"].item())
+        absolute_error = abs(predicted - target)
+
+        return {
+            "samples": float(len(dataset)),
+            "train_samples": float(len(train_dataset)),
+            "val_samples": float(len(eval_dataset)),
+            "input_dim": float(dataset.encoder.input_dim),
+            "gpu_count": float(world_size if ddp else int(train_device.type == "cuda")),
+            "target": target,
+            "prediction": predicted,
+            "absolute_error": absolute_error,
+            "eval_loss": metrics["loss"],
+            "topology_strategy": topology_strategy,
+            "parameter_strategy": parameter_strategy,
+        }
+    finally:
+        if ddp and dist.is_initialized():
+            dist.destroy_process_group()
 
 
-def resolve_device(device: str) -> torch.device:
+def setup_distributed(enabled: bool) -> tuple[int, int, int]:
+    if not enabled:
+        return 0, 0, 1
+    if not torch.cuda.is_available():
+        raise RuntimeError("DDP requires CUDA, but torch.cuda.is_available() is false.")
+    required = ("RANK", "LOCAL_RANK", "WORLD_SIZE")
+    missing = [name for name in required if name not in os.environ]
+    if missing:
+        raise RuntimeError(
+            "DDP must be launched with torchrun; missing environment "
+            f"variables: {missing}"
+        )
+    rank = int(os.environ["RANK"])
+    local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = int(os.environ["WORLD_SIZE"])
+    torch.cuda.set_device(local_rank)
+    dist.init_process_group(backend="nccl")
+    return rank, local_rank, world_size
+
+
+def resolve_device(device: str, local_rank: int | None = None) -> torch.device:
     if device == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            return torch.device("cuda", local_rank or 0)
+        return torch.device("cpu")
     resolved = torch.device(device)
     if resolved.type == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA was requested, but torch.cuda.is_available() is false.")
+    if resolved.type == "cuda" and local_rank is not None:
+        return torch.device("cuda", local_rank)
     return resolved
 
 
@@ -157,16 +225,15 @@ def maybe_parallelize_model(
     model: torch.nn.Module,
     device: torch.device,
     multi_gpu: str,
+    local_rank: int = 0,
 ) -> torch.nn.Module:
     if multi_gpu == "off":
         return model
-    if multi_gpu != "data-parallel":
-        raise ValueError("multi_gpu must be 'off' or 'data-parallel'.")
+    if multi_gpu != "ddp":
+        raise ValueError("multi_gpu must be 'off' or 'ddp'.")
     if device.type != "cuda":
-        raise RuntimeError("--multi-gpu data-parallel requires --device cuda or auto CUDA.")
-    if torch.cuda.device_count() < 2:
-        raise RuntimeError("DataParallel requested, but fewer than 2 CUDA GPUs are visible.")
-    return torch.nn.DataParallel(model)
+        raise RuntimeError("--multi-gpu ddp requires --device cuda or auto CUDA.")
+    return DistributedDataParallel(model, device_ids=[local_rank])
 
 
 def split_dataset(
@@ -225,8 +292,8 @@ def main() -> None:
     parser.add_argument(
         "--multi-gpu",
         default="off",
-        choices=("off", "data-parallel"),
-        help="Use torch.nn.DataParallel across all visible GPUs.",
+        choices=("off", "ddp"),
+        help="Use DistributedDataParallel. Launch with torchrun.",
     )
     parser.add_argument(
         "--checkpoint-path",
@@ -291,5 +358,6 @@ __all__ = [
     "maybe_parallelize_model",
     "resolve_device",
     "run_pipeline",
+    "setup_distributed",
     "split_dataset",
 ]

@@ -8,6 +8,7 @@ from pathlib import Path
 import logging
 import torch
 import torch.nn as nn
+from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data import DataLoader
 
 try:
@@ -29,6 +30,7 @@ class TrainConfig:
     grad_clip_norm: float | None = 1.0
     device: str | torch.device = "cpu"
     checkpoint_path: str | Path | None = None
+    rank: int = 0
 
 
 @dataclass
@@ -100,8 +102,11 @@ def fit(
     best_val_loss = float("inf")
 
     for _ in range(config.epochs):
-        print("=" * 50)
-        train_logger.info(f"Starting epoch {_+1}/{config.epochs}...")
+        if hasattr(train_loader.sampler, "set_epoch"):
+            train_loader.sampler.set_epoch(_)
+        if config.rank == 0:
+            print("=" * 50)
+            train_logger.info(f"Starting epoch {_+1}/{config.epochs}...")
         train_loss = train_epoch(
             model=model,
             dataloader=train_loader,
@@ -110,18 +115,25 @@ def fit(
             device=device,
             grad_clip_norm=config.grad_clip_norm,
         )
-        train_logger.info(f"Epoch {_+1} train loss: {train_loss:.6f}")
+        if config.rank == 0:
+            train_logger.info(f"Epoch {_+1} train loss: {train_loss:.6f}")
         history.train_loss.append(train_loss)
 
         if val_loader is None:
             continue
 
-        train_logger.info("\nRunning validation")
+        if config.rank == 0:
+            train_logger.info("\nRunning validation")
         metrics = evaluate(model, val_loader, loss_fn=loss_fn, device=device)
-        train_logger.info(f"Epoch {_+1} validation loss: {metrics['loss']:.6f}")
+        if config.rank == 0:
+            train_logger.info(f"Epoch {_+1} validation loss: {metrics['loss']:.6f}")
         history.val_loss.append(metrics["loss"])
 
-        if config.checkpoint_path is not None and metrics["loss"] < best_val_loss:
+        if (
+            config.rank == 0
+            and config.checkpoint_path is not None
+            and metrics["loss"] < best_val_loss
+        ):
             best_val_loss = metrics["loss"]
             train_logger.info("\nNew best validation loss found. Saving checkpoint.")
             save_checkpoint(model, config.checkpoint_path, kwargs=kwargs)
@@ -134,7 +146,7 @@ def save_checkpoint(model: nn.Module, path: str | Path, kwargs: dict) -> None:
         f"{kwargs.get('topology_strategy', 'hashing')}_{kwargs.get('parameter_strategy', 'bounds')}_checkpoint.pt"
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    model_to_save = model.module if isinstance(model, nn.DataParallel) else model
+    model_to_save = model.module if isinstance(model, DistributedDataParallel) else model
     torch.save(model_to_save.state_dict(), path)
     train_logger.info(f"Checkpoint saved to {path}")
 
