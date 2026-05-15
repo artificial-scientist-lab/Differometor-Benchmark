@@ -4,17 +4,6 @@ A benchmarking framework for optimization algorithms on gravitational-wave detec
 
 > **For detailed documentation, see the [Wiki](docs/Home.md).**
 
----
-
-## Please Read
-I want to keep the process of implementing an algorithm as intuitive as possible. Questions (and ideas) help me figure out where unclarities come up.
-
-If you have *any* questions, don't hesitate to ask me via Slack (Laurin Sefa) or an Issue!
-
-
-
----
-
 ## TL;DR (I want to try my own algorithm)
 
 This is how to create a raw script that tests your algorithm logic on a problem. Adding an algorithm as a class to the codebase is really not harder than this which would result in easier hyperparam testing (through short scripts you could then create) and the ability to add it to the benchmarking tool. But start from a script like that as you can copy that logic into the class later on.
@@ -100,7 +89,20 @@ See [Problems](docs/Problems.md) for details on loss computation, parameter mean
 
 ## Installation
 
-### With `uv` (recommended)
+### From PyPI
+
+```bash
+pip install dfbench                    # Core package and Differometor problems
+pip install "dfbench[optax,scipy]"      # Common local optimizers
+pip install "dfbench[evolution]"        # CMA, EvoX, Nevergrad, Evosax
+pip install "dfbench[bo]"               # BoTorch/Ax surrogate optimizers
+pip install "dfbench[dfo,smac]"         # Derivative-free and SMAC optimizers
+pip install "dfbench[all]"              # All optimizer backends
+pip install "dfbench[cuda13]"           # CUDA 13 JAX support
+pip install "dfbench[analysis]"         # Notebook/profiling tools
+```
+
+### From Source With `uv` (recommended for development)
 
 [uv](https://uv.dev/) handles virtual environments and dependency resolution automatically.
 
@@ -111,11 +113,11 @@ uv sync --group analysis                 # With analysis tools (profiling, noteb
 uv sync --group cuda13 --group analysis  # Everything
 ```
 
-### With `pip`
+### From Source With `pip`
 
 ```bash
-pip install -e .                     # Basic
-pip install -e ".[cuda13,analysis]"    # Everything
+pip install -e .                         # CPU-only editable install
+pip install -e ".[all,cuda13,analysis]"  # All backends, CUDA 13, and analysis extras
 ```
 
 See [Installation](docs/Installation.md) for GPU setup details and HPC notes.

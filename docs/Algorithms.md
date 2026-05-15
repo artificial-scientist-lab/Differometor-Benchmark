@@ -650,7 +650,6 @@ Implements TuRBO-1 from [Eriksson et al. 2019](https://proceedings.neurips.cc/pa
 optimizer = BotorchTuRBO(batch_size=5)
 optimizer.optimize(
     problem_objective=obj,
-    max_iterations=100,
     n_initial=20,
     acquisition_batch_size=5,
     random_seed=42,
@@ -659,15 +658,17 @@ optimizer.optimize(
 
 | Hyperparameter | Default | Description |
 |----------------|---------|-------------|
-| `max_iterations` | *required* | TuRBO iterations. |
+| `max_iterations` | `None` | Optional cap on TuRBO iterations per trust-region instance. |
 | `n_initial` | `20` | Initial Sobol samples. |
 | `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
 | `acquisition_batch_size` | `1` | Points per acquisition. |
+| `n_restarts` | `None` | Maximum trust-region restarts; `None` means restart until budget exhaustion. |
 
 **Trust region mechanics:**
 - After `success_tolerance` consecutive improvements → region **doubles** in size.
 - After `failure_tolerance` consecutive non-improvements → region **halves** in size.
 - When region shrinks below `length_min` → **restart** from scratch (re-initialize Sobol samples).
+- With `n_restarts=None`, these restarts are not capped separately; the objective budget is the stopping condition.
 
 ---
 
