@@ -23,10 +23,11 @@ source "$ENV_DIR/bin/activate"
 # External directory containing campaign .h5 files.
 DATA_DIR="/mnt/lustre/work/krenn/klz077/datasets/UIFOs"
 
-# Checkpoint path for saving the best model
+# Checkpoint directory for saving the best model during training.
 mkdir -p neural_surrogate/checkpoints
 CHECKPOINT_PATH="neural_surrogate/checkpoints"
 
+RUN_MODE="${RUN_MODE:-train}"
 LOSS_KEY="${LOSS_KEY:-loss_senspow}"
 EPOCHS="${EPOCHS:-250}"
 BATCH_SIZE="${BATCH_SIZE:-512}"
@@ -38,9 +39,16 @@ DEVICE="${DEVICE:-cuda}"
 MULTI_GPU="${MULTI_GPU:-data-parallel}"
 TOPOLOGY_STRATEGY="${TOPOLOGY_STRATEGY:-hashing}"
 PARAMETER_STRATEGY="${PARAMETER_STRATEGY:-bounds}"
+INVERSE_CHECKPOINT_PATH="${INVERSE_CHECKPOINT_PATH:-$CHECKPOINT_PATH/${TOPOLOGY_STRATEGY}_${PARAMETER_STRATEGY}_checkpoint.pt}"
+INVERSE_OUTPUT_PATH="${INVERSE_OUTPUT_PATH:-neural_surrogate/inverse_design_result.json}"
+INVERSE_STEPS="${INVERSE_STEPS:-1000}"
+INVERSE_LR="${INVERSE_LR:-1e-2}"
+TARGET_LOSS="${TARGET_LOSS:-}"
+REFERENCE_INDEX="${REFERENCE_INDEX:-}"
 
 echo "Environment: $ENV_DIR"
 echo "Data directory: $DATA_DIR"
+echo "Run mode: $RUN_MODE"
 echo "Loss key: $LOSS_KEY"
 echo "Epochs: $EPOCHS"
 echo "Batch size: $BATCH_SIZE"
@@ -53,21 +61,49 @@ echo "Multi-GPU mode: $MULTI_GPU"
 echo "Visible CUDA devices: ${CUDA_VISIBLE_DEVICES:-unset}"
 echo "Topology strategy: $TOPOLOGY_STRATEGY"
 echo "Parameter strategy: $PARAMETER_STRATEGY"
+echo "Checkpoint path: $CHECKPOINT_PATH"
 
 start=$(date +%s)
 
-python -m neural_surrogate.pipeline \
-  --data "$DATA_DIR" \
-  --loss-key "$LOSS_KEY" \
-  --epochs "$EPOCHS" \
-  --batch-size "$BATCH_SIZE" \
-  --lr "$LR" \
-  --topology-dim "$TOPOLOGY_DIM" \
-  --seed 1 \
-  --val-fraction "$VAL_FRACTION" \
-  --device "$DEVICE" \
-  --multi-gpu "$MULTI_GPU" \
-  --checkpoint-path "$CHECKPOINT_PATH"
+if [[ "$RUN_MODE" == "train" ]]; then
+  python -m neural_surrogate.pipeline \
+    --data "$DATA_DIR" \
+    --loss-key "$LOSS_KEY" \
+    --epochs "$EPOCHS" \
+    --batch-size "$BATCH_SIZE" \
+    --lr "$LR" \
+    --topology-dim "$TOPOLOGY_DIM" \
+    --seed "$SEED" \
+    --val-fraction "$VAL_FRACTION" \
+    --device "$DEVICE" \
+    --multi-gpu "$MULTI_GPU" \
+    --checkpoint-path "$CHECKPOINT_PATH" \
+    --topology-strategy "$TOPOLOGY_STRATEGY" \
+    --parameter-strategy "$PARAMETER_STRATEGY"
+elif [[ "$RUN_MODE" == "inverse" ]]; then
+  inverse_args=(
+    --data "$DATA_DIR"
+    --checkpoint-path "$INVERSE_CHECKPOINT_PATH"
+    --loss-key "$LOSS_KEY"
+    --steps "$INVERSE_STEPS"
+    --lr "$INVERSE_LR"
+    --topology-dim "$TOPOLOGY_DIM"
+    --topology-strategy "$TOPOLOGY_STRATEGY"
+    --parameter-strategy "$PARAMETER_STRATEGY"
+    --device "$DEVICE"
+    --output-path "$INVERSE_OUTPUT_PATH"
+  )
+  if [[ -n "$TARGET_LOSS" ]]; then
+    inverse_args+=(--target-loss "$TARGET_LOSS")
+  fi
+  if [[ -n "$REFERENCE_INDEX" ]]; then
+    inverse_args+=(--reference-index "$REFERENCE_INDEX")
+  fi
+  python -m neural_surrogate.inverse_design "${inverse_args[@]}"
+else
+  echo "Unknown RUN_MODE '$RUN_MODE'. Expected 'train' or 'inverse'." >&2
+  exit 2
+fi
 
 end=$(date +%s)
 runtime=$((end - start))
