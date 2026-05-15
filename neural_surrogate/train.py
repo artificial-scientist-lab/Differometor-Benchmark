@@ -99,6 +99,7 @@ def fit(
     best_val_loss = float("inf")
 
     for _ in range(config.epochs):
+        print("=" * 50)
         train_logger.info(f"Starting epoch {_+1}/{config.epochs}...")
         train_loss = train_epoch(
             model=model,
@@ -114,14 +115,14 @@ def fit(
         if val_loader is None:
             continue
 
-        train_logger.info("Running validation")
+        train_logger.info("\nRunning validation")
         metrics = evaluate(model, val_loader, loss_fn=loss_fn, device=device)
         train_logger.info(f"Epoch {_+1} validation loss: {metrics['loss']:.6f}")
         history.val_loss.append(metrics["loss"])
 
         if config.checkpoint_path is not None and metrics["loss"] < best_val_loss:
             best_val_loss = metrics["loss"]
-            train_logger.info("New best validation loss found. Saving checkpoint.")
+            train_logger.info("\nNew best validation loss found. Saving checkpoint.")
             save_checkpoint(model, config.checkpoint_path, kwargs=kwargs)
 
     return history

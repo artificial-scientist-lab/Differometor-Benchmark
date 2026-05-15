@@ -66,7 +66,7 @@ def run_pipeline(
 
     h5_files = find_h5_files(data_path)
 
-    pipeline_logger.info(f"Found {len(h5_files)} H5 file(s) for training:")
+    pipeline_logger.info(f"Found {len(h5_files)} H5 file(s) for training.")
     dataset = make_campaign_dataset(
         h5_files,
         topology_strategy=topology_strategy,
