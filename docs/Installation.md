@@ -16,13 +16,17 @@ source .venv/bin/activate
 pip install dfbench
 ```
 
-Optional PyPI extras are available for GPU support, analysis notebooks, and external optimizers:
+The base install keeps heavyweight optimizer backends optional. Add extras for the algorithm families you need:
 
 ```bash
-pip install "dfbench[cuda13]"         # CUDA 13 JAX support
-pip install "dfbench[cuda12]"         # CUDA 12 JAX support
-pip install "dfbench[analysis]"       # notebooks, profiling, plotting helpers
-pip install "dfbench[smac,pybobyqa]"  # optional external optimizers
+pip install "dfbench[optax,scipy]"      # common local optimizers
+pip install "dfbench[evolution]"        # CMA, EvoX, Nevergrad, Evosax
+pip install "dfbench[bo]"               # BoTorch/Ax surrogate optimizers
+pip install "dfbench[dfo,smac]"         # derivative-free and SMAC optimizers
+pip install "dfbench[all]"              # all optimizer backends
+pip install "dfbench[cuda13]"           # CUDA 13 JAX support
+pip install "dfbench[cuda12]"           # CUDA 12 JAX support
+pip install "dfbench[analysis]"         # notebooks, profiling, plotting helpers
 ```
 
 `HEBO` is not exposed as a project extra because the current upstream package pins `numpy<1.25`, while this project uses the JAX 0.9 stack with `numpy>=2.0`. If you need the HEBO wrapper, install and test it in a separate compatible environment.
@@ -74,8 +78,8 @@ pip install -e .
 # With CUDA GPU support
 pip install -e ".[cuda12]"
 
-# With analysis and optional optimizer extras
-pip install -e ".[analysis,smac,pybobyqa]"
+# With all optimizer backends and analysis tools
+pip install -e ".[all,analysis]"
 ```
 
 ## Verify Installation
@@ -98,14 +102,11 @@ The project's core dependencies (managed in `pyproject.toml`) are:
 |---------|---------|
 | `differometor` | JAX-based interferometer simulator |
 | `jax` / `jaxlib` | Auto-differentiation, JIT compilation, vmap |
-| `numpy` / `scipy` | Numerical arrays and SciPy optimizer wrappers |
+| `numpy` | Numerical arrays |
 | `jaxtyping` | Type annotations for JAX arrays |
 | `matplotlib` | Plotting helpers for objectives and problems |
-| `optax` | Gradient-based optimizer implementations |
-| `torch` | Torch/JAX conversion helpers, EvoX, BoTorch, and VAE algorithms |
-| `botorch` | Bayesian optimisation (BO and TuRBO algorithms) |
-| `evox` | Evolutionary optimisation (PSO, CMA-ES, etc.) |
-| `beartype` | Runtime type checking |
+
+Optimizer backends such as `optax`, `scipy`, `torch`, `botorch`, `evox`, `nevergrad`, `OMADS`, `pdfo`, and `smac` are installed through the extras above. The `t2j` and `j2t` helpers import `torch` only when called, so `import dfbench` does not require PyTorch.
 
 ## Build and Publish Checks
 
