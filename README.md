@@ -100,7 +100,16 @@ See [Problems](docs/Problems.md) for details on loss computation, parameter mean
 
 ## Installation
 
-### With `uv` (recommended)
+### From PyPI
+
+```bash
+pip install dfbench                         # CPU-only core package
+pip install "dfbench[cuda13]"               # CUDA 13 JAX support
+pip install "dfbench[analysis]"             # Notebook/profiling tools
+pip install "dfbench[smac,pybobyqa]"        # Optional external optimizers
+```
+
+### From Source With `uv` (recommended for development)
 
 [uv](https://uv.dev/) handles virtual environments and dependency resolution automatically.
 
@@ -111,11 +120,12 @@ uv sync --group analysis                 # With analysis tools (profiling, noteb
 uv sync --group cuda13 --group analysis  # Everything
 ```
 
-### With `pip`
+### From Source With `pip`
 
 ```bash
-pip install -e .                     # Basic
-pip install -e ".[cuda13,analysis]"    # Everything
+pip install -e .                         # CPU-only editable install
+pip install -e ".[cuda13,analysis]"      # CUDA 13 plus analysis extras
+pip install -e ".[smac,pybobyqa]"        # Optional external optimizers
 ```
 
 See [Installation](docs/Installation.md) for GPU setup details and HPC notes.
