@@ -25,7 +25,7 @@ DATA_DIR="/mnt/lustre/work/krenn/klz077/datasets/UIFOs"
 
 # Checkpoint path for saving the best model
 mkdir -p neural_surrogate/checkpoints
-CHECKPOINT_PATH="neural_surrogate/checkpoints/best_model.pt"
+CHECKPOINT_PATH="neural_surrogate/checkpoints"
 
 LOSS_KEY="${LOSS_KEY:-loss_senspow}"
 EPOCHS="${EPOCHS:-250}"
@@ -36,6 +36,8 @@ SEED="${SEED:-0}"
 VAL_FRACTION="${VAL_FRACTION:-0.2}"
 DEVICE="${DEVICE:-cuda}"
 MULTI_GPU="${MULTI_GPU:-data-parallel}"
+TOPOLOGY_STRATEGY="${TOPOLOGY_STRATEGY:-hashing}"
+PARAMETER_STRATEGY="${PARAMETER_STRATEGY:-bounds}"
 
 echo "Environment: $ENV_DIR"
 echo "Data directory: $DATA_DIR"
@@ -49,6 +51,8 @@ echo "Validation fraction: $VAL_FRACTION"
 echo "Device: $DEVICE"
 echo "Multi-GPU mode: $MULTI_GPU"
 echo "Visible CUDA devices: ${CUDA_VISIBLE_DEVICES:-unset}"
+echo "Topology strategy: $TOPOLOGY_STRATEGY"
+echo "Parameter strategy: $PARAMETER_STRATEGY"
 
 start=$(date +%s)
 

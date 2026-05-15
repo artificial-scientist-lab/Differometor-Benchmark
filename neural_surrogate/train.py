@@ -76,20 +76,24 @@ def train_epoch(
 def fit(
     model: nn.Module,
     train_loader: DataLoader,
-    val_loader: DataLoader | None = None,
-    config: TrainConfig | None = None,
-    optimizer: torch.optim.Optimizer | None = None,
+    val_loader: DataLoader,
+    config: TrainConfig,
+    topology_strategy: str = "hashing",
+    parameter_strategy: str = "bounds",
 ) -> TrainHistory:
     """Fit a model and optionally evaluate/checkpoint after each epoch."""
-    config = config or TrainConfig()
     device = torch.device(config.device)
     model.to(device)
     loss_fn = nn.MSELoss()
-    optimizer = optimizer or torch.optim.AdamW(
+    optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=config.lr,
         weight_decay=config.weight_decay,
     )
+    kwargs = {
+        "topology_strategy": topology_strategy,
+        "parameter_strategy": parameter_strategy,
+    }
 
     history = TrainHistory()
     best_val_loss = float("inf")
@@ -118,13 +122,15 @@ def fit(
         if config.checkpoint_path is not None and metrics["loss"] < best_val_loss:
             best_val_loss = metrics["loss"]
             train_logger.info("New best validation loss found. Saving checkpoint.")
-            save_checkpoint(model, config.checkpoint_path)
+            save_checkpoint(model, config.checkpoint_path, kwargs=kwargs)
 
     return history
 
 
-def save_checkpoint(model: nn.Module, path: str | Path) -> None:
-    path = Path(path)
+def save_checkpoint(model: nn.Module, path: str | Path, kwargs: dict) -> None:
+    path = Path(path) / (
+        f"{kwargs.get('topology_strategy', 'hashing')}_{kwargs.get('parameter_strategy', 'bounds')}_checkpoint.pt"
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     torch.save(model.state_dict(), path)
     train_logger.info(f"Checkpoint saved to {path}")

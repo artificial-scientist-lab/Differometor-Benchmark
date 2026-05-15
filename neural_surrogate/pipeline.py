@@ -58,6 +58,8 @@ def run_pipeline(
     device: str = "auto",
     multi_gpu: str = "off",
     checkpoint_path: str | Path | None = None,
+    topology_strategy: str = "hashing",
+    parameter_strategy: str = "bounds",
 ) -> dict[str, float]:
     torch.manual_seed(seed)
     train_device = resolve_device(device)
@@ -67,8 +69,8 @@ def run_pipeline(
     pipeline_logger.info(f"Found {len(h5_files)} H5 file(s) for training:")
     dataset = make_campaign_dataset(
         h5_files,
-        topology_strategy="hashing",
-        parameter_strategy="bounds",
+        topology_strategy=topology_strategy,
+        parameter_strategy=parameter_strategy,
         topology_dim=topology_dim,
         loss_key=loss_key,
     )
@@ -101,10 +103,12 @@ def run_pipeline(
     model = maybe_parallelize_model(model, train_device, multi_gpu)
 
     fit(
-        model,
-        train_loader,
-        eval_loader,
-        TrainConfig(
+        model=model,
+        train_loader=train_loader,
+        val_loader=eval_loader,
+        topology_strategy="hashing",
+        parameter_strategy="bounds",
+        config=TrainConfig(
             epochs=epochs,
             lr=lr,
             grad_clip_norm=1.0,
@@ -129,6 +133,8 @@ def run_pipeline(
         "prediction": predicted,
         "absolute_error": absolute_error,
         "eval_loss": metrics["loss"],
+        "topology_strategy": topology_strategy,
+        "parameter_strategy": parameter_strategy,
     }
 
 
@@ -222,6 +228,18 @@ def main() -> None:
         default=None,
         help="If specified, saves the best model checkpoint to this path.",
     )
+    parser.add_argument(
+        "--topology-strategy",
+        default="hashing",
+        choices=("hashing", "vocabulary", "exact"),
+        help="Strategy for encoding topology information.",
+    )
+    parser.add_argument(
+        "--parameter-strategy",
+        default="bounds",
+        choices=("identity", "standard", "bounds"),
+        help="Strategy for encoding parameter information.",
+    )
     args = parser.parse_args()
 
     if isinstance(args.data, str):
@@ -241,6 +259,8 @@ def main() -> None:
         device=args.device,
         multi_gpu=args.multi_gpu,
         checkpoint_path=args.checkpoint_path,
+        topology_strategy=args.topology_strategy,
+        parameter_strategy=args.parameter_strategy,
     )
     for key, value in metrics.items():
         print(f"{key}: {value:.9g}")
