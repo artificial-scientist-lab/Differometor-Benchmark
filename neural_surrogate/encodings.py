@@ -15,8 +15,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import warnings
 import zlib
+from concurrent.futures import ProcessPoolExecutor
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -335,9 +337,44 @@ def load_campaign_samples(
         "loss_optimized",
     ),
     include_simplifications: bool = False,
+    num_workers: int = 0,
 ) -> list[CampaignSample]:
     """Load H5 campaign runs that have topology, parameters, and target loss."""
     h5_paths = _normalize_paths(paths)
+    if num_workers < 0:
+        num_workers = min(len(h5_paths), os.cpu_count() or 1)
+    if num_workers <= 1 or len(h5_paths) <= 1:
+        return _load_campaign_samples_serial(
+            h5_paths,
+            loss_key=loss_key,
+            fallback_loss_keys=fallback_loss_keys,
+            include_simplifications=include_simplifications,
+        )
+
+    samples: list[CampaignSample] = []
+    worker_args = [
+        (h5_path, loss_key, tuple(fallback_loss_keys), include_simplifications)
+        for h5_path in h5_paths
+    ]
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        for h5_path, file_samples, error in executor.map(
+            _load_campaign_samples_worker,
+            worker_args,
+        ):
+            if error is not None:
+                warnings.warn(f"Skipping unreadable H5 file {h5_path}: {error}")
+                continue
+            samples.extend(file_samples)
+    return samples
+
+
+def _load_campaign_samples_serial(
+    h5_paths: Sequence[Path],
+    *,
+    loss_key: str,
+    fallback_loss_keys: Sequence[str],
+    include_simplifications: bool,
+) -> list[CampaignSample]:
     samples: list[CampaignSample] = []
     for h5_path in h5_paths:
         try:
@@ -354,6 +391,22 @@ def load_campaign_samples(
     return samples
 
 
+def _load_campaign_samples_worker(
+    args: tuple[Path, str, tuple[str, ...], bool],
+) -> tuple[Path, list[CampaignSample], str | None]:
+    h5_path, loss_key, fallback_loss_keys, include_simplifications = args
+    try:
+        samples = read_campaign_samples_h5(
+            h5_path,
+            loss_key=loss_key,
+            fallback_loss_keys=fallback_loss_keys,
+            include_simplifications=include_simplifications,
+        )
+    except OSError as exc:
+        return h5_path, [], str(exc)
+    return h5_path, samples, None
+
+
 def make_campaign_dataset(
     paths: str | Path | Iterable[str | Path],
     *,
@@ -366,6 +419,7 @@ def make_campaign_dataset(
         "loss_optimized",
     ),
     include_simplifications: bool = False,
+    num_workers: int = 0,
 ) -> EncodedCampaignDataset:
     """Load and encode campaign data for surrogate training."""
     samples = load_campaign_samples(
@@ -373,6 +427,7 @@ def make_campaign_dataset(
         loss_key=loss_key,
         fallback_loss_keys=fallback_loss_keys,
         include_simplifications=include_simplifications,
+        num_workers=num_workers,
     )
     encoder = CampaignEncoder(
         topology_strategy=topology_strategy,

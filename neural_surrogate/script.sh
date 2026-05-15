@@ -5,7 +5,7 @@
 #SBATCH --partition 2080-galvani
 #SBATCH --gpus=8
 #SBATCH --mem-per-gpu=30G
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=30
 #SBATCH --time=1-00:00:00
 
 set -euo pipefail
@@ -39,6 +39,7 @@ DEVICE="${DEVICE:-cuda}"
 MULTI_GPU="${MULTI_GPU:-data-parallel}"
 TOPOLOGY_STRATEGY="${TOPOLOGY_STRATEGY:-hashing}"
 PARAMETER_STRATEGY="${PARAMETER_STRATEGY:-bounds}"
+DATASET_WORKERS="${DATASET_WORKERS:-${SLURM_CPUS_PER_TASK:-30}}"
 INVERSE_CHECKPOINT_PATH="${INVERSE_CHECKPOINT_PATH:-$CHECKPOINT_PATH/${TOPOLOGY_STRATEGY}_${PARAMETER_STRATEGY}_checkpoint.pt}"
 INVERSE_OUTPUT_PATH="${INVERSE_OUTPUT_PATH:-neural_surrogate/inverse_design_result.json}"
 INVERSE_STEPS="${INVERSE_STEPS:-1000}"
@@ -61,6 +62,7 @@ echo "Multi-GPU mode: $MULTI_GPU"
 echo "Visible CUDA devices: ${CUDA_VISIBLE_DEVICES:-unset}"
 echo "Topology strategy: $TOPOLOGY_STRATEGY"
 echo "Parameter strategy: $PARAMETER_STRATEGY"
+echo "Dataset workers: $DATASET_WORKERS"
 echo "Checkpoint path: $CHECKPOINT_PATH"
 
 start=$(date +%s)
@@ -79,7 +81,8 @@ if [[ "$RUN_MODE" == "train" ]]; then
     --multi-gpu "$MULTI_GPU" \
     --checkpoint-path "$CHECKPOINT_PATH" \
     --topology-strategy "$TOPOLOGY_STRATEGY" \
-    --parameter-strategy "$PARAMETER_STRATEGY"
+    --parameter-strategy "$PARAMETER_STRATEGY" \
+    --dataset-workers "$DATASET_WORKERS"
 elif [[ "$RUN_MODE" == "inverse" ]]; then
   inverse_args=(
     --data "$DATA_DIR"
@@ -92,6 +95,7 @@ elif [[ "$RUN_MODE" == "inverse" ]]; then
     --parameter-strategy "$PARAMETER_STRATEGY"
     --device "$DEVICE"
     --output-path "$INVERSE_OUTPUT_PATH"
+    --dataset-workers "$DATASET_WORKERS"
   )
   if [[ -n "$TARGET_LOSS" ]]; then
     inverse_args+=(--target-loss "$TARGET_LOSS")

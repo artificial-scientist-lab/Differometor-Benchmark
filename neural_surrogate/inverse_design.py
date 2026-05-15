@@ -59,6 +59,7 @@ def run_inverse_design(
     lr: float = 1e-2,
     device: str = "auto",
     output_path: str | Path | None = None,
+    dataset_workers: int = 0,
 ) -> InverseDesignResult:
     train_device = resolve_device(device)
     h5_files = find_h5_files(data_path)
@@ -68,6 +69,7 @@ def run_inverse_design(
         parameter_strategy=parameter_strategy,
         topology_dim=topology_dim,
         loss_key=loss_key,
+        num_workers=dataset_workers,
     )
     if len(dataset) == 0:
         raise RuntimeError("No samples found to fit encoders for inverse design.")
@@ -260,6 +262,12 @@ def main() -> None:
     )
     parser.add_argument("--device", default="auto", choices=("auto", "cpu", "cuda"))
     parser.add_argument(
+        "--dataset-workers",
+        type=int,
+        default=0,
+        help="Parallel H5 loading workers. Use -1 to auto-use available CPUs.",
+    )
+    parser.add_argument(
         "--output-path",
         type=Path,
         default=Path("neural_surrogate/inverse_design_result.json"),
@@ -279,6 +287,7 @@ def main() -> None:
         lr=args.lr,
         device=args.device,
         output_path=args.output_path,
+        dataset_workers=args.dataset_workers,
     )
     print(f"source: {result.source}")
     print(f"predicted_loss: {result.predicted_loss:.9g}")

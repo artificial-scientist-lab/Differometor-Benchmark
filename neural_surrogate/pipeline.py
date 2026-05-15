@@ -60,6 +60,7 @@ def run_pipeline(
     checkpoint_path: str | Path | None = None,
     topology_strategy: str = "hashing",
     parameter_strategy: str = "bounds",
+    dataset_workers: int = 0,
 ) -> dict[str, float]:
     torch.manual_seed(seed)
     train_device = resolve_device(device)
@@ -73,11 +74,16 @@ def run_pipeline(
         parameter_strategy=parameter_strategy,
         topology_dim=topology_dim,
         loss_key=loss_key,
+        num_workers=dataset_workers,
     )
     if len(dataset) == 0:
         raise RuntimeError("No trainable samples found in the H5 campaign data.")
     
-    pipeline_logger.info(f"Created dataset containing {len(dataset)} samples with input dimension {dataset.encoder.input_dim}.")
+    pipeline_logger.info(
+        "Created dataset containing %s samples with input dimension %s.",
+        len(dataset),
+        dataset.encoder.input_dim,
+    )
 
     train_dataset, eval_dataset = split_dataset(
         dataset,
@@ -240,6 +246,12 @@ def main() -> None:
         choices=("identity", "standard", "bounds"),
         help="Strategy for encoding parameter information.",
     )
+    parser.add_argument(
+        "--dataset-workers",
+        type=int,
+        default=0,
+        help="Parallel H5 loading workers. Use -1 to auto-use available CPUs.",
+    )
     args = parser.parse_args()
 
     if isinstance(args.data, str):
@@ -261,6 +273,7 @@ def main() -> None:
         checkpoint_path=args.checkpoint_path,
         topology_strategy=args.topology_strategy,
         parameter_strategy=args.parameter_strategy,
+        dataset_workers=args.dataset_workers,
     )
     for key, value in metrics.items():
         if isinstance(value, (int, float)):
