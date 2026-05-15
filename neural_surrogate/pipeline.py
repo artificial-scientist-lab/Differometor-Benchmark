@@ -106,8 +106,8 @@ def run_pipeline(
         model=model,
         train_loader=train_loader,
         val_loader=eval_loader,
-        topology_strategy="hashing",
-        parameter_strategy="bounds",
+        topology_strategy=topology_strategy,
+        parameter_strategy=parameter_strategy,
         config=TrainConfig(
             epochs=epochs,
             lr=lr,
@@ -263,7 +263,10 @@ def main() -> None:
         parameter_strategy=args.parameter_strategy,
     )
     for key, value in metrics.items():
-        print(f"{key}: {value:.9g}")
+        if isinstance(value, (int, float)):
+            print(f"{key}: {value:.9g}")
+        else:
+            print(f"{key}: {value}")
 
 
 if __name__ == "__main__":

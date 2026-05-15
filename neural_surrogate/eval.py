@@ -37,7 +37,7 @@ def evaluate(
 ) -> dict[str, float]:
     """Evaluate a model and return average loss."""
     device = device or next(model.parameters()).device
-    loss_fn = loss_fn
+    loss_fn = loss_fn or nn.MSELoss()
     was_training = model.training
     model.eval()
 
@@ -57,7 +57,7 @@ def evaluate(
         model.train()
 
     if total_examples == 0:
-        return {"loss": 0.0, "mse": 0.0}
+        return {"loss": 0.0}
     return {
         "loss": total_loss / total_examples,
     }

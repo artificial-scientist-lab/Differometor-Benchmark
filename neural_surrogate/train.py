@@ -5,8 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import torch
 import logging
+import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
@@ -17,6 +17,7 @@ except ImportError:  # Allows running this file directly during quick experiment
 
 train_logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
 
 @dataclass
 class TrainConfig:
@@ -133,7 +134,8 @@ def save_checkpoint(model: nn.Module, path: str | Path, kwargs: dict) -> None:
         f"{kwargs.get('topology_strategy', 'hashing')}_{kwargs.get('parameter_strategy', 'bounds')}_checkpoint.pt"
     )
     path.parent.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), path)
+    model_to_save = model.module if isinstance(model, nn.DataParallel) else model
+    torch.save(model_to_save.state_dict(), path)
     train_logger.info(f"Checkpoint saved to {path}")
 
 
@@ -144,6 +146,11 @@ def load_checkpoint(
 ) -> nn.Module:
     device = device or next(model.parameters()).device
     state_dict = torch.load(path, map_location=device)
+    if isinstance(state_dict, dict) and "model_state_dict" in state_dict:
+        state_dict = state_dict["model_state_dict"]
+    state_dict = {
+        key.removeprefix("module."): value for key, value in state_dict.items()
+    }
     model.load_state_dict(state_dict)
     return model
 
