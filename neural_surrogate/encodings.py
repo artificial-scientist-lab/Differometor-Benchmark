@@ -127,7 +127,15 @@ class VocabularyTopologyEncoder:
 class ExactTopologyEncoder:
     """One-hot encode complete topology identities observed during fitting."""
 
-    def __init__(self, *, unknown_bucket: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        max_topologies: int | None = None,
+        unknown_bucket: bool = True,
+    ) -> None:
+        if max_topologies is not None and max_topologies <= 0:
+            raise ValueError("max_topologies must be positive when provided.")
+        self.max_topologies = max_topologies
         self.unknown_bucket = unknown_bucket
         self.topology_to_index: dict[str, int] = {}
 
@@ -140,6 +148,11 @@ class ExactTopologyEncoder:
         for setup_graph in setup_graphs:
             key = canonical_json(setup_graph)
             if key not in self.topology_to_index:
+                if (
+                    self.max_topologies is not None
+                    and len(self.topology_to_index) >= self.max_topologies
+                ):
+                    continue
                 self.topology_to_index[key] = len(self.topology_to_index)
         return self
 
@@ -324,7 +337,7 @@ def make_topology_encoder(
     if strategy == "vocabulary":
         return VocabularyTopologyEncoder(max_tokens=dim)
     if strategy == "exact":
-        return ExactTopologyEncoder()
+        return ExactTopologyEncoder(max_topologies=dim)
     raise ValueError(f"Unknown topology encoding strategy: {strategy}")
 
 

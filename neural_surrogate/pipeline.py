@@ -65,6 +65,11 @@ def run_pipeline(
     topology_strategy: str = "hashing",
     parameter_strategy: str = "bounds",
     dataset_workers: int = 0,
+    d_model: int = 64,
+    nhead: int = 4,
+    num_layers: int = 2,
+    dim_feedforward: int = 128,
+    max_input_dim: int | None = None,
 ) -> dict[str, float]:
     torch.manual_seed(seed)
     ddp = multi_gpu == "ddp"
@@ -86,6 +91,12 @@ def run_pipeline(
     )
     if len(dataset) == 0:
         raise RuntimeError("No trainable samples found in the H5 campaign data.")
+    if max_input_dim is not None and dataset.encoder.input_dim > max_input_dim:
+        raise RuntimeError(
+            f"Encoded input_dim={dataset.encoder.input_dim} exceeds "
+            f"--max-input-dim={max_input_dim}. Reduce --topology-dim, use "
+            "hashing/vocabulary, or increase the limit if you have enough memory."
+        )
     
     if is_main:
         pipeline_logger.info(
@@ -122,10 +133,10 @@ def run_pipeline(
         TransformerEncoderConfig(
             input_dim=dataset.encoder.input_dim,
             output_dim=1,
-            d_model=64,
-            nhead=4,
-            num_layers=2,
-            dim_feedforward=128,
+            d_model=d_model,
+            nhead=nhead,
+            num_layers=num_layers,
+            dim_feedforward=dim_feedforward,
             dropout=0.0,
             norm_first=False,
         )
@@ -276,6 +287,16 @@ def main() -> None:
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--topology-dim", type=int, default=128)
+    parser.add_argument("--d-model", type=int, default=64)
+    parser.add_argument("--nhead", type=int, default=4)
+    parser.add_argument("--num-layers", type=int, default=2)
+    parser.add_argument("--dim-feedforward", type=int, default=128)
+    parser.add_argument(
+        "--max-input-dim",
+        type=int,
+        default=None,
+        help="Abort early if encoded input dimension is too large for memory.",
+    )
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--val-fraction",
@@ -341,6 +362,11 @@ def main() -> None:
         topology_strategy=args.topology_strategy,
         parameter_strategy=args.parameter_strategy,
         dataset_workers=args.dataset_workers,
+        d_model=args.d_model,
+        nhead=args.nhead,
+        num_layers=args.num_layers,
+        dim_feedforward=args.dim_feedforward,
+        max_input_dim=args.max_input_dim,
     )
     for key, value in metrics.items():
         if isinstance(value, (int, float)):
