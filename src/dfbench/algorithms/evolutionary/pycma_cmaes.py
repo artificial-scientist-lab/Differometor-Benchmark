@@ -327,7 +327,7 @@ class PyCMAActiveCMAES(OptimizationAlgorithm):
         opts = _build_opts(n, pop_size, active=True)
 
         warmup_bs = min(self._batch_size, pop_size)
-    obj.warmup_vmap_value(batch_size=warmup_bs)
+        obj.warmup_vmap_value(batch_size=warmup_bs)
         obj.start_logging()
 
         es = cma.CMAEvolutionStrategy(x0_unit.tolist(), sigma, opts)
@@ -536,7 +536,7 @@ class PyCMABIPOP(OptimizationAlgorithm):
         sigma_base = sigma0 if sigma0 is not None else 0.3
 
         warmup_bs = min(self._batch_size, base_pop)
-    obj.warmup_vmap_value(batch_size=warmup_bs)
+        obj.warmup_vmap_value(batch_size=warmup_bs)
         obj.start_logging()
 
         large_pop = base_pop  # grows each large-regime restart
