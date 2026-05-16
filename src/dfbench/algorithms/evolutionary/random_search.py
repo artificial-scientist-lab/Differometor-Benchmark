@@ -1,8 +1,4 @@
-import jax
 import jax.numpy as jnp
-import numpy as np
-from jax import random
-from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 from dfbench.core.objective import Objective
@@ -60,12 +56,8 @@ class RandomSearch(OptimizationAlgorithm):
             random_seed (int | None): Random seed for reproducibility. Defaults to None.
         """
         obj = objective
-        problem = obj.problem
 
-        random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
-
-        # Get bounds
-        lower, upper = problem.bounds[0], problem.bounds[1]
+        self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         # Warmup JIT
         obj.warmup_vmap_value(batch_size=self.batch_size)
@@ -77,16 +69,8 @@ class RandomSearch(OptimizationAlgorithm):
             if max_iterations is not None and iteration >= max_iterations:
                 break
 
-            # Generate random samples
-            key, subkey = random.split(key)
-            random_params = random.uniform(
-                subkey,
-                shape=(self.batch_size, problem.n_params),
-                minval=lower,
-                maxval=upper,
-            )
+            random_params = jnp.atleast_2d(obj.random_params(n_samples=self.batch_size))
 
             # Evaluate batch
-            losses = obj.vmap_value(random_params)
-
+            obj.vmap_value(random_params)
             iteration += 1
