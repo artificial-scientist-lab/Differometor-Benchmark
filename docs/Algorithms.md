@@ -988,7 +988,7 @@ optimizer.optimize(
 - Latent dimension = `n_params / 10` (compressed 10×).
 - VAE training samples are drawn with `obj.random_params()` in the active unbounded Objective space, ranked by evaluated loss, and filtered to the best `top_k` fraction.
 - Cyclic $\beta$-annealing for stable training.
-- After training, BO uses batched `qLogEI` acquisition in the learned latent space.
+- After training, BO seeds its GP with the encoded top training samples plus decoded Sobol latent samples, then uses batched `qLogEI` acquisition in the learned latent space.
 
 **Rationale — why compress to latent space?** High-dimensional BO suffers from the curse of dimensionality. The VAE learns which parameter combinations matter, projecting the search into a much lower-dimensional space where the GP surrogate is more effective.
 
