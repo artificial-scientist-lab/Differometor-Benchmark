@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 from dfbench.core.objective import Objective
@@ -23,7 +24,6 @@ class RandomSearch(OptimizationAlgorithm):
         >>> optimizer = RandomSearch(batch_size=1)
         >>> result = optimizer.optimize(
         ...     objective=obj,
-        ...     max_iterations=100,
         ... )
     """
 
@@ -45,14 +45,15 @@ class RandomSearch(OptimizationAlgorithm):
     def optimize(
         self,
         objective: Objective,
-        max_iterations: int | None = None,
+        init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
     ) -> None:
         """Run Random Search optimization.
 
         Args:
             objective: The Objective instance wrapping the problem.
-            max_iterations: Maximum number of batches to evaluate. If None, runs until budget exceeded.
+            init_params: Initial parameters, accepted for the standard algorithm
+                contract but ignored by random search.
             random_seed (int | None): Random seed for reproducibility. Defaults to None.
         """
         obj = objective
@@ -64,13 +65,8 @@ class RandomSearch(OptimizationAlgorithm):
 
         obj.start_logging()
 
-        iteration = 0
         while not obj.budget_exceeded:
-            if max_iterations is not None and iteration >= max_iterations:
-                break
-
             random_params = jnp.atleast_2d(obj.random_params(n_samples=self.batch_size))
 
             # Evaluate batch
             obj.vmap_value(random_params)
-            iteration += 1
