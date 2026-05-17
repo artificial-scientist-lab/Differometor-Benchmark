@@ -14,6 +14,9 @@ from dfbench.algorithms import (
     RandomSearch, EvoxPSO, EvoxES,           # evolutionary
     NevergradOnePlusOne, NevergradTBPSA,     # nevergrad baselines
     NevergradNGOpt,                          # nevergrad meta-optimizer
+    PyCMACMAES, PyCMAActiveCMAES, PyCMAIPOP, PyCMABIPOP,
+    CMAESCMA, CMAESSepCMA, EvosaxMAES, EvosaxLMMAES,
+    JAXOnePlusOneES, JAXMuLambdaES,          # CMA / ES family
     OmadsMADS, OmadsOrthoMADS,               # derivative-free direct search
     PDFOUOBYQA, PDFONEWUOA, PDFOLINCOA, PyBOBYQA,  # Powell DFO
     NelderMead, Powell,                      # SciPy classics
@@ -38,19 +41,29 @@ from dfbench.algorithms import (
 
 ---
 
-## Algorithm Types
+## Package Categories and Algorithm Types
 
-Every algorithm declares an `algorithm_type` from the `AlgorithmType` enum:
+The source tree groups algorithms by implementation family under `src/dfbench/algorithms/`:
 
-| Type | `unbounded` | Evaluation methods used | Examples |
-|------|-------------|------------------------|----------|
-| `GRADIENT_BASED` | `True` | `value_and_grad()` | Adam, SA-GD, NA-Adam, L-BFGS, 34 Optax optimizers |
-| `EVOLUTIONARY` | `False` | `vmap_value()` | Random Search, PSO, CMA-ES |
-| `EVOLUTIONARY` (direct search) | `False` | `value()` | MADS, OrthoMADS |
-| `SURROGATE_BASED` | `False` | `value()`, `vmap_value()` | Bayesian Optimization, TuRBO, ReSTIR |
+| Package directory | Contents |
+|-------------------|----------|
+| `gradient_based/` | Adam-style loops, Optax wrappers, SciPy `minimize` wrappers, and native-JAX gradient methods |
+| `evolutionary/` | Random search, EvoX PSO/ES, Nevergrad wrappers, CMA-ES variants, evosax ES, and native-JAX ES |
+| `derivative_free/` | OMADS direct search, PDFO / Py-BOBYQA Powell solvers, and SciPy Nelder-Mead / Powell |
+| `global_search/` | SciPy global optimizers: basin hopping and dual annealing |
+| `surrogate_based/` | BoTorch, Ax, HEBO, SMAC, ReSTIR, and TuRBO/L-BFGS hybrids |
+| `generative/` | VAE-based sampling and latent-space BO |
+
+Each class also declares an `AlgorithmType` enum value used by the benchmark harness as a space-mode hint. The enum is intentionally coarser than the package layout: derivative-free and global-search algorithms currently use `AlgorithmType.EVOLUTIONARY` because they run in bounded physical space by default.
+
+| `AlgorithmType` | Default space | Common evaluation methods | Examples |
+|-----------------|---------------|---------------------------|----------|
+| `GRADIENT_BASED` | unbounded | `value_and_grad()`, Hessian callbacks where needed | Adam, SA-GD, L-BFGS, Optax, SciPy gradient/trust methods |
+| `EVOLUTIONARY` | bounded | `value()`, `vmap_value()` | Random Search, PSO, CMA-ES, OMADS, PDFO, BasinHopping |
+| `SURROGATE_BASED` | bounded | `value()`, `vmap_value()`, sometimes gradients | Bayesian Optimization, TuRBO, ReSTIR, GEBO |
 | `GENERATIVE` | varies | `value()`, `vmap_value()` | VAE Sampling |
 
-The `Benchmark` harness uses `algorithm_type` to set `unbounded` automatically. When running algorithms standalone, you set it yourself.
+When running algorithms through `Benchmark`, this type is used to choose the default bounded/unbounded objective mode. When running algorithms standalone, the algorithm's own `prepare()` call sets the mode.
 
 ---
 
@@ -265,7 +278,7 @@ optimizer.optimize(
 
 ### EvoxES (Evolution Strategies — EvoX backend)
 
-Uses EvoX's evolution strategy implementations. Similar structure to EvoxPSO but with different algorithmic families.  Note: the EvoX backend is distinct from the pycma / cmaes / evosax backends added in the CMA-family batch.
+Uses EvoX's evolution strategy implementations. Similar structure to EvoxPSO but with different algorithmic families. Note: the EvoX backend is distinct from the pycma / cmaes / evosax CMA-family wrappers in the same `evolutionary/` package.
 
 ```python
 optimizer = EvoxES(batch_size=5, variant="CMAES")
@@ -293,49 +306,6 @@ optimizer.optimize(
 | `NoiseReuseES` | Noise Reuse Evolution Strategy |
 | `GuidedES` | Guided Evolution Strategy |
 | `ESMC` | Evolution Strategy with Monte Carlo |
-
----
-
-## Direct Search Algorithms
-
-Derivative-free mesh-based algorithms that operate in **bounded physical space** and refine a mesh/poll structure around the incumbent point. These are local explorers for rugged landscapes — not global optimizers. Uses the [OMADS](https://github.com/Ahmed-Bayoumy/OMADS) library.
-
-### OmadsMADS (Mesh Adaptive Direct Search)
-
-Full MADS algorithm with search step (broad sampling) and poll step (structured directions). Each iteration first samples the mesh, then polls orthogonal directions. The mesh refines on failure and coarsens on success.
-
-```python
-optimizer = OmadsMADS(psize_init=1.0, tol=1e-9, ns=4)
-optimizer.optimize(
-    objective=obj,
-    random_seed=42,
-)
-```
-
-| Hyperparameter | Default | Description |
-|----------------|---------|-------------|
-| `psize_init` | `1.0` | Initial poll-step (frame) size. |
-| `tol` | `1e-9` | Convergence tolerance on mesh/frame size. |
-| `ns` | `4` | Number of search samples per search step. |
-
----
-
-### OmadsOrthoMADS (Orthogonal MADS, poll only)
-
-Runs only the OrthoMADS poll step with orthogonal Householder directions. Leaner per-iteration cost than full MADS, tighter local convergence.
-
-```python
-optimizer = OmadsOrthoMADS(psize_init=1.0, tol=1e-9)
-optimizer.optimize(
-    objective=obj,
-    random_seed=42,
-)
-```
-
-| Hyperparameter | Default | Description |
-|----------------|---------|-------------|
-| `psize_init` | `1.0` | Initial poll-step (frame) size. |
-| `tol` | `1e-9` | Convergence tolerance on mesh/frame size. |
 
 ---
 
@@ -409,7 +379,194 @@ optimizer.optimize(
 
 ---
 
-## Powell-Style Trust-Region DFO (PDFO / Py-BOBYQA)
+### CMA-Family Algorithms (pycma / cmaes / evosax / native JAX)
+
+Ten CMA-family and evolution-strategy algorithms live in `src/dfbench/algorithms/evolutionary/` alongside the EvoX backend. Each class names its backend explicitly in `algorithm_str` so benchmark runs can be distinguished.
+
+**Required packages** (install with `uv add cma cmaes evosax`):
+- `pycma` >= 3.3 — for `PyCMA*` classes
+- `cmaes` >= 0.10 — for `CMAESCMA` and `CMAESSepCMA`
+- `evosax` >= 0.1.6 — for `Evosax*` classes
+- `jax` (already a dependency) — for `JAX*` classes
+
+```python
+from dfbench.algorithms import (
+    PyCMACMAES, PyCMAActiveCMAES, PyCMAIPOP, PyCMABIPOP,  # pycma
+    CMAESCMA, CMAESSepCMA,                                # cmaes
+    EvosaxMAES, EvosaxLMMAES,                             # evosax
+    JAXOnePlusOneES, JAXMuLambdaES,                       # native JAX
+)
+```
+
+#### PyCMACMAES (pycma — vanilla CMA-ES)
+
+```python
+optimizer = PyCMACMAES(batch_size=50)
+optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_iterations=500, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | `4+floor(3·ln n)` | Population size lambda (optimize). |
+| `sigma0` | `0.3·mean(ub−lb)` | Initial step size (optimize). |
+| `max_iterations` | `None` | Generation cap (optimize). |
+
+#### PyCMAActiveCMAES (pycma — aCMA-ES)
+
+Identical to `PyCMACMAES` with `CMA_active=True`. Uses negative weight updates for unsuccessful directions.
+
+```python
+optimizer = PyCMAActiveCMAES(batch_size=50)
+optimizer.optimize(obj, pop_size=50, random_seed=0)
+```
+
+#### PyCMAIPOP (pycma — IPOP-CMA-ES)
+
+Restarts CMA-ES up to `max_restarts` times, doubling the population size each time.
+
+```python
+optimizer = PyCMAIPOP(batch_size=20)
+optimizer.optimize(obj, pop_size=20, max_restarts=5, random_seed=0, max_iterations_per_restart=200)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | `4+floor(3·ln n)` | Base population size (doubles each restart) (optimize). |
+| `max_restarts` | `9` | Maximum restarts (optimize). |
+| `max_iterations_per_restart` | `None` | Per-restart generation cap (optimize). |
+
+#### PyCMABIPOP (pycma — BIPOP-CMA-ES)
+
+Alternates between large-population and small-population restarts following Hansen 2009.
+
+```python
+optimizer = PyCMABIPOP(batch_size=20)
+optimizer.optimize(obj, pop_size=20, max_restarts=10, random_seed=0)
+```
+
+#### CMAESCMA (cmaes package — full-covariance CMA-ES)
+
+Standard CMA-ES using the `cmaes.CMA` backend. The search is performed in the unit cube and mapped to physical bounds for objective evaluation.
+
+```python
+optimizer = CMAESCMA(batch_size=50)
+optimizer.optimize(obj, pop_size=50, sigma0=0.3, max_iterations=500, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | library default | Population size (optimize). |
+| `sigma0` | `0.3` | Initial step size as a fraction of the unit cube (optimize). |
+| `max_no_improvement` | `None` | Stop on stagnation after N generations (optimize). |
+
+#### CMAESSepCMA (cmaes package — sep-CMA-ES)
+
+Diagonal covariance matrix; O(n²) instead of O(n³) per update.
+
+```python
+optimizer = CMAESSepCMA(batch_size=50)
+optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_no_improvement=100, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | library default | Population size (optimize). |
+| `max_no_improvement` | `None` | Stop on stagnation after N generations (optimize). |
+
+#### EvosaxMAES (evosax — MA-ES)
+
+Matrix Adaptation ES via the evosax JAX library.
+
+```python
+optimizer = EvosaxMAES(batch_size=64)
+optimizer.optimize(obj, pop_size=64, sigma0=0.3, max_iterations=1000, random_seed=0)
+```
+
+#### EvosaxLMMAES (evosax — LM-MA-ES)
+
+Limited-memory MA-ES; O(n·m) storage where m is `memory_size`.
+
+```python
+optimizer = EvosaxLMMAES(batch_size=64)
+optimizer.optimize(obj, pop_size=64, memory_size=10, random_seed=0)
+```
+
+#### JAXOnePlusOneES (native JAX — (1+1)-ES)
+
+Single-parent ES with the 1/5 success rule. No optional dependencies.
+
+```python
+optimizer = JAXOnePlusOneES()
+optimizer.optimize(obj, sigma0=0.3, sigma_min=1e-10, success_window=20, max_iterations=5000, random_seed=0)
+```
+
+#### JAXMuLambdaES (native JAX — (μ,λ)-ES)
+
+Comma-selection ES with isotropic Gaussian mutations and cumulative step-size adaptation. No optional dependencies.
+
+```python
+optimizer = JAXMuLambdaES(batch_size=50)
+optimizer.optimize(obj, mu=10, lam=50, sigma0=0.3, sigma_min=1e-10, max_iterations=500, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `mu` | `10` | Number of survivors (must be < `lam`) (optimize). |
+| `lam` | `50` | Number of offspring per generation (optimize). |
+
+---
+
+## Derivative-Free Algorithms
+
+These algorithms live in `src/dfbench/algorithms/derivative_free/`. They evaluate bounded physical-space candidate points without using gradients.
+
+### OMADS Direct Search
+
+Mesh-based algorithms that refine a mesh/poll structure around the incumbent point. These are local explorers for rugged landscapes, not global optimizers. Uses the [OMADS](https://github.com/Ahmed-Bayoumy/OMADS) library.
+
+#### OmadsMADS (Mesh Adaptive Direct Search)
+
+Full MADS algorithm with search step (broad sampling) and poll step (structured directions). Each iteration first samples the mesh, then polls orthogonal directions. The mesh refines on failure and coarsens on success.
+
+```python
+optimizer = OmadsMADS(psize_init=1.0, tol=1e-9, ns=4)
+optimizer.optimize(
+    objective=obj,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `psize_init` | `1.0` | Initial poll-step (frame) size. |
+| `tol` | `1e-9` | Convergence tolerance on mesh/frame size. |
+| `ns` | `4` | Number of search samples per search step. |
+
+#### OmadsOrthoMADS (Orthogonal MADS, poll only)
+
+Runs only the OrthoMADS poll step with orthogonal Householder directions. Leaner per-iteration cost than full MADS, tighter local convergence.
+
+```python
+optimizer = OmadsOrthoMADS(psize_init=1.0, tol=1e-9)
+optimizer.optimize(
+    objective=obj,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `psize_init` | `1.0` | Initial poll-step (frame) size. |
+| `tol` | `1e-9` | Convergence tolerance on mesh/frame size. |
+
+---
+
+### Powell-Style Trust-Region DFO (PDFO / Py-BOBYQA)
 
 Model-based derivative-free trust-region solvers by M. J. D. Powell.  All run in **bounded physical space** with multistart restarts.  Each call solves a quadratic model in a shrinking trust region; convergence is local but very precise on smooth landscapes.
 
@@ -444,7 +601,7 @@ optimizer.optimize(objective=obj, random_seed=42)
 
 ---
 
-## SciPy Classics — Nelder-Mead & Powell
+### SciPy Classics — Nelder-Mead & Powell
 
 Two non-gradient SciPy classics, exposed as `dfbench` algorithms via the shared SciPy DFO wrapper.  Both run in **bounded physical space**.
 
@@ -483,132 +640,6 @@ from dfbench.algorithms import BasinHopping, DualAnnealing
 | `step_size`     | `0.5`   | (BasinHopping) random hop magnitude in normalised space. |
 | `temperature`   | `5230.0`| (DualAnnealing) initial temperature. |
 | `local_method`  | `"L-BFGS-B"` | Inner local minimizer. |
-
----
-
-## CMA-Family Algorithms (pycma / cmaes / evosax / native JAX)
-
-Nine additional CMA-family algorithms added alongside the EvoX backend.  Each class names its backend explicitly in `algorithm_str` so benchmark runs can be distinguished.
-
-**Required packages** (install with `uv add cma cmaes evosax`):
-- `pycma` ≥ 3.3 — for `PyCMA*` classes
-- `cmaes` ≥ 0.10 — for `CMAESSepCMA`
-- `evosax` ≥ 0.1.6 — for `Evosax*` classes
-- `jax` (already a dependency) — for `JAX*` classes
-
-```python
-from dfbench.algorithms import (
-    PyCMACMAES, PyCMAActiveCMAES, PyCMAIPOP, PyCMABIPOP,  # pycma
-    CMAESSepCMA,                                            # cmaes
-    EvosaxMAES, EvosaxLMMAES,                               # evosax
-    JAXOnePlusOneES, JAXMuLambdaES,                         # native JAX
-)
-```
-
-### PyCMACMAES (pycma — vanilla CMA-ES)
-
-```python
-optimizer = PyCMACMAES(batch_size=50)
-optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_iterations=500, random_seed=0)
-```
-
-| parameter | default | description |
-|-----------|---------|-------------|
-| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
-| `pop_size` | `4+floor(3·ln n)` | Population size λ (optimize). |
-| `sigma0` | `0.3·mean(ub−lb)` | Initial step size (optimize). |
-| `max_iterations` | `None` | Generation cap (optimize). |
-
-### PyCMAActiveCMAES (pycma — aCMA-ES)
-
-Identical to `PyCMACMAES` with `CMA_active=True`.  Uses negative weight updates for unsuccessful directions.
-
-```python
-optimizer = PyCMAActiveCMAES(batch_size=50)
-optimizer.optimize(obj, pop_size=50, random_seed=0)
-```
-
-### PyCMAIPOP (pycma — IPOP-CMA-ES)
-
-Restarts CMA-ES up to `max_restarts` times, doubling λ each time.
-
-```python
-optimizer = PyCMAIPOP(batch_size=20)
-optimizer.optimize(obj, pop_size=20, max_restarts=5, random_seed=0, max_iterations_per_restart=200)
-```
-
-| parameter | default | description |
-|-----------|---------|-------------|
-| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
-| `pop_size` | `4+floor(3·ln n)` | Base λ (doubles each restart) (optimize). |
-| `max_restarts` | `9` | Maximum restarts (optimize). |
-| `max_iterations_per_restart` | `None` | Per-restart generation cap (optimize). |
-
-### PyCMABIPOP (pycma — BIPOP-CMA-ES)
-
-Alternates between large-population (doubled λ) and small-population (random λ, random σ) restarts following Hansen 2009.
-
-```python
-optimizer = PyCMABIPOP(batch_size=20)
-optimizer.optimize(obj, pop_size=20, max_restarts=10, random_seed=0)
-```
-
-### CMAESSepCMA (cmaes package — sep-CMA-ES)
-
-Diagonal covariance matrix; O(n²) instead of O(n³) per update.
-
-```python
-optimizer = CMAESSepCMA(batch_size=50)
-optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_no_improvement=100, random_seed=0)
-```
-
-| parameter | default | description |
-|-----------|---------|-------------|
-| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
-| `pop_size` | library default | Population λ (optimize). |
-| `max_no_improvement` | `None` | Stop on stagnation after N generations (optimize). |
-
-### EvosaxMAES (evosax — MA-ES)
-
-Matrix Adaptation ES via the evosax JAX library.
-
-```python
-optimizer = EvosaxMAES(batch_size=64)
-optimizer.optimize(obj, pop_size=64, sigma0=0.3, max_iterations=1000, random_seed=0)
-```
-
-### EvosaxLMMAES (evosax — LM-MA-ES)
-
-Limited-memory MA-ES; O(n·m) storage where m is `memory_size`.
-
-```python
-optimizer = EvosaxLMMAES(batch_size=64)
-optimizer.optimize(obj, pop_size=64, memory_size=10, random_seed=0)
-```
-
-### JAXOnePlusOneES (native JAX — (1+1)-ES)
-
-Single-parent ES with the 1/5 success rule.  No optional dependencies.
-
-```python
-optimizer = JAXOnePlusOneES()
-optimizer.optimize(obj, sigma0=0.3, sigma_min=1e-10, success_window=20, max_iterations=5000, random_seed=0)
-```
-
-### JAXMuLambdaES (native JAX — (μ,λ)-ES)
-
-Comma-selection ES with isotropic Gaussian mutations and cumulative step-size adaptation.  No optional dependencies.
-
-```python
-optimizer = JAXMuLambdaES(batch_size=50)
-optimizer.optimize(obj, mu=10, lam=50, sigma0=0.3, sigma_min=1e-10, max_iterations=500, random_seed=0)
-```
-
-| parameter | default | description |
-|-----------|---------|-------------|
-| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
-| `mu` | `10` | Number of survivors (must be < lam) (optimize). |
-| `lam` | `50` | Number of offspring per generation (optimize). |
 
 ---
 
@@ -994,7 +1025,7 @@ optimizer.optimize(
 
 ---
 
-## Optax Optimizer Batch (34 algorithms)
+## Optax Gradient-Based Optimizer Batch (34 algorithms)
 
 All Optax-based algorithms share a common base class `OptaxAlgorithm` and live in `src/dfbench/algorithms/gradient_based/optax/`. They operate in **unbounded** (sigmoid-transformed) space and use `obj.value_and_grad()` for gradient information.
 
@@ -1479,14 +1510,15 @@ optimizer.optimize(objective=obj, patience=500, random_seed=42)
 | `RandomSearch` | Evolutionary | No hyperparameters, unbiased baseline | Baseline comparison |
 | `EvoxPSO` | Evolutionary | Swarm intelligence, many variants | Moderate-dimensional problems |
 | `EvoxES` | Evolutionary | Covariance adaptation (CMA-ES) | General black-box optimization |
+| `PyCMACMAES` / `CMAESCMA` / `CMAESSepCMA` | Evolutionary | CMA-ES backends with full or diagonal covariance | General black-box optimization |
 | `NevergradOnePlusOne` | Evolutionary | Minimal (1+1)-ES, very lightweight | Sanity-check baseline |
 | `NevergradTBPSA` | Evolutionary | Noise-robust, adaptive population | Noisy / rugged landscapes |
 | `NevergradNGOpt` | Evolutionary | Auto algorithm selection | Library-default baseline |
 | `BotorchBO` | Surrogate | Sample-efficient, uncertainty-aware | Low evaluation budgets |
 | `BotorchTuRBO` | Surrogate | Local trust region, high-dim friendly | High-dimensional, expensive evals |
 | `ReSTIR` | Surrogate | Scalable kNN surrogate, GPU-native | Large candidate pools |
-| `OmadsMADS` | Direct Search | MADS search + poll, mesh refinement | Rugged-landscape local exploration |
-| `OmadsOrthoMADS` | Direct Search | OrthoMADS poll only, orthogonal dirs | Local refinement, predictable cost |
+| `OmadsMADS` | Derivative-Free | MADS search + poll, mesh refinement | Rugged-landscape local exploration |
+| `OmadsOrthoMADS` | Derivative-Free | OrthoMADS poll only, orthogonal dirs | Local refinement, predictable cost |
 | `PDFOUOBYQA` / `PDFONEWUOA` / `PDFOLINCOA` / `PyBOBYQA` | Derivative-Free | Powell trust-region DFO | Smooth bounded problems |
 | `NelderMead` / `Powell` | Derivative-Free | SciPy classical search | Low-dim smooth losses |
 | `BasinHopping` / `DualAnnealing` | Global Search | SciPy stochastic global | Multimodal landscapes |

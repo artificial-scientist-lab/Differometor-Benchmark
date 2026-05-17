@@ -24,11 +24,14 @@ Place your algorithm in the appropriate subdirectory:
 
 ```
 src/dfbench/algorithms/
-├── evolutionary/        ← population-based (PSO, ES, random search)
+├── derivative_free/     ← direct search and non-gradient local solvers
+├── global_search/       ← stochastic global optimizers
+├── evolutionary/        ← population-based methods (PSO, ES, random search)
 ├── gradient_based/
 │   ├── optax/           ← Optax optimizer wrappers (subclass OptaxAlgorithm)
 │   ├── scipy/           ← SciPy minimize wrappers (subclass ScipyMinimizeAlgorithm)
-│   └── misc/            ← custom optimization loops
+│   ├── custom_jax.py    ← native-JAX custom/hybrid gradient methods
+│   └── *.py             ← custom optimization loops
 ├── surrogate_based/     ← builds a surrogate model (BO, kNN, etc.)
 └── generative/          ← generative models (VAE, diffusion, etc.)
 ```

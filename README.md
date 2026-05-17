@@ -157,11 +157,11 @@ src/dfbench/
 │   ├── objective.py       # Objective wrapper (central piece)
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
-│   ├── derivative_free/   # OMADS + Powell DFO + SciPy (NelderMead, Powell)
+│   ├── derivative_free/   # OMADS, PDFO/Py-BOBYQA, NelderMead, Powell
 │   ├── global_search/     # SciPy BasinHopping, DualAnnealing
 │   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES, Nevergrad, CMA family
 │   ├── gradient_based/
-│   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
+│   │   ├── optax/         # 34 Optax-based optimizers (OptaxAdam, OptaxLAMB, ...)
 │   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
 │   │   ├── custom_jax.py  # Native-JAX custom/hybrid batch (SGLD, ASAM, GD→L-BFGS, …)
 │   │   └── *.py           # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, NAAdamGD, OptaxLBFGS)
@@ -421,6 +421,7 @@ See [Objective API Reference](docs/Objective-API-Reference.md) for the complete 
 | `PyCMAActiveCMAES` | Evolutionary | Active CMA-ES with negative weight updates (pycma) |
 | `PyCMAIPOP` | Evolutionary | IPOP-CMA-ES: increasing-population restarts (pycma) |
 | `PyCMABIPOP` | Evolutionary | BIPOP-CMA-ES: bi-population restart strategy (pycma) |
+| `CMAESCMA` | Evolutionary | Full-covariance CMA-ES (cmaes package) |
 | `CMAESSepCMA` | Evolutionary | sep-CMA-ES with diagonal covariance (cmaes package) |
 | `EvosaxMAES` | Evolutionary | Matrix Adaptation ES (evosax backend) |
 | `EvosaxLMMAES` | Evolutionary | Limited-Memory MA-ES for high dimensions (evosax) |
@@ -450,7 +451,7 @@ See [Algorithms](docs/Algorithms.md) for hyperparameter details and usage exampl
 Execution scripts in `./scripts/`:
 - `voyager_adam_gd.py`: single-algorithm run
 - `voyager_benchmark.py`: full benchmark with multiple algorithms
-- `voyager_cma_family.py`: all nine CMA-family algorithms on VoyagerProblem
+- `voyager_cma_family.py`: all ten CMA-family algorithms on VoyagerProblem
 - `voyager_scipy_benchmark.py`: SciPy gradient / trust / constrained batch
 
 Reference implementations worth reading:
