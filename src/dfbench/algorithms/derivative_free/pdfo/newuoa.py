@@ -68,7 +68,7 @@ class PDFONEWUOA(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         max_iterations: int | None = None,
@@ -80,7 +80,7 @@ class PDFONEWUOA(OptimizationAlgorithm):
                 "PDFO is required for NEWUOA.  Install with: pip install pdfo"
             ) from exc
 
-        obj = problem_objective
+        obj = objective
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         lower, upper = solver_bounds_np(obj)
@@ -94,7 +94,7 @@ class PDFONEWUOA(OptimizationAlgorithm):
             return raw_fun(xc)
 
         # JIT warmup
-        _ = obj.value(jnp.asarray(clip_to_bounds(np.zeros(obj.n_params), obj)))
+        obj.warmup_value()
 
         obj.start_logging()
 

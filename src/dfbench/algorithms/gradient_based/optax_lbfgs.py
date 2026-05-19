@@ -53,7 +53,7 @@ class OptaxLBFGS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         patience: int | None = None,
@@ -65,13 +65,13 @@ class OptaxLBFGS(OptimizationAlgorithm):
         any additional internal line-search probes used by Optax.
 
         Args:
-            problem_objective: Pre-configured Objective.
+            objective: Pre-configured Objective.
             init_params: Starting point.  ``None`` → random unbounded.
             random_seed: Seed for reproducibility.
             patience: Early-stop after this many evals without improvement.
             **lbfgs_kwargs: Forwarded to ``optax.lbfgs()``.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         self.prepare(obj, unbounded=True, random_seed=random_seed)

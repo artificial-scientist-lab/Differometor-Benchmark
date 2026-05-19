@@ -72,7 +72,7 @@ class OptimizationAlgorithm(ABC):
     @abstractmethod
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         **kwargs,
@@ -87,7 +87,7 @@ class OptimizationAlgorithm(ABC):
         the caller already holds the reference.
 
         Args:
-            problem_objective: Pre-configured Objective instance for function evaluations.
+            objective: Pre-configured Objective instance for function evaluations.
             init_params: Initial parameters. If None, initialized randomly.
             random_seed: Random seed for reproducibility. If None, uses system entropy.
             **kwargs: Algorithm-specific hyperparameters (learning_rate, patience, etc.).
@@ -98,7 +98,7 @@ class OptimizationAlgorithm(ABC):
                 ``max_evals`` on the Objective and should not be added.
         """
         # 1. Setup references
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         # 2. Setup objective and resolve/apply random seed
@@ -123,14 +123,15 @@ class OptimizationAlgorithm(ABC):
         else:
             params = init_params
 
-        # 4. JIT warmup (optional but recommended, else much time is lost during the first evaluation)
-        _ = obj.value(params)
-        _ = obj.value_and_grad(params)  # For gradientients and loss
-        _ = obj.grad(params)  # Loss won't get logged
-        # Or for batched:
-        _ = obj.vmap_value()
-        _ = obj.vmap_value_and_grad()
-        _ = obj.vmap_grad()
+        # 4. JIT warmup (optional but recommended, else much time is lost during
+        # the first evaluation). Warm up only the paths your algorithm will use.
+        obj.warmup_value()  # loss-only single-point evaluation
+        obj.warmup_value_and_grad()  # single-point loss + gradient
+        obj.warmup_grad()  # gradient-only single-point evaluation
+        # Or for batched algorithms:
+        obj.warmup_vmap_value(batch_size=10)
+        obj.warmup_vmap_value_and_grad(batch_size=10)
+        obj.warmup_vmap_grad(batch_size=10)
 
         # 5. Start logging
         obj.start_logging()

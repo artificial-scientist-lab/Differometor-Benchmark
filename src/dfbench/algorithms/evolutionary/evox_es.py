@@ -71,7 +71,7 @@ class EvoxES(OptimizationAlgorithm):
         >>> obj = Objective(problem, ...)
         >>> optimizer = EvoxES(batch_size=50, variant="CMAES")
         >>> result = optimizer.optimize(
-        ...     problem_objective=obj,
+        ...     objective=obj,
         ...     max_iterations=1000,
         ...     pop_size=100,
         ... )
@@ -120,7 +120,7 @@ class EvoxES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params_pop: Float[Array, "pop_size n_params"] | None = None,
         random_seed: int | None = None,
@@ -131,7 +131,7 @@ class EvoxES(OptimizationAlgorithm):
         """Run ES optimization.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             max_iterations: Maximum number of iterations (generations). None for unlimited.
             init_params_pop: Initial population of parameters. Not supported by most
                 ES variants (mean is typically initialized instead). Defaults to None.
@@ -140,7 +140,7 @@ class EvoxES(OptimizationAlgorithm):
             n_generations: Number of generations to run. Defaults to 10000.
             **es_kwargs: Variant-specific keyword arguments passed to the EvoX algorithm.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)

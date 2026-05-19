@@ -81,7 +81,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         # TuRBO phase
@@ -96,7 +96,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         """Run TuRBO→L-BFGS.
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
             turbo_iterations: Optional cap on BO iterations for the TuRBO phase.
@@ -109,7 +109,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
                 improvement.
             **kwargs: Additional TuRBO kwargs.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
         dim = problem.n_params
 
@@ -130,7 +130,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         turbo_engine.dtype = self.dtype
 
         # JIT warmup (bounded)
-        _ = obj.vmap_value(jnp.zeros((1, dim)))
+        obj.warmup_vmap_value(batch_size=1)
 
         obj.start_logging()
 
@@ -157,7 +157,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
 
         state = TurboState(
             dim=dim,
-            batch_size=turbo_batch_size,
+            acquisition_batch_size=turbo_batch_size,
             best_value=train_Y.max().item(),
         )
 
@@ -179,7 +179,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
                 model=model,
                 X=train_X,
                 Y=train_Y_norm,
-                batch_size=turbo_batch_size,
+                acquisition_batch_size=turbo_batch_size,
                 acqf=turbo_acqf,
             )
 

@@ -98,7 +98,7 @@ for algo, opt_kwargs in configs:
     )
 
     algo.optimize(
-        problem_objective=obj,
+        objective=obj,
         random_seed=RANDOM_SEED,
         **opt_kwargs,
     )

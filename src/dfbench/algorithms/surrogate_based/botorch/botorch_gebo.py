@@ -120,7 +120,7 @@ class GEBO(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
@@ -132,7 +132,7 @@ class GEBO(OptimizationAlgorithm):
         """Run Gradient-Enhanced BO.
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
             n_initial: Sobol initialisation budget.
@@ -143,7 +143,7 @@ class GEBO(OptimizationAlgorithm):
             grad_refine_lr: Step size for local gradient refinement.
             **bo_kwargs: Extra kwargs for acquisition optimisation.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
         D = problem.n_params
 
@@ -161,7 +161,7 @@ class GEBO(OptimizationAlgorithm):
         }
 
         # JIT warmup — use value_and_grad for this algo
-        _ = obj.value_and_grad(jnp.zeros(D))
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         # Initial Sobol

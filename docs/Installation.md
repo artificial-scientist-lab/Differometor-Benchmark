@@ -6,7 +6,32 @@
 - **Linux** (tested on Ubuntu 24.04 LTS and SUSE Linux Enterprise Server 15 SP6)
 - (Optional) NVIDIA GPU with CUDA 12+ for accelerated simulations
 
-## Recommended: Install with `uv`
+## Install from PyPI
+
+For normal use, install the published package with `pip`:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install dfbench
+```
+
+The base install keeps heavyweight optimizer backends optional. Add extras for the algorithm families you need:
+
+```bash
+pip install "dfbench[optax,scipy]"      # common local optimizers
+pip install "dfbench[evolution]"        # CMA, EvoX, Nevergrad, Evosax
+pip install "dfbench[bo]"               # BoTorch/Ax surrogate optimizers
+pip install "dfbench[dfo,smac]"         # derivative-free and SMAC optimizers
+pip install "dfbench[all]"              # all optimizer backends
+pip install "dfbench[cuda13]"           # CUDA 13 JAX support
+pip install "dfbench[cuda12]"           # CUDA 12 JAX support
+pip install "dfbench[analysis]"         # notebooks, profiling, plotting helpers
+```
+
+`HEBO` is not exposed as a project extra because the current upstream package pins `numpy<1.25`, while this project uses the JAX 0.9 stack with `numpy>=2.0`. If you need the HEBO wrapper, install and test it in a separate compatible environment.
+
+## Development Install with `uv`
 
 [uv](https://uv.dev/) is a fast Python package manager that handles virtual environments and dependency resolution automatically.
 
@@ -28,13 +53,19 @@ uv sync --group cuda12
 uv sync --group analysis
 ```
 
+### With publishing tools
+
+```bash
+uv sync --group publish
+```
+
 ### Everything (GPU + analysis)
 
 ```bash
 uv sync --group cuda12 --group analysis
 ```
 
-## Alternative: Install with `pip`
+## Development Install with `pip`
 
 ```bash
 # Create and activate a virtual environment
@@ -45,8 +76,10 @@ source .venv/bin/activate
 pip install -e .
 
 # With CUDA GPU support
-pip install -e .
-pip install --upgrade "jax[cuda12]==0.9.0.1"
+pip install -e ".[cuda12]"
+
+# With all optimizer backends and analysis tools
+pip install -e ".[all,analysis]"
 ```
 
 ## Verify Installation
@@ -69,10 +102,39 @@ The project's core dependencies (managed in `pyproject.toml`) are:
 |---------|---------|
 | `differometor` | JAX-based interferometer simulator |
 | `jax` / `jaxlib` | Auto-differentiation, JIT compilation, vmap |
+| `numpy` | Numerical arrays |
 | `jaxtyping` | Type annotations for JAX arrays |
-| `botorch` | Bayesian optimisation (BO and TuRBO algorithms) |
-| `evox` | Evolutionary optimisation (PSO, CMA-ES, etc.) |
-| `beartype` | Runtime type checking |
+| `matplotlib` | Plotting helpers for objectives and problems |
+
+Optimizer backends such as `optax`, `scipy`, `torch`, `botorch`, `evox`, `nevergrad`, `OMADS`, `pdfo`, and `smac` are installed through the extras above. The `t2j` and `j2t` helpers import `torch` only when called, so `import dfbench` does not require PyTorch.
+
+## Build and Publish Checks
+
+Before uploading a release, build the distributions and validate the metadata:
+
+```bash
+source .venv/bin/activate
+python -m pip install --upgrade build twine
+rm -rf dist/
+python -m build
+python -m twine check dist/*
+```
+
+Install the built wheel in a clean environment before uploading:
+
+```bash
+python -m venv /tmp/dfbench-wheel-test
+source /tmp/dfbench-wheel-test/bin/activate
+python -m pip install dist/*.whl
+python -c "import dfbench; from dfbench import Objective; print('dfbench import ok')"
+```
+
+Upload to TestPyPI first, then PyPI once the TestPyPI install succeeds:
+
+```bash
+python -m twine upload --repository testpypi dist/*
+python -m twine upload dist/*
+```
 
 ## HPC Notes
 

@@ -3,11 +3,17 @@
 Provides torch<->jax conversion utilities and other helpers.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import jax
 import jax.numpy as jnp
 import numpy as np
-import torch
 from jaxtyping import Float
+
+if TYPE_CHECKING:
+    import torch
 
 
 def t2j(tensor: torch.Tensor) -> jax.Array:
@@ -20,6 +26,8 @@ def j2t(arr: jax.Array) -> torch.Tensor:
 
     Creates a writable copy to avoid PyTorch warnings about non-writable arrays.
     """
+    import torch
+
     return torch.from_numpy(np.array(arr))
 
 

@@ -78,7 +78,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: np.ndarray | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -89,7 +89,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
         """Run sep-CMA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean vector.  Sampled uniformly in bounds
                 when ``None``.
             random_seed: Seed for reproducibility.
@@ -105,7 +105,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
                 improving the best loss seen by the Objective.  ``None``
                 disables stagnation stopping.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -146,7 +146,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
         actual_pop = optimizer.population_size
 
         # JIT warmup before timing starts
-        _ = obj.vmap_value(jnp.zeros((min(batch_size, actual_pop), n)))
+        obj.warmup_vmap_value(batch_size=min(batch_size, actual_pop))
         obj.start_logging()
 
         iteration = 0

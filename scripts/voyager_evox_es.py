@@ -17,7 +17,7 @@ obj = Objective(
 optimizer = EvoxES(batch_size=125, variant="SNES")
 
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=2000,
     pop_size=500,
     random_seed=42,

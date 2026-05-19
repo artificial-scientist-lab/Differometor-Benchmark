@@ -19,7 +19,7 @@ optimizer = ReSTIR(batch_size=10)
 
 # Run optimization
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     random_seed=42,
     n_total_samples=1_000_000,
     n_initial_reference_samples=10_000,

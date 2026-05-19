@@ -17,7 +17,7 @@ obj = Objective(
 optimizer = EvoxPSO(batch_size=50, variant="PSO")
 
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=2000,
     pop_size=50,
     random_seed=42,

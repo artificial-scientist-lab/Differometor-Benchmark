@@ -105,7 +105,7 @@ class BAxUS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
@@ -119,7 +119,7 @@ class BAxUS(OptimizationAlgorithm):
         (``max_evals`` / ``max_time``).
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded space). Currently unused.
             random_seed: Seed for reproducibility.
             n_initial: Sobol samples in each new subspace.
@@ -129,7 +129,7 @@ class BAxUS(OptimizationAlgorithm):
                 Defaults to ``max(dim // 2, 5)``.
             **bo_kwargs: Extra kwargs for acquisition optimisation.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
         D = problem.n_params
 
@@ -153,7 +153,7 @@ class BAxUS(OptimizationAlgorithm):
         }
 
         # JIT warmup
-        _ = obj.vmap_value(jnp.zeros((1, D)))
+        obj.warmup_vmap_value(batch_size=1)
         obj.start_logging()
 
         d_e = d_init

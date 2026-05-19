@@ -100,7 +100,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -111,7 +111,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
         """Run (1+1)-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Starting point.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
@@ -126,7 +126,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
             max_iterations: Maximum number of offspring evaluations.  ``None``
                 means unlimited (budget governs stopping).
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -150,7 +150,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
         window = success_window if success_window is not None else max(10, 10 * n)
 
         # JIT warmup — single-point evaluation
-        _ = obj.value(x)
+        obj.warmup_value()
         obj.start_logging()
 
         # Evaluate starting point
@@ -246,7 +246,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -258,7 +258,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
         """Run (μ,λ)-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
@@ -281,7 +281,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
                 f"(μ,λ)-ES requires mu < lam, got mu={mu}, lam={lam}."
             )
 
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -310,11 +310,9 @@ class JAXMuLambdaES(OptimizationAlgorithm):
         p_succ = target_succ        # initialise cumulative success rate
         prev_mean_loss = float("inf")  # track improvement for adaptation
 
-        # JIT warmup with batch_size — use midpoint (not zeros) so the
-        # warmup call lands within bounds for every parameter.
+        # JIT warmup with the same effective batch size used in-loop.
         batch_size = self._batch_size
-        midpoint = 0.5 * (lb + ub)
-        _ = obj.vmap_value(jnp.tile(midpoint[None, :], (min(batch_size, lam), 1)))
+        obj.warmup_vmap_value(batch_size=min(batch_size, lam))
         obj.start_logging()
 
         iteration = 0

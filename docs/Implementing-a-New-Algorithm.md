@@ -10,7 +10,7 @@ Every algorithm must:
 
 1. **Subclass** `OptimizationAlgorithm`
 2. **Declare** `algorithm_str` and `algorithm_type`
-3. **Implement** `optimize(problem_objective, …) → None`
+3. **Implement** `optimize(objective, …) → None`
 4. **Use `Objective`** for all function evaluations
     - *Unless* you use your own JIT-compiled loop — then manually log calls via `Objective.log_evaluation(...)` afterwards. This adds negligible overhead relative to the objective function.
 
@@ -24,11 +24,14 @@ Place your algorithm in the appropriate subdirectory:
 
 ```
 src/dfbench/algorithms/
-├── evolutionary/        ← population-based (PSO, ES, random search)
+├── derivative_free/     ← direct search and non-gradient local solvers
+├── global_search/       ← stochastic global optimizers
+├── evolutionary/        ← population-based methods (PSO, ES, random search)
 ├── gradient_based/
 │   ├── optax/           ← Optax optimizer wrappers (subclass OptaxAlgorithm)
 │   ├── scipy/           ← SciPy minimize wrappers (subclass ScipyMinimizeAlgorithm)
-│   └── misc/            ← custom optimization loops
+│   ├── custom_jax.py    ← native-JAX custom/hybrid gradient methods
+│   └── *.py             ← custom optimization loops
 ├── surrogate_based/     ← builds a surrogate model (BO, kNN, etc.)
 └── generative/          ← generative models (VAE, diffusion, etc.)
 ```
@@ -71,7 +74,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
@@ -83,7 +86,7 @@ class MyAlgorithm(OptimizationAlgorithm):
         """Run the optimization.
         
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             max_iterations: Max algorithm iterations (not evals). None = budget only.
                 For algorithms where each iteration performs exactly one evaluation
                 (e.g. gradient-based methods), omit this parameter —
@@ -94,7 +97,7 @@ class MyAlgorithm(OptimizationAlgorithm):
             patience: Stop after N iterations without improvement.
         """
         # ─── 1. Setup references ───
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         # Sets unbounded mode, algorithm_str, seeds np/JAX, returns resolved seed + JAX key
@@ -110,7 +113,7 @@ class MyAlgorithm(OptimizationAlgorithm):
         # ─── 4. JIT warmup ───
         # This compiles the JAX computation graph. Do it BEFORE start_logging()
         # so compilation time doesn't count against the time budget.
-        _ = obj.vmap_value(params)
+        obj.warmup_vmap_value(batch_size=self.batch_size)
 
         # ─── 5. Start logging (starts the clock) ───
         obj.start_logging()
@@ -171,7 +174,7 @@ The base class `OptimizationAlgorithm.optimize()` contains a commented blueprint
 ### 1. Setup references
 
 ```python
-obj = problem_objective
+obj = objective
 problem = obj.problem
 random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 ```
@@ -212,7 +215,7 @@ obj.warmup_value_and_grad()              # when using gradients
 obj.warmup_vmap_value(batch_size=100)    # for batched methods (match your batch size)
 ```
 
-Warmup can take seconds because it triggers JAX compilation. Do this **before** `start_logging()` so the compilation time is not counted against the time budget. The `warmup_*()` helpers use deterministic params internally and run the corresponding path twice.
+Warmup can take seconds because it triggers JAX compilation. Do this **before** `start_logging()` so the compilation time is not counted against the time budget. The `warmup_*()` helpers use deterministic params internally and run the corresponding path twice. Single-point helpers take no arguments; batched helpers take the batch size used by your algorithm.
 
 ### 5. Start logging
 
@@ -383,7 +386,7 @@ params = optax.apply_updates(params, updates)
 - [ ] Algorithm subclasses `OptimizationAlgorithm`
 - [ ] `algorithm_str` is set to a unique identifier
 - [ ] `algorithm_type` is set correctly
-- [ ] `optimize()` accepts `problem_objective: Objective` as first arg
+- [ ] `optimize()` accepts `objective: Objective` as first arg
 - [ ] `optimize()` returns `None` (the `Objective` is mutated in place)
 - [ ] All evaluations go through `Objective` (no direct `problem.objective_function()` calls)
 - [ ] JIT warmup happens before `obj.start_logging()`

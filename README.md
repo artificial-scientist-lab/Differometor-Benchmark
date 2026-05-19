@@ -4,17 +4,6 @@ A benchmarking framework for optimization algorithms on gravitational-wave detec
 
 > **For detailed documentation, see the [Wiki](docs/Home.md).**
 
----
-
-## Please Read
-I want to keep the process of implementing an algorithm as intuitive as possible. Questions (and ideas) help me figure out where unclarities come up.
-
-If you have *any* questions, don't hesitate to ask me via Slack (Laurin Sefa) or an Issue!
-
-
-
----
-
 ## TL;DR (I want to try my own algorithm)
 
 This is how to create a raw script that tests your algorithm logic on a problem. Adding an algorithm as a class to the codebase is really not harder than this which would result in easier hyperparam testing (through short scripts you could then create) and the ability to add it to the benchmarking tool. But start from a script like that as you can copy that logic into the class later on.
@@ -100,7 +89,20 @@ See [Problems](docs/Problems.md) for details on loss computation, parameter mean
 
 ## Installation
 
-### With `uv` (recommended)
+### From PyPI
+
+```bash
+pip install dfbench                    # Core package and Differometor problems
+pip install "dfbench[optax,scipy]"      # Common local optimizers
+pip install "dfbench[evolution]"        # CMA, EvoX, Nevergrad, Evosax
+pip install "dfbench[bo]"               # BoTorch/Ax surrogate optimizers
+pip install "dfbench[dfo,smac]"         # Derivative-free and SMAC optimizers
+pip install "dfbench[all]"              # All optimizer backends
+pip install "dfbench[cuda13]"           # CUDA 13 JAX support
+pip install "dfbench[analysis]"         # Notebook/profiling tools
+```
+
+### From Source With `uv` (recommended for development)
 
 [uv](https://uv.dev/) handles virtual environments and dependency resolution automatically.
 
@@ -111,11 +113,11 @@ uv sync --group analysis                 # With analysis tools (profiling, noteb
 uv sync --group cuda13 --group analysis  # Everything
 ```
 
-### With `pip`
+### From Source With `pip`
 
 ```bash
-pip install -e .                     # Basic
-pip install -e ".[cuda13,analysis]"    # Everything
+pip install -e .                         # CPU-only editable install
+pip install -e ".[all,cuda13,analysis]"  # All backends, CUDA 13, and analysis extras
 ```
 
 See [Installation](docs/Installation.md) for GPU setup details and HPC notes.
@@ -155,11 +157,11 @@ src/dfbench/
 │   ├── objective.py       # Objective wrapper (central piece)
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
-│   ├── derivative_free/   # OMADS + Powell DFO + SciPy (NelderMead, Powell)
+│   ├── derivative_free/   # OMADS, PDFO/Py-BOBYQA, NelderMead, Powell
 │   ├── global_search/     # SciPy BasinHopping, DualAnnealing
 │   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES, Nevergrad, CMA family
 │   ├── gradient_based/
-│   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
+│   │   ├── optax/         # 34 Optax-based optimizers (OptaxAdam, OptaxLAMB, ...)
 │   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
 │   │   ├── custom_jax.py  # Native-JAX custom/hybrid batch (SGLD, ASAM, GD→L-BFGS, …)
 │   │   └── *.py           # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, NAAdamGD, OptaxLBFGS)
@@ -198,7 +200,7 @@ obj = Objective(problem, max_time=120, max_evals=50000, verbose=1)
 # The algorithm receives the Objective and mutates it in place
 optimizer = AdamGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,
     patience=1000,
     random_seed=42,
@@ -272,7 +274,7 @@ The interface is designed to make this as simple as possible. You write the opti
 
 1. Subclass `OptimizationAlgorithm`
 2. Declare `algorithm_str` and `algorithm_type`
-3. Implement `optimize(problem_objective, ...) → None`
+3. Implement `optimize(objective, ...) → None`
 4. Use `Objective` for all function evaluations
 5. The `Objective` is mutated in place, thereby no return is needed
 
@@ -303,7 +305,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
@@ -311,7 +313,7 @@ class MyAlgorithm(OptimizationAlgorithm):
         **kwargs,
     ) -> None:
         # 1. Setup + seed all RNGs
-        obj = problem_objective
+        obj = objective
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)  # for frameworks beyond np/jax
 
@@ -322,7 +324,7 @@ class MyAlgorithm(OptimizationAlgorithm):
             params = init_params
 
         # 4. JIT warmup (before start_logging, compilation time is free)
-        _ = obj.vmap_value(params)
+        obj.warmup_vmap_value(batch_size=self.batch_size)
 
         # 5. Start the clock
         obj.start_logging()
@@ -351,7 +353,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 - **`optimize()` receives a pre-configured `Objective`**, the algorithm does not create it.
 - **`prepare()`** configures `unbounded`, `algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. For PyTorch-based algorithms, call `torch.manual_seed(random_seed)` afterwards.
 - **Choose `unbounded`:** Set to `True` if your algorithm benefits from smooth unconstrained space (via sigmoid transform). Most evolutionary and surrogate methods use `False` (bounded space).
-- **JIT warmup before `start_logging()`**, compilation time doesn't count against the budget. The no-arg `warmup_*()` helpers run the matching path twice on deterministic params.
+- **JIT warmup before `start_logging()`**, compilation time doesn't count against the budget. Use the matching `warmup_*()` helper; the single-point helpers take no arguments, while batched helpers take the batch size you will use during optimization.
 - **`budget_exceeded`** checks both time and eval limits, please use it as your loop condition.
 
 ### Evaluation Methods
@@ -384,6 +386,7 @@ while not obj.budget_exceeded:        # main loop condition
         break                          # early stopping
 
 # Random parameter generation
+params = obj.random_params()                      # active bounded/unbounded space
 params = obj.random_params_bounded()              # shape: (n_params,)
 batch = obj.random_params_bounded(n_samples=100)  # shape: (100, n_params)
 params = obj.random_params_unbounded()            # for unbounded space
@@ -418,6 +421,7 @@ See [Objective API Reference](docs/Objective-API-Reference.md) for the complete 
 | `PyCMAActiveCMAES` | Evolutionary | Active CMA-ES with negative weight updates (pycma) |
 | `PyCMAIPOP` | Evolutionary | IPOP-CMA-ES: increasing-population restarts (pycma) |
 | `PyCMABIPOP` | Evolutionary | BIPOP-CMA-ES: bi-population restart strategy (pycma) |
+| `CMAESCMA` | Evolutionary | Full-covariance CMA-ES (cmaes package) |
 | `CMAESSepCMA` | Evolutionary | sep-CMA-ES with diagonal covariance (cmaes package) |
 | `EvosaxMAES` | Evolutionary | Matrix Adaptation ES (evosax backend) |
 | `EvosaxLMMAES` | Evolutionary | Limited-Memory MA-ES for high dimensions (evosax) |
@@ -447,7 +451,7 @@ See [Algorithms](docs/Algorithms.md) for hyperparameter details and usage exampl
 Execution scripts in `./scripts/`:
 - `voyager_adam_gd.py`: single-algorithm run
 - `voyager_benchmark.py`: full benchmark with multiple algorithms
-- `voyager_cma_family.py`: all nine CMA-family algorithms on VoyagerProblem
+- `voyager_cma_family.py`: all ten CMA-family algorithms on VoyagerProblem
 - `voyager_scipy_benchmark.py`: SciPy gradient / trust / constrained batch
 
 Reference implementations worth reading:

@@ -178,7 +178,7 @@ class EvosaxMAES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -188,7 +188,7 @@ class EvosaxMAES(OptimizationAlgorithm):
         """Run MA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
@@ -196,7 +196,7 @@ class EvosaxMAES(OptimizationAlgorithm):
             pop_size: Population size lambda.  Defaults to 20.
             max_iterations: Maximum CMA generations.  ``None`` = unlimited.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -224,7 +224,7 @@ class EvosaxMAES(OptimizationAlgorithm):
 
         # JIT warmup before timing starts
         batch_size = self._batch_size
-        _ = obj.vmap_value(jnp.zeros((min(batch_size, pop_size), n)))
+        obj.warmup_vmap_value(batch_size=min(batch_size, pop_size))
         obj.start_logging()
 
         rng, loop_rng = jax.random.split(rng)
@@ -274,7 +274,7 @@ class EvosaxLMMAES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -285,7 +285,7 @@ class EvosaxLMMAES(OptimizationAlgorithm):
         """Run LM-MA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
@@ -296,7 +296,7 @@ class EvosaxLMMAES(OptimizationAlgorithm):
                 (approximately ``4 + floor(3*ln(n))``).
             max_iterations: Maximum generations.  ``None`` = unlimited.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -326,7 +326,7 @@ class EvosaxLMMAES(OptimizationAlgorithm):
         state = strategy.init(init_rng, mean0, es_params)
 
         batch_size = self._batch_size
-        _ = obj.vmap_value(jnp.zeros((min(batch_size, pop_size), n)))
+    obj.warmup_vmap_value(batch_size=min(batch_size, pop_size))
         obj.start_logging()
 
         rng, loop_rng = jax.random.split(rng)

@@ -19,7 +19,7 @@ class SLSQP(ScipyMinimizeAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         ftol: float = 1e-6,
@@ -33,7 +33,7 @@ class SLSQP(ScipyMinimizeAlgorithm):
         box bounds to SciPy's sequential least-squares solver.
 
         Args:
-            problem_objective: Objective to mutate in place with evaluation logs.
+            objective: Objective to mutate in place with evaluation logs.
             init_params: Initial point in bounded space. If None, sampled via
                 :meth:`Objective.random_params_bounded`.
             random_seed: Seed used when sampling ``init_params``.
@@ -44,7 +44,7 @@ class SLSQP(ScipyMinimizeAlgorithm):
                 ``options=...``.
         """
         self._run_scipy_minimize(
-            problem_objective,
+            objective,
             init_params,
             random_seed,
             tol,

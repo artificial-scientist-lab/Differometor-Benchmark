@@ -144,7 +144,7 @@ class NAAdamGD(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
@@ -167,7 +167,7 @@ class NAAdamGD(OptimizationAlgorithm):
         the number of gradient steps.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             init_params: Starting point in unbounded space. If None, initialized
                 via obj.random_params_unbounded(). Defaults to None.
             random_seed: Seed for NumPy and JAX. If None,
@@ -198,7 +198,7 @@ class NAAdamGD(OptimizationAlgorithm):
                 activates. Defaults to 500.
             **adam_kwargs: Passed to optax.adam().
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, rng_key = self.prepare(

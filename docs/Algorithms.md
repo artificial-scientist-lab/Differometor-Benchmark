@@ -14,6 +14,9 @@ from dfbench.algorithms import (
     RandomSearch, EvoxPSO, EvoxES,           # evolutionary
     NevergradOnePlusOne, NevergradTBPSA,     # nevergrad baselines
     NevergradNGOpt,                          # nevergrad meta-optimizer
+    PyCMACMAES, PyCMAActiveCMAES, PyCMAIPOP, PyCMABIPOP,
+    CMAESCMA, CMAESSepCMA, EvosaxMAES, EvosaxLMMAES,
+    JAXOnePlusOneES, JAXMuLambdaES,          # CMA / ES family
     OmadsMADS, OmadsOrthoMADS,               # derivative-free direct search
     PDFOUOBYQA, PDFONEWUOA, PDFOLINCOA, PyBOBYQA,  # Powell DFO
     NelderMead, Powell,                      # SciPy classics
@@ -38,19 +41,29 @@ from dfbench.algorithms import (
 
 ---
 
-## Algorithm Types
+## Package Categories and Algorithm Types
 
-Every algorithm declares an `algorithm_type` from the `AlgorithmType` enum:
+The source tree groups algorithms by implementation family under `src/dfbench/algorithms/`:
 
-| Type | `unbounded` | Evaluation methods used | Examples |
-|------|-------------|------------------------|----------|
-| `GRADIENT_BASED` | `True` | `value_and_grad()` | Adam, SA-GD, NA-Adam, L-BFGS, 34 Optax optimizers |
-| `EVOLUTIONARY` | `False` | `vmap_value()` | Random Search, PSO, CMA-ES |
-| `EVOLUTIONARY` (direct search) | `False` | `value()` | MADS, OrthoMADS |
-| `SURROGATE_BASED` | `False` | `value()`, `vmap_value()` | Bayesian Optimization, TuRBO, ReSTIR |
+| Package directory | Contents |
+|-------------------|----------|
+| `gradient_based/` | Adam-style loops, Optax wrappers, SciPy `minimize` wrappers, and native-JAX gradient methods |
+| `evolutionary/` | Random search, EvoX PSO/ES, Nevergrad wrappers, CMA-ES variants, evosax ES, and native-JAX ES |
+| `derivative_free/` | OMADS direct search, PDFO / Py-BOBYQA Powell solvers, and SciPy Nelder-Mead / Powell |
+| `global_search/` | SciPy global optimizers: basin hopping and dual annealing |
+| `surrogate_based/` | BoTorch, Ax, HEBO, SMAC, ReSTIR, and TuRBO/L-BFGS hybrids |
+| `generative/` | VAE-based sampling and latent-space BO |
+
+Each class also declares an `AlgorithmType` enum value used by the benchmark harness as a space-mode hint. The enum is intentionally coarser than the package layout: derivative-free and global-search algorithms currently use `AlgorithmType.EVOLUTIONARY` because they run in bounded physical space by default.
+
+| `AlgorithmType` | Default space | Common evaluation methods | Examples |
+|-----------------|---------------|---------------------------|----------|
+| `GRADIENT_BASED` | unbounded | `value_and_grad()`, Hessian callbacks where needed | Adam, SA-GD, L-BFGS, Optax, SciPy gradient/trust methods |
+| `EVOLUTIONARY` | bounded | `value()`, `vmap_value()` | Random Search, PSO, CMA-ES, OMADS, PDFO, BasinHopping |
+| `SURROGATE_BASED` | bounded | `value()`, `vmap_value()`, sometimes gradients | Bayesian Optimization, TuRBO, ReSTIR, GEBO |
 | `GENERATIVE` | varies | `value()`, `vmap_value()` | VAE Sampling |
 
-The `Benchmark` harness uses `algorithm_type` to set `unbounded` automatically. When running algorithms standalone, you set it yourself.
+When running algorithms through `Benchmark`, this type is used to choose the default bounded/unbounded objective mode. When running algorithms standalone, the algorithm's own `prepare()` call sets the mode.
 
 ---
 
@@ -65,7 +78,7 @@ Standard Adam optimizer with gradient clipping.
 ```python
 optimizer = AdamGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,      # Adam learning rate
     patience=1000,           # stop after N iters without improvement
     random_seed=42,
@@ -88,7 +101,7 @@ Based on [arXiv:2107.07558](https://arxiv.org/abs/2107.07558). Combines gradient
 ```python
 optimizer = SAGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,
     patience=1000,
     T0=15.0,                  # initial temperature
@@ -116,7 +129,7 @@ Adam with decaying Gaussian noise injection for exploration.
 ```python
 optimizer = NAAdamGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,
     patience=1000,
     noise_std_start=0.3,      # initial noise σ
@@ -152,7 +165,7 @@ L-BFGS optimizer from Optax. Uses second-order curvature information for faster 
 ```python
 optimizer = LBFGSGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     patience=500,
     random_seed=42,
 )
@@ -209,7 +222,7 @@ Simplest baseline. Draws uniform random samples within bounds and evaluates them
 ```python
 optimizer = RandomSearch(batch_size=100)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=None,
     random_seed=42,
 )
@@ -230,7 +243,7 @@ Uses the [EvoX](https://github.com/EMI-Group/evox) library's PSO implementations
 ```python
 optimizer = EvoxPSO(batch_size=5, variant="CLPSO")
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     pop_size=200,
     n_generations=10000,
     random_seed=42,
@@ -265,12 +278,12 @@ optimizer.optimize(
 
 ### EvoxES (Evolution Strategies — EvoX backend)
 
-Uses EvoX's evolution strategy implementations. Similar structure to EvoxPSO but with different algorithmic families.  Note: the EvoX backend is distinct from the pycma / cmaes / evosax backends added in the CMA-family batch.
+Uses EvoX's evolution strategy implementations. Similar structure to EvoxPSO but with different algorithmic families. Note: the EvoX backend is distinct from the pycma / cmaes / evosax CMA-family wrappers in the same `evolutionary/` package.
 
 ```python
 optimizer = EvoxES(batch_size=5, variant="CMAES")
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     pop_size=100,
     n_generations=10000,
     random_seed=42,
@@ -296,49 +309,6 @@ optimizer.optimize(
 
 ---
 
-## Direct Search Algorithms
-
-Derivative-free mesh-based algorithms that operate in **bounded physical space** and refine a mesh/poll structure around the incumbent point. These are local explorers for rugged landscapes — not global optimizers. Uses the [OMADS](https://github.com/Ahmed-Bayoumy/OMADS) library.
-
-### OmadsMADS (Mesh Adaptive Direct Search)
-
-Full MADS algorithm with search step (broad sampling) and poll step (structured directions). Each iteration first samples the mesh, then polls orthogonal directions. The mesh refines on failure and coarsens on success.
-
-```python
-optimizer = OmadsMADS(psize_init=1.0, tol=1e-9, ns=4)
-optimizer.optimize(
-    problem_objective=obj,
-    random_seed=42,
-)
-```
-
-| Hyperparameter | Default | Description |
-|----------------|---------|-------------|
-| `psize_init` | `1.0` | Initial poll-step (frame) size. |
-| `tol` | `1e-9` | Convergence tolerance on mesh/frame size. |
-| `ns` | `4` | Number of search samples per search step. |
-
----
-
-### OmadsOrthoMADS (Orthogonal MADS, poll only)
-
-Runs only the OrthoMADS poll step with orthogonal Householder directions. Leaner per-iteration cost than full MADS, tighter local convergence.
-
-```python
-optimizer = OmadsOrthoMADS(psize_init=1.0, tol=1e-9)
-optimizer.optimize(
-    problem_objective=obj,
-    random_seed=42,
-)
-```
-
-| Hyperparameter | Default | Description |
-|----------------|---------|-------------|
-| `psize_init` | `1.0` | Initial poll-step (frame) size. |
-| `tol` | `1e-9` | Convergence tolerance on mesh/frame size. |
-
----
-
 ### Nevergrad Baselines (Rugged-Landscape Controls)
 
 A small batch of [Nevergrad](https://github.com/facebookresearch/nevergrad) wrappers intended as rugged-landscape controls. All operate in **bounded physical space** and evaluate candidates through the `Objective` for fair benchmark accounting.
@@ -350,7 +320,7 @@ Lightweight (1+1)-ES: maintains a single candidate, perturbs it with Gaussian no
 ```python
 optimizer = NevergradOnePlusOne()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     n_restarts=3,
     random_seed=42,
 )
@@ -370,7 +340,7 @@ Test-Based Population-Size Adaptation. A noise-robust baseline that dynamically 
 ```python
 optimizer = NevergradTBPSA()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     n_restarts=1,
     num_evaluations=3,    # average 3 evaluations per candidate
     random_seed=42,
@@ -394,7 +364,7 @@ Nevergrad's automatic algorithm-selection meta-optimizer. Internally chooses and
 ```python
 optimizer = NevergradNGOpt()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     n_restarts=1,
     random_seed=42,
 )
@@ -409,7 +379,194 @@ optimizer.optimize(
 
 ---
 
-## Powell-Style Trust-Region DFO (PDFO / Py-BOBYQA)
+### CMA-Family Algorithms (pycma / cmaes / evosax / native JAX)
+
+Ten CMA-family and evolution-strategy algorithms live in `src/dfbench/algorithms/evolutionary/` alongside the EvoX backend. Each class names its backend explicitly in `algorithm_str` so benchmark runs can be distinguished.
+
+**Required packages** (install with `uv add cma cmaes evosax`):
+- `pycma` >= 3.3 — for `PyCMA*` classes
+- `cmaes` >= 0.10 — for `CMAESCMA` and `CMAESSepCMA`
+- `evosax` >= 0.1.6 — for `Evosax*` classes
+- `jax` (already a dependency) — for `JAX*` classes
+
+```python
+from dfbench.algorithms import (
+    PyCMACMAES, PyCMAActiveCMAES, PyCMAIPOP, PyCMABIPOP,  # pycma
+    CMAESCMA, CMAESSepCMA,                                # cmaes
+    EvosaxMAES, EvosaxLMMAES,                             # evosax
+    JAXOnePlusOneES, JAXMuLambdaES,                       # native JAX
+)
+```
+
+#### PyCMACMAES (pycma — vanilla CMA-ES)
+
+```python
+optimizer = PyCMACMAES(batch_size=50)
+optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_iterations=500, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | `4+floor(3·ln n)` | Population size lambda (optimize). |
+| `sigma0` | `0.3·mean(ub−lb)` | Initial step size (optimize). |
+| `max_iterations` | `None` | Generation cap (optimize). |
+
+#### PyCMAActiveCMAES (pycma — aCMA-ES)
+
+Identical to `PyCMACMAES` with `CMA_active=True`. Uses negative weight updates for unsuccessful directions.
+
+```python
+optimizer = PyCMAActiveCMAES(batch_size=50)
+optimizer.optimize(obj, pop_size=50, random_seed=0)
+```
+
+#### PyCMAIPOP (pycma — IPOP-CMA-ES)
+
+Restarts CMA-ES up to `max_restarts` times, doubling the population size each time.
+
+```python
+optimizer = PyCMAIPOP(batch_size=20)
+optimizer.optimize(obj, pop_size=20, max_restarts=5, random_seed=0, max_iterations_per_restart=200)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | `4+floor(3·ln n)` | Base population size (doubles each restart) (optimize). |
+| `max_restarts` | `9` | Maximum restarts (optimize). |
+| `max_iterations_per_restart` | `None` | Per-restart generation cap (optimize). |
+
+#### PyCMABIPOP (pycma — BIPOP-CMA-ES)
+
+Alternates between large-population and small-population restarts following Hansen 2009.
+
+```python
+optimizer = PyCMABIPOP(batch_size=20)
+optimizer.optimize(obj, pop_size=20, max_restarts=10, random_seed=0)
+```
+
+#### CMAESCMA (cmaes package — full-covariance CMA-ES)
+
+Standard CMA-ES using the `cmaes.CMA` backend. The search is performed in the unit cube and mapped to physical bounds for objective evaluation.
+
+```python
+optimizer = CMAESCMA(batch_size=50)
+optimizer.optimize(obj, pop_size=50, sigma0=0.3, max_iterations=500, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | library default | Population size (optimize). |
+| `sigma0` | `0.3` | Initial step size as a fraction of the unit cube (optimize). |
+| `max_no_improvement` | `None` | Stop on stagnation after N generations (optimize). |
+
+#### CMAESSepCMA (cmaes package — sep-CMA-ES)
+
+Diagonal covariance matrix; O(n²) instead of O(n³) per update.
+
+```python
+optimizer = CMAESSepCMA(batch_size=50)
+optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_no_improvement=100, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `pop_size` | library default | Population size (optimize). |
+| `max_no_improvement` | `None` | Stop on stagnation after N generations (optimize). |
+
+#### EvosaxMAES (evosax — MA-ES)
+
+Matrix Adaptation ES via the evosax JAX library.
+
+```python
+optimizer = EvosaxMAES(batch_size=64)
+optimizer.optimize(obj, pop_size=64, sigma0=0.3, max_iterations=1000, random_seed=0)
+```
+
+#### EvosaxLMMAES (evosax — LM-MA-ES)
+
+Limited-memory MA-ES; O(n·m) storage where m is `memory_size`.
+
+```python
+optimizer = EvosaxLMMAES(batch_size=64)
+optimizer.optimize(obj, pop_size=64, memory_size=10, random_seed=0)
+```
+
+#### JAXOnePlusOneES (native JAX — (1+1)-ES)
+
+Single-parent ES with the 1/5 success rule. No optional dependencies.
+
+```python
+optimizer = JAXOnePlusOneES()
+optimizer.optimize(obj, sigma0=0.3, sigma_min=1e-10, success_window=20, max_iterations=5000, random_seed=0)
+```
+
+#### JAXMuLambdaES (native JAX — (μ,λ)-ES)
+
+Comma-selection ES with isotropic Gaussian mutations and cumulative step-size adaptation. No optional dependencies.
+
+```python
+optimizer = JAXMuLambdaES(batch_size=50)
+optimizer.optimize(obj, mu=10, lam=50, sigma0=0.3, sigma_min=1e-10, max_iterations=500, random_seed=0)
+```
+
+| parameter | default | description |
+|-----------|---------|-------------|
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `mu` | `10` | Number of survivors (must be < `lam`) (optimize). |
+| `lam` | `50` | Number of offspring per generation (optimize). |
+
+---
+
+## Derivative-Free Algorithms
+
+These algorithms live in `src/dfbench/algorithms/derivative_free/`. They evaluate bounded physical-space candidate points without using gradients.
+
+### OMADS Direct Search
+
+Mesh-based algorithms that refine a mesh/poll structure around the incumbent point. These are local explorers for rugged landscapes, not global optimizers. Uses the [OMADS](https://github.com/Ahmed-Bayoumy/OMADS) library.
+
+#### OmadsMADS (Mesh Adaptive Direct Search)
+
+Full MADS algorithm with search step (broad sampling) and poll step (structured directions). Each iteration first samples the mesh, then polls orthogonal directions. The mesh refines on failure and coarsens on success.
+
+```python
+optimizer = OmadsMADS(psize_init=1.0, tol=1e-9, ns=4)
+optimizer.optimize(
+    objective=obj,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `psize_init` | `1.0` | Initial poll-step (frame) size. |
+| `tol` | `1e-9` | Convergence tolerance on mesh/frame size. |
+| `ns` | `4` | Number of search samples per search step. |
+
+#### OmadsOrthoMADS (Orthogonal MADS, poll only)
+
+Runs only the OrthoMADS poll step with orthogonal Householder directions. Leaner per-iteration cost than full MADS, tighter local convergence.
+
+```python
+optimizer = OmadsOrthoMADS(psize_init=1.0, tol=1e-9)
+optimizer.optimize(
+    objective=obj,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `psize_init` | `1.0` | Initial poll-step (frame) size. |
+| `tol` | `1e-9` | Convergence tolerance on mesh/frame size. |
+
+---
+
+### Powell-Style Trust-Region DFO (PDFO / Py-BOBYQA)
 
 Model-based derivative-free trust-region solvers by M. J. D. Powell.  All run in **bounded physical space** with multistart restarts.  Each call solves a quadratic model in a shrinking trust region; convergence is local but very precise on smooth landscapes.
 
@@ -439,12 +596,12 @@ Common hyperparameters (passed at construction):
 
 ```python
 optimizer = PDFOLINCOA(radius_init=0.5, n_restarts=3)
-optimizer.optimize(problem_objective=obj, random_seed=42)
+optimizer.optimize(objective=obj, random_seed=42)
 ```
 
 ---
 
-## SciPy Classics — Nelder-Mead & Powell
+### SciPy Classics — Nelder-Mead & Powell
 
 Two non-gradient SciPy classics, exposed as `dfbench` algorithms via the shared SciPy DFO wrapper.  Both run in **bounded physical space**.
 
@@ -486,132 +643,6 @@ from dfbench.algorithms import BasinHopping, DualAnnealing
 
 ---
 
-## CMA-Family Algorithms (pycma / cmaes / evosax / native JAX)
-
-Nine additional CMA-family algorithms added alongside the EvoX backend.  Each class names its backend explicitly in `algorithm_str` so benchmark runs can be distinguished.
-
-**Required packages** (install with `uv add cma cmaes evosax`):
-- `pycma` ≥ 3.3 — for `PyCMA*` classes
-- `cmaes` ≥ 0.10 — for `CMAESSepCMA`
-- `evosax` ≥ 0.1.6 — for `Evosax*` classes
-- `jax` (already a dependency) — for `JAX*` classes
-
-```python
-from dfbench.algorithms import (
-    PyCMACMAES, PyCMAActiveCMAES, PyCMAIPOP, PyCMABIPOP,  # pycma
-    CMAESSepCMA,                                            # cmaes
-    EvosaxMAES, EvosaxLMMAES,                               # evosax
-    JAXOnePlusOneES, JAXMuLambdaES,                         # native JAX
-)
-```
-
-### PyCMACMAES (pycma — vanilla CMA-ES)
-
-```python
-optimizer = PyCMACMAES(batch_size=50)
-optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_iterations=500, random_seed=0)
-```
-
-| parameter | default | description |
-|-----------|---------|-------------|
-| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
-| `pop_size` | `4+floor(3·ln n)` | Population size λ (optimize). |
-| `sigma0` | `0.3·mean(ub−lb)` | Initial step size (optimize). |
-| `max_iterations` | `None` | Generation cap (optimize). |
-
-### PyCMAActiveCMAES (pycma — aCMA-ES)
-
-Identical to `PyCMACMAES` with `CMA_active=True`.  Uses negative weight updates for unsuccessful directions.
-
-```python
-optimizer = PyCMAActiveCMAES(batch_size=50)
-optimizer.optimize(obj, pop_size=50, random_seed=0)
-```
-
-### PyCMAIPOP (pycma — IPOP-CMA-ES)
-
-Restarts CMA-ES up to `max_restarts` times, doubling λ each time.
-
-```python
-optimizer = PyCMAIPOP(batch_size=20)
-optimizer.optimize(obj, pop_size=20, max_restarts=5, random_seed=0, max_iterations_per_restart=200)
-```
-
-| parameter | default | description |
-|-----------|---------|-------------|
-| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
-| `pop_size` | `4+floor(3·ln n)` | Base λ (doubles each restart) (optimize). |
-| `max_restarts` | `9` | Maximum restarts (optimize). |
-| `max_iterations_per_restart` | `None` | Per-restart generation cap (optimize). |
-
-### PyCMABIPOP (pycma — BIPOP-CMA-ES)
-
-Alternates between large-population (doubled λ) and small-population (random λ, random σ) restarts following Hansen 2009.
-
-```python
-optimizer = PyCMABIPOP(batch_size=20)
-optimizer.optimize(obj, pop_size=20, max_restarts=10, random_seed=0)
-```
-
-### CMAESSepCMA (cmaes package — sep-CMA-ES)
-
-Diagonal covariance matrix; O(n²) instead of O(n³) per update.
-
-```python
-optimizer = CMAESSepCMA(batch_size=50)
-optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_no_improvement=100, random_seed=0)
-```
-
-| parameter | default | description |
-|-----------|---------|-------------|
-| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
-| `pop_size` | library default | Population λ (optimize). |
-| `max_no_improvement` | `None` | Stop on stagnation after N generations (optimize). |
-
-### EvosaxMAES (evosax — MA-ES)
-
-Matrix Adaptation ES via the evosax JAX library.
-
-```python
-optimizer = EvosaxMAES(batch_size=64)
-optimizer.optimize(obj, pop_size=64, sigma0=0.3, max_iterations=1000, random_seed=0)
-```
-
-### EvosaxLMMAES (evosax — LM-MA-ES)
-
-Limited-memory MA-ES; O(n·m) storage where m is `memory_size`.
-
-```python
-optimizer = EvosaxLMMAES(batch_size=64)
-optimizer.optimize(obj, pop_size=64, memory_size=10, random_seed=0)
-```
-
-### JAXOnePlusOneES (native JAX — (1+1)-ES)
-
-Single-parent ES with the 1/5 success rule.  No optional dependencies.
-
-```python
-optimizer = JAXOnePlusOneES()
-optimizer.optimize(obj, sigma0=0.3, sigma_min=1e-10, success_window=20, max_iterations=5000, random_seed=0)
-```
-
-### JAXMuLambdaES (native JAX — (μ,λ)-ES)
-
-Comma-selection ES with isotropic Gaussian mutations and cumulative step-size adaptation.  No optional dependencies.
-
-```python
-optimizer = JAXMuLambdaES(batch_size=50)
-optimizer.optimize(obj, mu=10, lam=50, sigma0=0.3, sigma_min=1e-10, max_iterations=500, random_seed=0)
-```
-
-| parameter | default | description |
-|-----------|---------|-------------|
-| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
-| `mu` | `10` | Number of survivors (must be < lam) (optimize). |
-| `lam` | `50` | Number of offspring per generation (optimize). |
-
----
-
 ## Surrogate-Based Algorithms
 
 These algorithms build a surrogate model of the loss landscape and use it to select promising evaluation points.
@@ -621,12 +652,12 @@ These algorithms build a surrogate model of the loss landscape and use it to sel
 Standard Bayesian Optimization using a Gaussian Process surrogate and batch Expected Improvement acquisition (qLogEI).
 
 ```python
-optimizer = BotorchBO()
+optimizer = BotorchBO(batch_size=1)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=100,      # required
     n_initial=10,            # Sobol samples before fitting GP
-    batch_size=1,            # points per acquisition
+    acquisition_batch_size=1,
     random_seed=42,
 )
 ```
@@ -635,7 +666,8 @@ optimizer.optimize(
 |----------------|---------|-------------|
 | `max_iterations` | *required* | BO iterations (excluding initial samples). |
 | `n_initial` | `10` | Initial Sobol quasi-random samples. |
-| `batch_size` | `1` | Points acquired per iteration. |
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `acquisition_batch_size` | `1` | Points acquired per iteration. |
 
 **Implementation detail:** Parameters are internally normalized to $[0, 1]$. The GP is fit on negated losses (BoTorch maximizes by convention). NaN/Inf evaluations are retried with small perturbations up to `max_retries` times.
 
@@ -646,26 +678,28 @@ optimizer.optimize(
 Implements TuRBO-1 from [Eriksson et al. 2019](https://proceedings.neurips.cc/paper/2019/hash/6c990b7aca7bc7e0d4b91ac0c4ed2f54-Abstract.html). Maintains a local trust region that expands on success and shrinks on failure, making it effective for high-dimensional problems where global BO struggles.
 
 ```python
-optimizer = BotorchTuRBO()
+optimizer = BotorchTuRBO(batch_size=5)
 optimizer.optimize(
-    problem_objective=obj,
-    max_iterations=100,
+    objective=obj,
     n_initial=20,
-    batch_size=5,
+    acquisition_batch_size=5,
     random_seed=42,
 )
 ```
 
 | Hyperparameter | Default | Description |
 |----------------|---------|-------------|
-| `max_iterations` | *required* | TuRBO iterations. |
+| `max_iterations` | `None` | Optional cap on TuRBO iterations per trust-region instance. |
 | `n_initial` | `20` | Initial Sobol samples. |
-| `batch_size` | `5` | Points per acquisition. |
+| `batch_size` | `1` | Candidates per `vmap_value` call (constructor). |
+| `acquisition_batch_size` | `1` | Points per acquisition. |
+| `n_restarts` | `None` | Maximum trust-region restarts; `None` means restart until budget exhaustion. |
 
 **Trust region mechanics:**
 - After `success_tolerance` consecutive improvements → region **doubles** in size.
 - After `failure_tolerance` consecutive non-improvements → region **halves** in size.
 - When region shrinks below `length_min` → **restart** from scratch (re-initialize Sobol samples).
+- With `n_restarts=None`, these restarts are not capped separately; the objective budget is the stopping condition.
 
 ---
 
@@ -678,7 +712,7 @@ from dfbench.algorithms.surrogate_based.restir import MyAlgorithm as ReSTIR
 
 optimizer = ReSTIR(batch_size=100)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     n_initial_samples=1000,
     n_knn_samples=100_000,
     k_neighbors=10,
@@ -707,7 +741,7 @@ Reference: Eriksson & Jankowiak, *High-Dimensional Bayesian Optimization with Sp
 ```python
 optimizer = AxSAASBO()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     num_warmup=256,
@@ -734,7 +768,7 @@ Reference: Papenmeier et al., *Increasing the Scope as You Learn*, NeurIPS 2022.
 ```python
 optimizer = BAxUS()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     d_init=5,
@@ -760,7 +794,7 @@ Reference: Letham et al., *Noisy Expected Improvement*, NeurIPS 2019.
 ```python
 optimizer = BotorchqNEI()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     batch_size=1,
@@ -786,7 +820,7 @@ Reference: Wu & Frazier, *The Parallel Knowledge Gradient Method*, NeurIPS 2016.
 ```python
 optimizer = BotorchqKG()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     num_fantasies=16,
@@ -811,7 +845,7 @@ Reference: Wang et al., *Bayesian Optimization in a Billion Dimensions via Rando
 ```python
 optimizer = REMBO()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     d_embedding=10,
@@ -836,7 +870,7 @@ Reference: Wu et al., *Bayesian Optimization with Gradients*, NeurIPS 2017.
 ```python
 optimizer = GEBO()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     grad_refine_steps=3,
@@ -863,7 +897,7 @@ Reference: Kirschner et al., *Adaptive and Safe Bayesian Optimization in High Di
 ```python
 optimizer = LineBO()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     line_samples=20,
@@ -886,7 +920,7 @@ Two-phase hybrid: Phase 1 runs TuRBO in bounded space to locate a basin; Phase 2
 ```python
 optimizer = TuRBOLBFGS()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     turbo_iterations=50,
     n_initial=20,
     lbfgs_patience=200,
@@ -912,7 +946,7 @@ Reference: Cowen-Rivers et al., *An Empirical Study of Assumptions in Bayesian O
 ```python
 optimizer = HEBO()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=60,
     batch_size=1,
     random_seed=42,
@@ -935,7 +969,7 @@ Reference: Lindauer et al., *SMAC3*, JMLR 2022.
 ```python
 optimizer = SMAC()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     n_initial=10,
     random_seed=42,
@@ -956,35 +990,42 @@ optimizer.optimize(
 Two-phase approach: (1) train a Variational Autoencoder on high-quality samples to learn a compressed latent space, then (2) run Bayesian Optimization in that latent space.
 
 ```python
-optimizer = VAESampling()
+optimizer = VAESampling(batch_size_sampling=5, batch_size_bo=1)
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=50,
     vae_training_samples=1000,
+    sampling_budget_fraction=0.25,
     vae_epochs=100,
-    batch_size=64,
+    vae_train_batch_size=64,
+    top_k=0.02,
     random_seed=42,
 )
 ```
 
 | Hyperparameter | Default | Description |
 |----------------|---------|-------------|
-| `vae_training_samples` | `1000` | Samples for VAE training. |
+| `vae_training_samples` | `1000` | Maximum objective-evaluated samples for VAE training (`None` means budget-fraction only). |
+| `sampling_budget_fraction` | `0.25` | Stop VAE sampling when this fraction of the tightest Objective budget is consumed, leaving the rest for latent BO. |
 | `vae_epochs` | `100` | Training epochs with cyclic KL annealing. |
-| `batch_size` | `64` | Mini-batch size for VAE training. |
-| `max_iterations` | *required* | BO iterations in latent space. |
+| `batch_size_sampling` | `1` | Sampling-phase candidates per `vmap_value` call (constructor). |
+| `batch_size_bo` | `1` | Latent BO candidates per GP fit and BO-phase candidates per `vmap_value` call (constructor). |
+| `vae_train_batch_size` | `32` | Mini-batch size for VAE training. |
+| `top_k` | `0.02` | Fraction of the sampled candidates used for VAE training after ranking by objective loss. |
+| `max_iterations` | `None` | BO iterations in latent space. `None` runs until the Objective budget is exhausted. |
 
 **Architecture details:**
 - ResNet-style VAE with residual blocks, batch normalization, and Mish activations.
 - Latent dimension = `n_params / 10` (compressed 10×).
+- VAE training samples are drawn with `obj.random_params()` in the active unbounded Objective space, ranked by evaluated loss, and filtered to the best `top_k` fraction.
 - Cyclic $\beta$-annealing for stable training.
-- After training, BO uses `qLogEI` acquisition in the learned latent space.
+- After training, BO seeds its GP with the encoded top training samples plus decoded Sobol latent samples, then uses batched `qLogEI` acquisition in the learned latent space.
 
 **Rationale — why compress to latent space?** High-dimensional BO suffers from the curse of dimensionality. The VAE learns which parameter combinations matter, projecting the search into a much lower-dimensional space where the GP surrogate is more effective.
 
 ---
 
-## Optax Optimizer Batch (34 algorithms)
+## Optax Gradient-Based Optimizer Batch (34 algorithms)
 
 All Optax-based algorithms share a common base class `OptaxAlgorithm` and live in `src/dfbench/algorithms/gradient_based/optax/`. They operate in **unbounded** (sigmoid-transformed) space and use `obj.value_and_grad()` for gradient information.
 
@@ -1022,7 +1063,7 @@ Standard Adam optimizer ([Kingma & Ba, 2015](https://arxiv.org/abs/1412.6980)).
 
 ```python
 optimizer = OptaxAdam()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1033,7 +1074,7 @@ Adam with decoupled weight decay ([Loshchilov & Hutter, 2019](https://arxiv.org/
 
 ```python
 optimizer = OptaxAdamW()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1048,7 +1089,7 @@ AdaBelief — adapts step sizes based on *belief* in the gradient ([Zhuang et al
 
 ```python
 optimizer = OptaxAdaBelief()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1059,7 +1100,7 @@ Memory-efficient factored Adam ([Shazeer & Stern, 2018](https://arxiv.org/abs/18
 
 ```python
 optimizer = OptaxAdafactor()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1070,7 +1111,7 @@ AMSGrad variant of Adam that maintains the maximum of past squared gradients ([R
 
 ```python
 optimizer = OptaxAMSGrad()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1081,7 +1122,7 @@ Adaptive gradient method — per-parameter learning rates decay based on accumul
 
 ```python
 optimizer = OptaxAdaGrad()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1092,7 +1133,7 @@ AdaDelta — learning-rate-free adaptive method using running averages ([Zeiler,
 
 ```python
 optimizer = OptaxAdaDelta()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1103,7 +1144,7 @@ AdaMax — $L^\infty$ variant of Adam ([Kingma & Ba, 2015](https://arxiv.org/abs
 
 ```python
 optimizer = OptaxAdaMax()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1114,7 +1155,7 @@ AdaMax with decoupled weight decay.
 
 ```python
 optimizer = OptaxAdaMaxW()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1129,7 +1170,7 @@ Adaptive Nesterov momentum algorithm ([Xie et al., 2023](https://arxiv.org/abs/2
 
 ```python
 optimizer = OptaxAdan()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1140,7 +1181,7 @@ Evolved sign momentum optimizer — discovered via meta-learning ([Chen et al., 
 
 ```python
 optimizer = OptaxLion()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1151,7 +1192,7 @@ Layer-wise Adaptive Moments for Batch training ([You et al., 2020](https://arxiv
 
 ```python
 optimizer = OptaxLAMB()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1162,7 +1203,7 @@ Nesterov-accelerated Adam ([Dozat, 2016](https://openreview.net/forum?id=OM0jvwB
 
 ```python
 optimizer = OptaxNadam()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1173,7 +1214,7 @@ Nadam with decoupled weight decay.
 
 ```python
 optimizer = OptaxNadamW()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, weight_decay=1e-4, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1188,7 +1229,7 @@ RMSProp — root mean square propagation ([Hinton, 2012](https://www.cs.toronto.
 
 ```python
 optimizer = OptaxRMSProp()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1199,7 +1240,7 @@ RProp — resilient backpropagation with sign-based updates ([Riedmiller & Braun
 
 ```python
 optimizer = OptaxRProp()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1210,7 +1251,7 @@ Rectified Adam — variance-rectified adaptive learning rate ([Liu et al., 2020]
 
 ```python
 optimizer = OptaxRAdam()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1220,9 +1261,9 @@ optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
 Vanilla SGD, SGD with Momentum, and Nesterov Accelerated Gradient. All three live in the same file (`optax_sgd.py`) and share the standard loop.
 
 ```python
-OptaxSGD().optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
-OptaxSGDM().optimize(problem_objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
-OptaxNAG().optimize(problem_objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
+OptaxSGD().optimize(objective=obj, learning_rate=0.1, random_seed=42)
+OptaxSGDM().optimize(objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
+OptaxNAG().optimize(objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Applies to | Description |
@@ -1237,7 +1278,7 @@ SGD with decaying Gaussian noise injection.
 
 ```python
 optimizer = OptaxNoisySGD()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, eta=0.01, gamma=0.55, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, eta=0.01, gamma=0.55, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1255,7 +1296,7 @@ Polyak step-size SGD — adapts step size using $\text{step} = (f(x) - f^*) / \l
 
 ```python
 optimizer = OptaxPolyakSGD()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, f_min=0.0, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, f_min=0.0, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1273,7 +1314,7 @@ Sharpness-Aware Minimization — seeks flat minima by perturbing towards the wor
 
 ```python
 optimizer = OptaxSAM()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, rho=0.05, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, rho=0.05, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1291,7 +1332,7 @@ Sophia optimizer — lightweight second-order method using diagonal Hessian EMA 
 
 ```python
 optimizer = OptaxSophia()
-optimizer.optimize(problem_objective=obj, learning_rate=1e-3, gamma=0.01, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=1e-3, gamma=0.01, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1312,7 +1353,7 @@ Lookahead wrapper — slow-weight averaging around a fast inner optimizer ([Zhan
 ```python
 optimizer = OptaxLookahead()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,
     inner_optimizer_name="adam",  # adam | adamw | sgd | rmsprop | lion
     sync_period=6,
@@ -1335,7 +1376,7 @@ Schedule-Free Adam — removes the need for an explicit LR schedule by maintaini
 
 ```python
 optimizer = OptaxScheduleFreeAdam()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, warmup_steps=200, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, warmup_steps=200, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Description |
@@ -1350,7 +1391,7 @@ Yogi optimizer — controls adaptive learning-rate increase more conservatively 
 
 ```python
 optimizer = OptaxYogi()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1361,7 +1402,7 @@ NovoGrad — layer-wise gradient normalization optimizer ([Ginsburg et al., 2019
 
 ```python
 optimizer = OptaxNovoGrad()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1371,8 +1412,8 @@ optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
 Optimistic GD and Optimistic Adam.
 
 ```python
-OptaxOGD().optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
-OptaxOAdam().optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+OptaxOGD().optimize(objective=obj, learning_rate=0.1, random_seed=42)
+OptaxOAdam().optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1382,8 +1423,8 @@ OptaxOAdam().optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
 Sign-based optimizers — update with the sign of the gradient.
 
 ```python
-OptaxSignSGD().optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
-OptaxSignum().optimize(problem_objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
+OptaxSignSGD().optimize(objective=obj, learning_rate=0.1, random_seed=42)
+OptaxSignum().optimize(objective=obj, learning_rate=0.1, momentum=0.9, random_seed=42)
 ```
 
 | Extra hyperparameter | Default | Applies to | Description |
@@ -1398,7 +1439,7 @@ SM3 — memory-efficient adaptive optimizer for sparse gradients ([Anil et al., 
 
 ```python
 optimizer = OptaxSM3()
-optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 ```
 
 ---
@@ -1411,7 +1452,7 @@ L-BFGS optimizer via Optax. Uses second-order curvature information for faster c
 
 ```python
 optimizer = OptaxLBFGS()
-optimizer.optimize(problem_objective=obj, patience=500, random_seed=42)
+optimizer.optimize(objective=obj, patience=500, random_seed=42)
 ```
 
 ---
@@ -1469,14 +1510,15 @@ optimizer.optimize(problem_objective=obj, patience=500, random_seed=42)
 | `RandomSearch` | Evolutionary | No hyperparameters, unbiased baseline | Baseline comparison |
 | `EvoxPSO` | Evolutionary | Swarm intelligence, many variants | Moderate-dimensional problems |
 | `EvoxES` | Evolutionary | Covariance adaptation (CMA-ES) | General black-box optimization |
+| `PyCMACMAES` / `CMAESCMA` / `CMAESSepCMA` | Evolutionary | CMA-ES backends with full or diagonal covariance | General black-box optimization |
 | `NevergradOnePlusOne` | Evolutionary | Minimal (1+1)-ES, very lightweight | Sanity-check baseline |
 | `NevergradTBPSA` | Evolutionary | Noise-robust, adaptive population | Noisy / rugged landscapes |
 | `NevergradNGOpt` | Evolutionary | Auto algorithm selection | Library-default baseline |
 | `BotorchBO` | Surrogate | Sample-efficient, uncertainty-aware | Low evaluation budgets |
 | `BotorchTuRBO` | Surrogate | Local trust region, high-dim friendly | High-dimensional, expensive evals |
 | `ReSTIR` | Surrogate | Scalable kNN surrogate, GPU-native | Large candidate pools |
-| `OmadsMADS` | Direct Search | MADS search + poll, mesh refinement | Rugged-landscape local exploration |
-| `OmadsOrthoMADS` | Direct Search | OrthoMADS poll only, orthogonal dirs | Local refinement, predictable cost |
+| `OmadsMADS` | Derivative-Free | MADS search + poll, mesh refinement | Rugged-landscape local exploration |
+| `OmadsOrthoMADS` | Derivative-Free | OrthoMADS poll only, orthogonal dirs | Local refinement, predictable cost |
 | `PDFOUOBYQA` / `PDFONEWUOA` / `PDFOLINCOA` / `PyBOBYQA` | Derivative-Free | Powell trust-region DFO | Smooth bounded problems |
 | `NelderMead` / `Powell` | Derivative-Free | SciPy classical search | Low-dim smooth losses |
 | `BasinHopping` / `DualAnnealing` | Global Search | SciPy stochastic global | Multimodal landscapes |

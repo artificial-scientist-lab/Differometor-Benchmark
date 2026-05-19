@@ -11,6 +11,8 @@ One class per algorithm, named after the algorithm.
 
 from __future__ import annotations
 
+import inspect
+
 from scipy.optimize import SR1 as ScipySR1
 
 import numpy as np
@@ -18,6 +20,7 @@ import pytest
 
 from dfbench.algorithms import (
     BasinHopping,
+    BotorchTuRBO,
     Dogleg,
     DualAnnealing,
     EvoxES,
@@ -138,6 +141,18 @@ class TestNevergrad:
         obj = Objective(mock_problem, max_evals=30, max_time=60)
         algo.optimize(obj, random_seed=42, num_evaluations=3)
         assert obj.eval_count > 0
+
+
+# ── BoTorch TuRBO: API defaults ─────────────────────────────────────
+
+
+class TestBotorchTuRBO:
+    def test_n_restarts_defaults_to_none(self):
+        """TuRBO restart count is uncapped by default and budget-limited."""
+        default = inspect.signature(BotorchTuRBO.optimize).parameters[
+            "n_restarts"
+        ].default
+        assert default is None
 
 
 # ── ReSTIR helpers: kNN, standardisation, importance ─────────────────

@@ -13,12 +13,15 @@ src/dfbench/
 │   ├── problem.py            # ContinuousProblem ABC
 │   └── utils.py              # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
-│   ├── evolutionary/         # RandomSearch, EvoxPSO, EvoxES
+│   ├── derivative_free/      # OMADS, PDFO/Py-BOBYQA, NelderMead, Powell
+│   ├── global_search/        # BasinHopping, DualAnnealing
+│   ├── evolutionary/         # RandomSearch, EvoxPSO, EvoxES, Nevergrad, CMA family
 │   ├── gradient_based/
-│   │   ├── optax/            # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
+│   │   ├── optax/            # 34 Optax-based optimizers (OptaxAdam, OptaxLAMB, ...)
 │   │   ├── scipy/            # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
-│   │   └── misc/             # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, …)
-│   ├── surrogate_based/      # BotorchBO, BotorchTuRBO, ReSTIR
+│   │   ├── custom_jax.py     # Native-JAX custom/hybrid batch
+│   │   └── *.py              # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, ...)
+│   ├── surrogate_based/      # BoTorch/Ax/HEBO/SMAC/ReSTIR/TuRBO-LBFGS
 │   └── generative/           # VAESampling
 ├── problems/
 │   ├── base_problem.py       # OpticalSetupProblem (shared optics logic)
@@ -68,7 +71,7 @@ An algorithm defines *how* to search. Every algorithm subclasses `OptimizationAl
 |--------------------|---------|
 | `algorithm_str` | Unique identifier (e.g. `"adam_gd"`, `"evox_cmaes"`) |
 | `algorithm_type` | One of `GRADIENT_BASED`, `EVOLUTIONARY`, `SURROGATE_BASED`, `GENERATIVE` |
-| `optimize(problem_objective, …)` | Main entry point — receives a pre-configured `Objective`, runs the loop, returns it |
+| `optimize(objective, …)` | Main entry point — receives a pre-configured `Objective`, runs the loop, returns it |
 
 Algorithms **never** create their own `Objective`; they receive one from the caller (or from the `Benchmark` harness). This inversion of control ensures the harness can set budget limits, select seeds, and configure history storage uniformly.
 

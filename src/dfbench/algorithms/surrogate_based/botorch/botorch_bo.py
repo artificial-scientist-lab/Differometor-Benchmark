@@ -34,44 +34,48 @@ class BotorchBO(OptimizationAlgorithm):
 
     Example:
         >>> problem = VoyagerProblem()
-        >>> optimizer = BotorchBO()
+        >>> optimizer = BotorchBO(batch_size=5)
         >>> objective = optimizer.optimize(
-        ...     problem_objective=objective,
+        ...     objective=objective,
         ...     max_iterations=100,
         ...     n_initial=10,
-        ...     batch_size=5,
+        ...     acquisition_batch_size=5,
         ... )
     """
 
     algorithm_str: str = "botorch_bo"
     algorithm_type: AlgorithmType = AlgorithmType.SURROGATE_BASED
 
-    def __init__(self) -> None:
+    def __init__(self, batch_size: int = 1) -> None:
         """Initialize BoTorch Bayesian Optimization.
 
-        No configuration parameters needed - all settings are provided
-        at optimization time via the optimize() method.
+        Args:
+            batch_size: Number of candidates evaluated per ``vmap_value`` call.
         """
+        if batch_size < 1:
+            raise ValueError("batch_size must be at least 1.")
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = torch.float64
+        self.batch_size = batch_size
 
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "n_params"] | None = None,
         num_restarts: int = 20,
         raw_samples: int | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
-        batch_size: int = 1,
+        acquisition_batch_size: int = 1,
         **bo_kwargs,
     ) -> None:
         """Run Bayesian Optimization with batch acquisition.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             max_iterations: Optional cap on BO iterations (excluding initial samples).
                 When ``None`` the algorithm runs until ``obj.budget_exceeded``.
             init_params: Initial parameters to include in the training set.
@@ -79,10 +83,14 @@ class BotorchBO(OptimizationAlgorithm):
             random_seed: Random seed for reproducibility. Defaults to None.
             n_initial: Number of initial Sobol samples before fitting GP.
                 Defaults to 10.
-            batch_size: Number of points to acquire per iteration. Defaults to 1.
+            acquisition_batch_size: Number of points to acquire per iteration.
+                Defaults to 1.
             **bo_kwargs: Additional keyword arguments for acquisition optimization.
         """
-        obj = problem_objective
+        if acquisition_batch_size < 1:
+            raise ValueError("acquisition_batch_size must be at least 1.")
+
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -105,7 +113,7 @@ class BotorchBO(OptimizationAlgorithm):
         )
 
         # Warmup JIT (vmap_value is used for batch evaluation in _evaluate_y)
-        obj.warmup_vmap_value(batch_size=batch_size)
+        obj.warmup_vmap_value(batch_size=self.batch_size)
 
         obj.start_logging()
 

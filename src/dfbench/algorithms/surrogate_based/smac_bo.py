@@ -52,7 +52,7 @@ class SMAC(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
@@ -67,13 +67,13 @@ class SMAC(OptimizationAlgorithm):
         once the budget is exhausted).
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded). Currently unused.
             random_seed: Seed for reproducibility.
             n_initial: Initial random configurations.
             **smac_kwargs: Forwarded to SMAC Scenario.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
         dim = problem.n_params
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -87,7 +87,7 @@ class SMAC(OptimizationAlgorithm):
             cs.add(CS_Float(f"x{i}", bounds=(float(lb[i]), float(ub[i]))))
 
         # JIT warmup
-        _ = obj.vmap_value(jnp.zeros((1, dim)))
+        obj.warmup_vmap_value(batch_size=1)
         obj.start_logging()
 
         # Target function called by SMAC

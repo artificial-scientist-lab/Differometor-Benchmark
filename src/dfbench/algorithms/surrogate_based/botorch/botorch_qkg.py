@@ -69,7 +69,7 @@ class BotorchqKG(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
@@ -81,7 +81,7 @@ class BotorchqKG(OptimizationAlgorithm):
         """Run knowledge-gradient BO.
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
             n_initial: Sobol initialisation budget.
@@ -91,7 +91,7 @@ class BotorchqKG(OptimizationAlgorithm):
             num_fantasies: Number of fantasy models for KG estimation.
             **bo_kwargs: Forwarded to ``optimize_acqf``.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
         dim = problem.n_params
 
@@ -109,7 +109,7 @@ class BotorchqKG(OptimizationAlgorithm):
         }
 
         # JIT warmup
-        _ = obj.vmap_value(jnp.zeros((1, dim)))
+        obj.warmup_vmap_value(batch_size=1)
         obj.start_logging()
 
         # Initial Sobol

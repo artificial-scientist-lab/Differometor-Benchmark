@@ -51,7 +51,7 @@ class NevergradNGOpt(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         random_seed: int | None = None,
         n_restarts: int = 1,
@@ -59,13 +59,13 @@ class NevergradNGOpt(OptimizationAlgorithm):
         """Run NGOpt optimization via Nevergrad.
 
         Args:
-            problem_objective: Pre-configured Objective for function evaluations.
+            objective: Pre-configured Objective for function evaluations.
             max_iterations: Cap on total ask/tell iterations across all restarts.
                 If None, runs until the Objective budget is exhausted.
             random_seed: Seed for reproducibility.
             n_restarts: Number of independent restarts. Budget is split evenly.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -81,8 +81,7 @@ class NevergradNGOpt(OptimizationAlgorithm):
         budget_per_restart = max_iterations // n_restarts if max_iterations else None
 
         # JIT warmup
-        _warmup = jnp.zeros(n_params)
-        _ = obj.value(_warmup)
+        obj.warmup_value()
 
         obj.start_logging()
 

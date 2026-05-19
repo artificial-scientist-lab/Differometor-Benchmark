@@ -71,7 +71,7 @@ class AxSAASBO(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
@@ -83,7 +83,7 @@ class AxSAASBO(OptimizationAlgorithm):
         """Run SAASBO.
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded space).
             random_seed: Seed for reproducibility.
             n_initial: Sobol initialisation budget.
@@ -93,7 +93,7 @@ class AxSAASBO(OptimizationAlgorithm):
             num_samples: NUTS posterior samples.
             **ax_kwargs: Forwarded to the Ax model bridge.
         """
-        obj = problem_objective
+        obj = objective
         problem = obj.problem
         dim = problem.n_params
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -139,7 +139,7 @@ class AxSAASBO(OptimizationAlgorithm):
         )
 
         # ── JIT warmup ───────────────────────────────────────────────
-        _ = obj.vmap_value(jnp.zeros((1, dim)))
+        obj.warmup_vmap_value(batch_size=1)
 
         obj.start_logging()
 

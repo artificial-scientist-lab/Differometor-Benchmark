@@ -49,7 +49,7 @@ class OptaxSAM(OptaxAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params=None,
         random_seed=None,
         patience=None,
@@ -58,7 +58,7 @@ class OptaxSAM(OptaxAlgorithm):
         **kwargs,
     ):
         """SAM loop — two gradient evaluations per logical step."""
-        obj = problem_objective
+        obj = objective
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         if init_params is None:
@@ -74,7 +74,7 @@ class OptaxSAM(OptaxAlgorithm):
         opt_state = optimizer.init(params)
 
         # JIT warmup
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
 
         obj.start_logging()
 

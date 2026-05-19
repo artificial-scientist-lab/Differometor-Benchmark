@@ -226,7 +226,7 @@ Clears all histories, resets counters, and prepares for a completely fresh run. 
 
 ### `set_seed(seed: int)`
 
-Initializes the internal JAX PRNG key. Subsequent calls to `random_params_bounded()` and `random_params_unbounded()` consume and split this key automatically, guaranteeing identical initial samples across runs with the same seed.
+Initializes the internal JAX PRNG key. Subsequent calls to `random_params()`, `random_params_bounded()`, and `random_params_unbounded()` consume and split this key automatically, guaranteeing identical initial samples across runs with the same seed.
 
 This is to facilitate uniform initialization across algorithms.
 
@@ -263,6 +263,10 @@ obj.set_space_mode(
 ---
 
 ## Random Sampling
+
+### `random_params(n_samples=1, rng_key=None)`
+
+Returns random samples from the active Objective space: bounded when `obj.unbounded` is `False`, unbounded when `obj.unbounded` is `True`. Prefer this in algorithms after calling `prepare()` when sampling should follow the configured space mode.
 
 ### `random_params_bounded(n_samples=1, rng_key=None)`
 
