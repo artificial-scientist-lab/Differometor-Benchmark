@@ -326,7 +326,7 @@ class EvosaxLMMAES(OptimizationAlgorithm):
         state = strategy.init(init_rng, mean0, es_params)
 
         batch_size = self._batch_size
-    obj.warmup_vmap_value(batch_size=min(batch_size, pop_size))
+        obj.warmup_vmap_value(batch_size=min(batch_size, pop_size))
         obj.start_logging()
 
         rng, loop_rng = jax.random.split(rng)
