@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import jax.numpy as jnp
 import torch
 from jaxtyping import Float
 from botorch.utils.transforms import unnormalize
@@ -14,6 +15,7 @@ def evaluate_y(
         obj: Objective,
         max_retries: int = 3,
         perturbation_scale: float = 1e-6,
+        batch_size: int = 4,
     ) -> tuple[Float[torch.Tensor, "..."], Float[torch.Tensor, "..."]]:
         """Evaluate objective function at given input(s) through Objective wrapper.
 
@@ -27,6 +29,7 @@ def evaluate_y(
             obj: Objective wrapper for evaluation tracking.
             max_retries: Number of retries with perturbation for NaN values.
             perturbation_scale: Scale of random perturbation for retries.
+            batch_size: Number of candidates evaluated per ``vmap_value`` call.
 
         Returns:
             Tuple of (negated objective values, validity mask).
@@ -40,7 +43,10 @@ def evaluate_y(
             Y_jax = obj.value(X_jax)
             Y_torch = torch.tensor([Y_jax.item()], device=X.device, dtype=X.dtype)
         else:
-            Y_jax = obj.vmap_value(X_jax)
+            y_chunks = []
+            for start in range(0, X_jax.shape[0], batch_size):
+                y_chunks.append(obj.vmap_value(X_jax[start : start + batch_size]))
+            Y_jax = jnp.concatenate(y_chunks)
             Y_torch = torch.from_numpy(np.array(Y_jax)).to(
                 device=X.device, dtype=X.dtype
             )

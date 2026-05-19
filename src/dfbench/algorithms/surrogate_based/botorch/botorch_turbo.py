@@ -215,7 +215,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int | None = None,
-        batch_size: int = 1,
+        acquisition_batch_size: int = 1,
         num_restarts: int = 10,
         raw_samples: int | None = None,
         acqf: Literal["ts", "ei"] = "ts",

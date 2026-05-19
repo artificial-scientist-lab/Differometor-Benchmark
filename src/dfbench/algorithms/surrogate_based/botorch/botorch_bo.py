@@ -186,7 +186,7 @@ class BotorchBO(OptimizationAlgorithm):
             candidates, _ = optimize_acqfn(
                 acquisition_function=acqf,
                 bounds=unit_bounds,
-                q=batch_size,
+                q=acquisition_batch_size,
                 num_restarts=num_restarts,
                 raw_samples=raw_samples,
                 seed=random_seed,
