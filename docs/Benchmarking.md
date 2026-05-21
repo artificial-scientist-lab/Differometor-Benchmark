@@ -63,7 +63,7 @@ AlgorithmConfig(
 )
 ```
 
-**Why a separate config instead of passing kwargs directly?**  
+**Why a separate config instead of passing kwargs directly?**
 So the same algorithm instance can appear twice with different hyperparameters (e.g., `Adam_lr0.01` vs `Adam_lr0.1`).
 
 ### `Benchmark`
