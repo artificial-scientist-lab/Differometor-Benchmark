@@ -184,6 +184,10 @@ markers = [
 addopts = "-m 'not slow and not gpu' --tb=short -q"
 
 
+[tool.ruff]
+extend-exclude = ["analysis"]
+force-exclude = true
+
 [tool.ruff.lint]
 ignore = [ # Ignore safely to allow jaxtyping
     "F722",
