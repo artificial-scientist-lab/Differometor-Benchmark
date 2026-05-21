@@ -107,6 +107,8 @@ all = [
 test = [
     "pytest>=8.0",
     "pytest-timeout>=2.2",
+    "pytest-cases>=3",
+    "pytest-repeat>=0",
 ]
 
 [tool.hatch.build]
@@ -159,12 +161,14 @@ analysis = [
     "snakeviz>=2.2.2",
     "tueplots>=0.2.1",
 ]
-test = [
+dev = [
+    "ruff",
+    "pre-commit",
+    "mypy",
     "pytest>=8.0",
     "pytest-timeout>=2.2",
-]
-dev = [
-    "ruff>=0.14.8",
+    "pytest-cases>=3",
+    "pytest-repeat>=0",
 ]
 publish = [
     "build>=1.2",

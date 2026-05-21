@@ -1,0 +1,56 @@
+name: tests
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  tests:
+    name: py${{ matrix.python-version }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv latest
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          version: latest
+          enable-cache: true
+          prune-cache: true
+          cache-dependency-glob: "**/pyproject.toml"
+
+      - name: Run tests
+        run: >
+          uv run
+          --extra evolution
+          --extra optax
+          --extra scipy
+          --extra pybobyqa
+          --extra test
+          --with botorch
+          --with gpytorch
+          --with OMADS
+          pytest
+          -k "not PDFO
+          and not test_warmup_vmap_hessian_calls_underlying_twice
+          and not test_unsuccessful_status_warns"
