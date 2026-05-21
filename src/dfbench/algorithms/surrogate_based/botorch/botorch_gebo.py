@@ -18,14 +18,13 @@ finite-difference or automatic differentiation through JAX.
 from __future__ import annotations
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 import torch
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.core.utils import t2j, j2t
+from dfbench.core.utils import t2j
 from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     DEVICE,
     DTYPE,

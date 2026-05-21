@@ -1,6 +1,5 @@
 import jax
 import jax.numpy as jnp
-import numpy as np
 import torch
 from typing import Literal, get_args
 from evox.algorithms import PSO, CLPSO, CSO, DMSPSOEL, FSPSO, SLPSOGS, SLPSOUS
@@ -9,7 +8,6 @@ from evox.workflows import EvalMonitor, StdWorkflow
 from jaxtyping import Array, Float
 
 from dfbench import (
-    ContinuousProblem,
     OptimizationAlgorithm,
     AlgorithmType,
     j2t,

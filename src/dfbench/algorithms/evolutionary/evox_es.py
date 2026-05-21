@@ -22,7 +22,6 @@ from evox.workflows import EvalMonitor, StdWorkflow
 from jaxtyping import Array, Float
 
 from dfbench import (
-    ContinuousProblem,
     OptimizationAlgorithm,
     AlgorithmType,
     j2t,

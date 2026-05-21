@@ -57,7 +57,7 @@ def safe_evaluate(
     for k in range(_MAX_NAN_STREAK):
         if obj.budget_exceeded:
             break
-        scale = _NAN_PERTURB_BASE * (2 ** k)
+        scale = _NAN_PERTURB_BASE * (2**k)
         perturbed = np.clip(cur + rng.normal(size=cur.shape) * scale, lb, ub)
         loss = obj.value(jnp.asarray(perturbed, dtype=jnp.float32))
         if bool(jnp.isfinite(loss)):

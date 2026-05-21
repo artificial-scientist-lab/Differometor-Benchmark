@@ -1,6 +1,6 @@
 """Test script for AdamGD optimizer."""
 
-from dfbench.problems import VoyagerProblem, RandomUIFOProblem
+from dfbench.problems import VoyagerProblem
 from dfbench.algorithms import AdamGD
 from dfbench import Objective
 

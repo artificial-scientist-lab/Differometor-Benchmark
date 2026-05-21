@@ -60,9 +60,7 @@ class TestOptimizationAlgorithmABC:
             def __init__(self):
                 pass
 
-            def optimize(
-                self, objective, init_params=None, random_seed=None, **kw
-            ):
+            def optimize(self, objective, init_params=None, random_seed=None, **kw):
                 pass
 
         algo = DummyAlgo()
@@ -83,9 +81,7 @@ class TestOptimizationAlgorithmABC:
             def __init__(self):
                 pass
 
-            def optimize(
-                self, objective, init_params=None, random_seed=None, **kw
-            ):
+            def optimize(self, objective, init_params=None, random_seed=None, **kw):
                 pass
 
         algo = DummyAlgo()

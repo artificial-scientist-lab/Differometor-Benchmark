@@ -5,8 +5,6 @@ Simulated annealing gradient descent based on https://arxiv.org/abs/2107.07558
 import math
 
 import jax
-import jax.numpy as jnp
-import numpy as np
 import optax
 from jaxtyping import Array, Float
 
@@ -165,7 +163,6 @@ class SAGD(OptimizationAlgorithm):
             **adam_kwargs: Additional keyword arguments passed to optax.adam().
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, rng_key = self.prepare(
             obj, unbounded=True, random_seed=random_seed

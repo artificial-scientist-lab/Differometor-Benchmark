@@ -22,7 +22,6 @@ Reference:
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -31,7 +30,6 @@ from dfbench.algorithms.derivative_free._dfo_common import (
     dfo_objective_wrapper,
     multistart_loop,
     solver_bounds_np,
-    clip_to_bounds,
 )
 
 
@@ -84,7 +82,11 @@ class PDFOLINCOA(OptimizationAlgorithm):
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         lower, upper = solver_bounds_np(obj)
-        radius_init = self.radius_init if self.radius_init is not None else float(0.1 * np.mean(upper - lower))
+        radius_init = (
+            self.radius_init
+            if self.radius_init is not None
+            else float(0.1 * np.mean(upper - lower))
+        )
         npt = self.npt if self.npt is not None else 2 * obj.n_params + 1
 
         fun = dfo_objective_wrapper(obj)
@@ -98,9 +100,7 @@ class PDFOLINCOA(OptimizationAlgorithm):
             if lc is not None:
                 A_ub = np.asarray(lc["A_ub"], dtype=np.float64)
                 b_ub = np.asarray(lc["b_ub"], dtype=np.float64)
-                constraints.append(
-                    LinearConstraint(A_ub, ub=b_ub)
-                )
+                constraints.append(LinearConstraint(A_ub, ub=b_ub))
 
         # JIT warmup
         obj.warmup_value()
@@ -133,7 +133,9 @@ class PDFOLINCOA(OptimizationAlgorithm):
             )
 
         multistart_loop(
-            obj, key, _solve,
+            obj,
+            key,
+            _solve,
             n_restarts=self.n_restarts,
             init_params=init_params,
         )

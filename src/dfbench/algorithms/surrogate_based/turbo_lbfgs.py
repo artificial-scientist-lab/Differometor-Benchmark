@@ -24,7 +24,7 @@ from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.core.utils import t2j, inverse_sigmoid_bounding
+from dfbench.core.utils import inverse_sigmoid_bounding
 from dfbench.algorithms.surrogate_based.botorch.botorch_turbo import (
     BotorchTuRBO,
     TurboState,
@@ -36,7 +36,6 @@ from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     evaluate_objective,
     fit_gp,
     get_problem_bounds_torch,
-    sobol_initial_samples,
 )
 
 

@@ -8,8 +8,6 @@ from __future__ import annotations
 import os
 import importlib
 
-import pytest
-
 
 class TestMplConfigDir:
     def test_set_after_import(self):

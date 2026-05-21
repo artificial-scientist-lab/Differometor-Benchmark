@@ -122,19 +122,17 @@ class TestConstrainedVoyagerProblem:
         """4.14 Switching power_penalty_fn changes loss."""
         from dfbench.problems.base_problem import (
             squashed_relu_penalty,
-            relu_penalty,
             zero_penalty,
         )
-        from dfbench.problems import ConstrainedVoyagerProblem
 
         b = self.problem.bounds
         mid = (b[0] + b[1]) / 2
 
         self.problem._power_penalty_fn = squashed_relu_penalty
-        loss_sq = float(self.problem.objective_function(mid))
+        loss_sq = float(self.problem.objective_function(mid))  # noqa
 
         self.problem._power_penalty_fn = zero_penalty
-        loss_zero = float(self.problem.objective_function(mid))
+        loss_zero = float(self.problem.objective_function(mid))  # noqa
         # Loss should differ if there are actual power violations
         # (may be equal if midpoint has no violations)
 

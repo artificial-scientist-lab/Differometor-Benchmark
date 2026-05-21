@@ -5,20 +5,16 @@ Tests 9.1–9.14.
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from dfbench.benchmark.benchmark import (
     AlgorithmConfig,
-    AggregateMetric,
     Benchmark,
     BenchmarkResult,
     RunData,
-    SingleMetric,
 )
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
@@ -222,7 +218,7 @@ class TestBenchmarkSaveLoad:
             n_time_samples=3,
             random_seed=42,
         )
-        results = bm.run(save_csv=False, save_run_data=True, output_dir=str(tmp_path))
+        _ = bm.run(save_csv=False, save_run_data=True, output_dir=str(tmp_path))
         npz_files = list(tmp_path.rglob("*.npz"))
         assert len(npz_files) > 0
 
@@ -263,7 +259,7 @@ class TestBenchmarkCSV:
             random_seed=42,
         )
         bm.run(save_csv=True)
-        csv_files = list(tmp_path.rglob("*.csv")) + list(Path("data").rglob("*.csv"))
+        csv_files = list(tmp_path.rglob("*.csv")) + list(Path("data").rglob("*.csv"))  # noqa: F841, check next line
         # Just verify it doesn't crash; exact path depends on implementation
         # The CSV writing code is exercised regardless
 

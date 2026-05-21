@@ -6,9 +6,7 @@ Differometor or GPU simulation, making it suitable for fast CI tests.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 from dfbench.core.problem import ContinuousProblem

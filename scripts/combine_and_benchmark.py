@@ -38,8 +38,10 @@ def run_benchmark(combined_dir: Path, success_loss: float, n_time_samples: int):
             meta = json.load(f)
         n_runs = meta.get("n_runs", TOTAL_RUNS)
         max_time = meta.get("max_time", MAX_TIME)
-        print(f"Loaded metadata: {len(meta.get('algorithms', []))} algorithms, "
-              f"{n_runs} runs, max_time={max_time}s")
+        print(
+            f"Loaded metadata: {len(meta.get('algorithms', []))} algorithms, "
+            f"{n_runs} runs, max_time={max_time}s"
+        )
     else:
         n_runs = TOTAL_RUNS
         max_time = MAX_TIME
@@ -48,6 +50,7 @@ def run_benchmark(combined_dir: Path, success_loss: float, n_time_samples: int):
 
     # Dummy config — not used when loading, but Benchmark requires it
     from dfbench.algorithms import AdamGD
+
     dummy_configs = [AlgorithmConfig(AdamGD(), {}, name="dummy")]
 
     benchmark = Benchmark(

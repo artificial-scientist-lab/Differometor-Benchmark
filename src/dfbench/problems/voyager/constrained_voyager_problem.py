@@ -1,7 +1,6 @@
 """Voyager problem with realistic 3-noise model and power constraints."""
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 from differometor.setups import voyager

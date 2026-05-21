@@ -1,9 +1,6 @@
 """UIFO (Uniform Interferometer Field Optimization) problems with power constraints."""
 
-import copy
-
 import jax
-import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 from differometor.setups import uifo, constrain_inter_grid_cell_spaces
@@ -495,7 +492,9 @@ class UIFOProblem(OpticalSetupProblem):
         self.objective_function = objective_function
 
         # Compute and cache topology string
-        self._topology_string = topology_to_string(self._centers, self._boundaries, size)
+        self._topology_string = topology_to_string(
+            self._centers, self._boundaries, size
+        )
 
     @property
     def optimization_pairs(self) -> list[tuple]:

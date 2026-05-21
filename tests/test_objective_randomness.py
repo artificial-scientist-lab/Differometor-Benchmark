@@ -6,7 +6,6 @@ Tests 5.5–5.12: set_seed, random_params_bounded, random_params_unbounded.
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 from dfbench.core.objective import Objective
 from differometor.utils import sigmoid_bounding

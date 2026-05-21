@@ -30,7 +30,7 @@ import jax.numpy as jnp
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, fields, field
-from typing import Any, Optional
+from typing import Any
 from jaxtyping import Array, Float
 
 from dfbench import Objective
@@ -49,7 +49,6 @@ from dfbench.benchmark.metrics import (
     multi_solution_diversity_nn,
     multi_auc_top_k,
     compute_performance_profile,
-    get_index_at_time,
     slice_history_at_time,
     get_value_at_time,
 )
@@ -851,7 +850,7 @@ class Benchmark:
         if not np.isnan(tts_mean):
             print(f"  Time to success: {tts_mean:.2f} ± {tts_std:.2f}s")
         else:
-            print(f"  Time to success: N/A (no successful runs)")
+            print("  Time to success: N/A (no successful runs)")
 
     def print_summary(self, results: list[BenchmarkResult]) -> None:
         """Print a summary comparison table of all algorithms."""

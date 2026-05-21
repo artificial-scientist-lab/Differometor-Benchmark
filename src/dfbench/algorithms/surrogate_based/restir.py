@@ -5,7 +5,6 @@ Implementation of a kNN-surrogate based optimization algorithm using JAX.
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 from functools import partial
 from jaxtyping import Array, Float
@@ -329,7 +328,6 @@ class ReSTIR(OptimizationAlgorithm):
                 replace=False,
             )
             selected_samples = sel_samples[final_idx]
-            selected_logits = weight_logits[final_idx]
 
             # Batched Adam GD refinement on all selected candidates
             if n_final_candidates > 0 and gd_steps > 0:

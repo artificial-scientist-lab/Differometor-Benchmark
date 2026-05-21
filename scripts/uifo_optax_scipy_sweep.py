@@ -112,9 +112,13 @@ ALGORITHMS = [
 
 # ── CLI ───────────────────────────────────────────────────────────────
 
-parser = argparse.ArgumentParser(description="UIFO sweep over Optax + SciPy algorithms.")
+parser = argparse.ArgumentParser(
+    description="UIFO sweep over Optax + SciPy algorithms."
+)
 parser.add_argument(
-    "-a", "--algo", required=True,
+    "-a",
+    "--algo",
+    required=True,
     help=f"Algorithm index (0–{len(ALGORITHMS) - 1}), or 'list' to print the table.",
 )
 parser.add_argument("-s", "--seed", type=int, default=0, help="Run seed (0–24).")
