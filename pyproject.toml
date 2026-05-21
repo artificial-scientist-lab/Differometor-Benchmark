@@ -188,6 +188,7 @@ addopts = "-m 'not slow and not gpu' --tb=short -q"
 ignore = [ # Ignore safely to allow jaxtyping
     "F722",
     "F821",
+    "E741",
 ]
 
 # Exclude a variety of commonly ignored directories.
