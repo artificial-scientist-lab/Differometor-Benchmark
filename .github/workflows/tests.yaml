@@ -15,7 +15,6 @@ on:
 
 jobs:
   tests:
-    name: py${{ matrix.python-version }}
     defaults:
       run:
         shell: bash
