@@ -31,8 +31,7 @@ try:
     import cma
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "pycma is required for PyCMA* algorithms. "
-        "Install it with:  uv add cma"
+        "pycma is required for PyCMA* algorithms. Install it with:  uv add cma"
     ) from exc
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
@@ -573,7 +572,7 @@ class PyCMABIPOP(OptimizationAlgorithm):
             else:
                 # Large-population regime
                 large_restarts += 1
-                large_pop = base_pop * (2 ** large_restarts)
+                large_pop = base_pop * (2**large_restarts)
                 pop_size = large_pop
                 sigma = sigma_base
                 x0_unit = np.random.uniform(0.0, 1.0, size=n)

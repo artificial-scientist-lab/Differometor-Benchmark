@@ -11,9 +11,7 @@ parametrization. Unbounded mode is not supported.
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import numpy as np
-from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective

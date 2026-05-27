@@ -16,10 +16,7 @@
 import jax.numpy as jnp
 from differometor.setups import voyager
 from dfbench.problems import ConstrainedVoyagerProblem
-from dfbench.algorithms import AdamGD
 from dfbench import Objective
-from dfbench.core.utils import inverse_sigmoid_bounding
-from differometor.utils import sigmoid_bounding
 from differometor.simulate import simulate
 from differometor.utils import calculate_sensitivities, calculate_powers
 import jax
@@ -162,7 +159,7 @@ for idx in range(n_params):
 if not negative_params:
     print("  NONE — no single-parameter perturbation achieves loss < 0")
 
-print(f"All parameters sorted by minimum achievable loss:")
+print("All parameters sorted by minimum achievable loss:")
 print("-" * 80)
 sorted_indices = sorted(range(n_params), key=lambda i: results[i]["min_loss"])
 for idx in sorted_indices[:15]:  # show top 15
@@ -574,7 +571,7 @@ ax_raw.set_yticklabels(labels, fontsize=7)
 ax_raw.invert_yaxis()
 ax_raw.axvline(0, color="black", linewidth=0.5)
 ax_raw.set_xlabel("Component value (symlog)")
-ax_raw.set_title(f"Steepest descent (−g)\ncos(−g, −g) = 1.000")
+ax_raw.set_title("Steepest descent (−g)\ncos(−g, −g) = 1.000")
 ax_raw.grid(axis="x", alpha=0.25, linestyle="--")
 
 ax_clamp.barh(y, damped_grad, height=0.7, color="mediumpurple")
@@ -596,7 +593,7 @@ ax_safe.set_title(f"|eigenvalue| clamped (descent)\ncos(−g, step) = {cos_safe:
 ax_safe.grid(axis="x", alpha=0.25, linestyle="--")
 
 fig.suptitle(
-    f"Newton step with damped Hessian (ε = max|λ| × 1e-6)",
+    "Newton step with damped Hessian (ε = max|λ| × 1e-6)",
     fontsize=13,
 )
 plt.tight_layout()
@@ -796,7 +793,7 @@ param_range = upper - lower
 diffs = newton_best_params - init_params
 rel_diffs = diffs / param_range
 top_changed = jnp.argsort(jnp.abs(rel_diffs))[-10:]
-print(f"\nTop 10 parameters by relative change:")
+print("\nTop 10 parameters by relative change:")
 for idx in reversed(top_changed):
     idx = int(idx)
     name = vp.optimization_pairs[idx]

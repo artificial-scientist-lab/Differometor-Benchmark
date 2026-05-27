@@ -21,12 +21,14 @@ Edit ``GLOBAL_MAX_EVALS``, ``POP_SIZE``, and ``RANDOM_SEED`` to taste.
 
 from __future__ import annotations
 
+from dfbench import Objective
+from dfbench.problems import VoyagerProblem
+from dfbench.algorithms.evolutionary.jax_es import JAXOnePlusOneES, JAXMuLambdaES
+
+
 MAX_EVALS = 100_000
 POP_SIZE = 50
 RANDOM_SEED = 42
-
-from dfbench import Objective
-from dfbench.problems import VoyagerProblem
 
 problem = VoyagerProblem()
 
@@ -74,7 +76,6 @@ except ImportError:
     print("evosax not installed — skipping evosax algorithms.")
 
 # --- native JAX ---
-from dfbench.algorithms.evolutionary.jax_es import JAXOnePlusOneES, JAXMuLambdaES
 
 configs += [
     (JAXOnePlusOneES(), {}),
@@ -86,7 +87,7 @@ configs += [
 # ---------------------------------------------------------------------------
 
 for algo, opt_kwargs in configs:
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running {algo.algorithm_str} ...")
 
     obj = Objective(

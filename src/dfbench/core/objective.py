@@ -343,9 +343,7 @@ class Objective:
         handles scaling to actual bounds.  The inverse mapping receives
         values already normalised to [0, 1] by the Objective.
         """
-        if (unit_mapping is None) != (
-            inverse_unit_mapping is None
-        ):
+        if (unit_mapping is None) != (inverse_unit_mapping is None):
             raise ValueError(
                 "Custom unbounded mapping requires both "
                 "unit_mapping and inverse_unit_mapping."
@@ -354,14 +352,10 @@ class Objective:
         self._unit_mapping = unit_mapping
         self._inverse_unit_mapping = inverse_unit_mapping
         self._unit_mapping_vmap = (
-            jax.vmap(unit_mapping)
-            if unit_mapping is not None
-            else None
+            jax.vmap(unit_mapping) if unit_mapping is not None else None
         )
         self._inverse_unit_mapping_vmap = (
-            jax.vmap(inverse_unit_mapping)
-            if inverse_unit_mapping is not None
-            else None
+            jax.vmap(inverse_unit_mapping) if inverse_unit_mapping is not None else None
         )
 
     def _map_unbounded_to_bounded(
@@ -384,9 +378,7 @@ class Objective:
         """Map a parameter batch from unbounded to bounded space."""
         if self._unit_mapping_vmap is not None:
             lower, upper = self._problem.bounds
-            return lower + (upper - lower) * self._unit_mapping_vmap(
-                params
-            )
+            return lower + (upper - lower) * self._unit_mapping_vmap(params)
         return jax.vmap(lambda x: sigmoid_bounding(x, self._problem.bounds))(params)
 
     def _map_bounded_to_unbounded(
@@ -438,9 +430,11 @@ class Objective:
 
             def _cols_chunk(basis_chunk):
                 """Compute multiple Hessian columns in parallel."""
+
                 def _single_col(e_i):
                     _, col = jax.jvp(_grad_for_hessian, (params,), (e_i,))
                     return col
+
                 return jax.vmap(_single_col)(basis_chunk)
 
             # Build full identity and split into chunks
@@ -449,9 +443,7 @@ class Objective:
             remainder = n % _hbs
             if remainder != 0:
                 pad_size = _hbs - remainder
-                basis = jnp.concatenate(
-                    [basis, jnp.zeros((pad_size, n))], axis=0
-                )
+                basis = jnp.concatenate([basis, jnp.zeros((pad_size, n))], axis=0)
             chunks = basis.reshape(-1, _hbs, n)
             # lax.map iterates sequentially over chunks
             result = jax.lax.map(_cols_chunk, chunks)
@@ -507,9 +499,7 @@ class Objective:
                 "set_space_mode() must be called before start_logging() so "
                 "evaluation histories stay consistent."
             )
-        if (unit_mapping is None) != (
-            inverse_unit_mapping is None
-        ):
+        if (unit_mapping is None) != (inverse_unit_mapping is None):
             raise ValueError(
                 "set_space_mode() custom mapping requires both "
                 "unit_mapping and inverse_unit_mapping."
@@ -1134,7 +1124,11 @@ class Objective:
             raise ValueError("n_samples must be at least 1.")
 
         midpoint = (self._bounds[0] + self._bounds[1]) / 2.0
-        bounded_params = midpoint[None, :] if n_samples == 1 else jnp.repeat(midpoint[None, :], repeats=n_samples, axis=0)
+        bounded_params = (
+            midpoint[None, :]
+            if n_samples == 1
+            else jnp.repeat(midpoint[None, :], repeats=n_samples, axis=0)
+        )
 
         if self.unbounded:
             return self._map_bounded_to_unbounded(bounded_params)
@@ -1828,10 +1822,16 @@ class Objective:
             algorithm_name = self.algorithm_str or "unknown"
 
         # Reuse cached path if no explicit filepath/hyper_param_str override
-        if self._cached_save_path is not None and filepath is None and hyper_param_str is None:
+        if (
+            self._cached_save_path is not None
+            and filepath is None
+            and hyper_param_str is None
+        ):
             save_path = self._cached_save_path
         else:
-            save_path = self._get_run_data_path(algorithm_name, filepath, hyper_param_str)
+            save_path = self._get_run_data_path(
+                algorithm_name, filepath, hyper_param_str
+            )
             if filepath is None and hyper_param_str is None:
                 self._cached_save_path = save_path
 

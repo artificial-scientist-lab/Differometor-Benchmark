@@ -91,8 +91,12 @@ class OptaxLBFGS(OptimizationAlgorithm):
         def _step(params, opt_state):
             loss, grads = value_and_grad_fn(params)
             updates, new_opt_state = optimizer.update(
-                grads, opt_state, params,
-                value=loss, grad=grads, value_fn=value_fn,
+                grads,
+                opt_state,
+                params,
+                value=loss,
+                grad=grads,
+                value_fn=value_fn,
             )
             new_params = jnp.asarray(optax.apply_updates(params, updates))
             return new_params, new_opt_state, loss, grads

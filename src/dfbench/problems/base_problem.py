@@ -8,7 +8,6 @@ from typing import Callable, Mapping
 
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
-import numpy as np
 from jaxtyping import Array, Float
 
 from differometor.components import (

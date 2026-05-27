@@ -22,7 +22,11 @@ class OptaxAdam(OptaxAlgorithm):
 
     def _make_optimizer(self, learning_rate=0.1, grad_clip_norm=1.0, **kw):
         return build_optimizer(
-            optax.adam(learning_rate, b1=kw.get("b1", 0.9), b2=kw.get("b2", 0.999),
-                       eps=kw.get("eps", 1e-8)),
+            optax.adam(
+                learning_rate,
+                b1=kw.get("b1", 0.9),
+                b2=kw.get("b2", 0.999),
+                eps=kw.get("eps", 1e-8),
+            ),
             grad_clip_norm=grad_clip_norm,
         )

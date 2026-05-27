@@ -3,7 +3,6 @@ from enum import Enum
 import secrets
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 
@@ -99,7 +98,7 @@ class OptimizationAlgorithm(ABC):
         """
         # 1. Setup references
         obj = objective
-        problem = obj.problem
+        problem = obj.problem  # noqa: F841, just for clarity and convention in the algorithm code
 
         # 2. Setup objective and resolve/apply random seed
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -117,11 +116,11 @@ class OptimizationAlgorithm(ABC):
                 obj.random_params_unbounded()
             )  # If unbounded = True was given to prepare()
             # Batched optimization
-            batched_params = obj.random_params_bounded(
+            batched_params = obj.random_params_bounded(  # noqa: F841, just for convention in the algorithm code
                 n_samples=10
             )  # Use self.batch_size from __init__() here
         else:
-            params = init_params
+            params = init_params  # noqa: F841, just for convention in the algorithm code
 
         # 4. JIT warmup (optional but recommended, else much time is lost during
         # the first evaluation). Warm up only the paths your algorithm will use.

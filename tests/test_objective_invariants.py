@@ -6,9 +6,6 @@ Tests 5.1–5.4, 5.13–5.59 (excluding randomness tests in test_objective_rando
 
 from __future__ import annotations
 
-import math
-import os
-import tempfile
 import time
 
 import jax
@@ -17,7 +14,6 @@ import numpy as np
 import pytest
 
 from dfbench.core.objective import Objective
-from differometor.utils import sigmoid_bounding
 
 
 # ======================================================================
@@ -604,7 +600,7 @@ class TestEvalTypeTracking:
         obj.vmap_hessian(batch)
         obj.vmap_value_grad_and_hessian(batch)
         counts = obj.eval_type_counts
-        assert 8 in counts   # hessian-only
+        assert 8 in counts  # hessian-only
         assert 11 in counts  # value+grad+hessian
         assert 12 in counts  # batched hessian
         assert 15 in counts  # batched value+grad+hessian

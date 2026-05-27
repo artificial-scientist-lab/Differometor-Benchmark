@@ -65,9 +65,7 @@ _NAN_PERTURB_BASE: float = 1e-10
 
 def _is_nonfinite(loss, grads) -> bool:
     """Return True if loss or any gradient entry is NaN or Inf."""
-    return bool(
-        not jnp.isfinite(loss) or not jnp.all(jnp.isfinite(grads))
-    )
+    return bool(not jnp.isfinite(loss) or not jnp.all(jnp.isfinite(grads)))
 
 
 class OptaxAlgorithm(OptimizationAlgorithm):
@@ -157,9 +155,7 @@ class OptaxAlgorithm(OptimizationAlgorithm):
         obj.start_logging()
 
         nan_streak = 0
-        rng_key = jax.random.PRNGKey(
-            random_seed if random_seed is not None else 0
-        )
+        rng_key = jax.random.PRNGKey(random_seed if random_seed is not None else 0)
 
         while not obj.budget_exceeded:
             loss, grads = obj.value_and_grad(params)
@@ -176,9 +172,10 @@ class OptaxAlgorithm(OptimizationAlgorithm):
                     # Fallback: jump to best-known point or fresh random start
                     best = obj.best_params
                     if best is not None:
-                        params = best + jax.random.normal(
-                            sub_key, best.shape
-                        ) * _NAN_PERTURB_BASE
+                        params = (
+                            best
+                            + jax.random.normal(sub_key, best.shape) * _NAN_PERTURB_BASE
+                        )
                     else:
                         params = obj.random_params_unbounded()
                     opt_state = optimizer.init(params)
@@ -187,9 +184,7 @@ class OptaxAlgorithm(OptimizationAlgorithm):
                     # Escalating perturbation: starts at 1e-10 and doubles
                     # each consecutive miss (capped at 2**30 ≈ 1e9 growth).
                     scale = _NAN_PERTURB_BASE * (2 ** min(nan_streak, 30))
-                    params = params + jax.random.normal(
-                        sub_key, params.shape
-                    ) * scale
+                    params = params + jax.random.normal(sub_key, params.shape) * scale
                 continue
             # --------------------------------------------------------------
 

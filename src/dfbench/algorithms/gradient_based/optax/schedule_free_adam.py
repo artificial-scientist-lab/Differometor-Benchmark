@@ -5,9 +5,7 @@ import optax.contrib
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
-    build_optimizer,
 )
-from dfbench.core.objective import Objective
 
 
 class OptaxScheduleFreeAdam(OptaxAlgorithm):

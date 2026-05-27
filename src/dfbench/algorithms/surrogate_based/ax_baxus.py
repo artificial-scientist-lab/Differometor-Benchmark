@@ -17,21 +17,18 @@ Operates in **bounded** parameter space.
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import numpy as np
 import torch
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.core.utils import t2j
 from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     DEVICE,
     DTYPE,
     get_problem_bounds_torch,
     evaluate_objective,
     fit_gp,
-    sobol_initial_samples,
     unit_bounds_torch,
 )
 
@@ -39,7 +36,7 @@ try:
     from botorch.acquisition import qLogExpectedImprovement as qLogEI
     from botorch.optim import optimize_acqf
     from botorch.generation import gen_candidates_scipy
-    from botorch.utils.transforms import normalize, unnormalize
+    from botorch.utils.transforms import normalize
 
     _BOTORCH_AVAILABLE = True
 except ImportError:
@@ -138,7 +135,6 @@ class BAxUS(OptimizationAlgorithm):
         rng = torch.Generator(device="cpu").manual_seed(random_seed)
 
         bounds = get_problem_bounds_torch(problem, self.device, self.dtype)
-        unit_bds = unit_bounds_torch(D, self.device, self.dtype)
 
         if d_init is None:
             d_init = min(5, D)

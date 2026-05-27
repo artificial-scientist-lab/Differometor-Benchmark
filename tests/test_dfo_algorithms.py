@@ -9,7 +9,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
+from dfbench.core.algorithm import AlgorithmType
 from dfbench.core.objective import Objective
 
 from dfbench.algorithms import (
@@ -120,6 +120,7 @@ class TestPDFO:
     def test_uobyqa_missing_package(self, mock_problem, monkeypatch):
         """UOBYQA raises ImportError when pdfo is not available."""
         import builtins
+
         real_import = builtins.__import__
 
         def _fake_import(name, *args, **kwargs):
@@ -188,6 +189,7 @@ class TestPyBOBYQA:
     def test_missing_package(self, mock_problem, monkeypatch):
         """PyBOBYQA raises ImportError when pybobyqa is not available."""
         import builtins
+
         real_import = builtins.__import__
 
         def _fake_import(name, *args, **kwargs):

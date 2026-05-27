@@ -20,9 +20,9 @@ configs = [
 ]
 
 for name, optimizer, extra_kwargs in configs:
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running {name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     obj = Objective(
         problem,

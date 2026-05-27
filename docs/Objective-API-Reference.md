@@ -2,7 +2,7 @@
 
 `Objective` is the central class of the benchmark. It wraps a `ContinuousProblem` and acts as the only interface between an optimization algorithm and the underlying physics simulation. Every function evaluation, gradient computation, and random sample goes through `Objective`, which transparently records everything needed for reproducible benchmarking.
 
-If manual handling of everything is desired, `Objective` still offers the `ContinuousProblem` itself as an instance which has all the pure JAX-functions 
+If manual handling of everything is desired, `Objective` still offers the `ContinuousProblem` itself as an instance which has all the pure JAX-functions
 
 **Import:**
 

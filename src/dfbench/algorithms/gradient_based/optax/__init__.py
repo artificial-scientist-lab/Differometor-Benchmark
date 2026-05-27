@@ -23,7 +23,9 @@ from dfbench.algorithms.gradient_based.optax.polyak_sgd import OptaxPolyakSGD
 from dfbench.algorithms.gradient_based.optax.sam import OptaxSAM
 from dfbench.algorithms.gradient_based.optax.sophia import OptaxSophia
 from dfbench.algorithms.gradient_based.optax.lookahead import OptaxLookahead
-from dfbench.algorithms.gradient_based.optax.schedule_free_adam import OptaxScheduleFreeAdam
+from dfbench.algorithms.gradient_based.optax.schedule_free_adam import (
+    OptaxScheduleFreeAdam,
+)
 from dfbench.algorithms.gradient_based.optax.yogi import OptaxYogi
 from dfbench.algorithms.gradient_based.optax.novograd import OptaxNovoGrad
 from dfbench.algorithms.gradient_based.optax.ogd import OptaxOGD

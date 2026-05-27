@@ -5,14 +5,11 @@ Marked @slow — must be run via srun on the cluster.
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from dfbench.benchmark.benchmark import AlgorithmConfig, Benchmark
-from dfbench.core.objective import Objective
 
 
 pytestmark = pytest.mark.slow

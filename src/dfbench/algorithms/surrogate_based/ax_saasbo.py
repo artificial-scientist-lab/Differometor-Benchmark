@@ -24,15 +24,6 @@ from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.core.utils import t2j
-from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
-    DEVICE,
-    DTYPE,
-    get_problem_bounds_torch,
-    evaluate_objective,
-    sobol_initial_samples,
-    unit_bounds_torch,
-)
 
 try:
     from ax.service.ax_client import AxClient
@@ -99,7 +90,6 @@ class AxSAASBO(OptimizationAlgorithm):
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        bounds_torch = get_problem_bounds_torch(problem)
         lb = np.asarray(problem.bounds[0])
         ub = np.asarray(problem.bounds[1])
 

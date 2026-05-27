@@ -17,7 +17,6 @@ Operates in **bounded** parameter space.
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import numpy as np
 import torch
 from jaxtyping import Array, Float
@@ -30,15 +29,12 @@ from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     evaluate_objective,
     fit_gp,
     get_problem_bounds_torch,
-    sobol_initial_samples,
-    unit_bounds_torch,
 )
 
 try:
     from botorch.acquisition import qLogExpectedImprovement as qLogEI
     from botorch.optim import optimize_acqf
     from botorch.generation import gen_candidates_scipy
-    from botorch.utils.transforms import normalize, unnormalize
 
     _BOTORCH_AVAILABLE = True
 except ImportError:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
 from scipy.optimize import dual_annealing, minimize
 
@@ -68,9 +67,7 @@ class DualAnnealing(OptimizationAlgorithm):
         """
         obj = objective
 
-        random_seed, _key = self.prepare(
-            obj, unbounded=False, random_seed=random_seed
-        )
+        random_seed, _key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         if init_params is None:
             params = obj.random_params_bounded()

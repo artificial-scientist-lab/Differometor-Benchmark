@@ -57,7 +57,7 @@ from dfbench.core.objective import Objective
 
 class MyAlgorithm(OptimizationAlgorithm):
     """One-line description of your algorithm.
-    
+
     Longer description, references, etc.
     """
 
@@ -66,7 +66,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 
     def __init__(self, batch_size: int = 50) -> None:
         """Initialize with algorithm-level meta-parameters.
-        
+
         These are parameters intrinsic to the algorithm that don't change
         between runs (e.g. batch size, network architecture).
         """
@@ -84,7 +84,7 @@ class MyAlgorithm(OptimizationAlgorithm):
         **kwargs,
     ) -> None:
         """Run the optimization.
-        
+
         Args:
             objective: Pre-configured Objective instance.
             max_iterations: Max algorithm iterations (not evals). None = budget only.
