@@ -451,14 +451,14 @@ class TestBoundedUnbounded:
         expected = mock_problem.objective_function(params)
         np.testing.assert_allclose(float(loss), float(expected), atol=1e-6)
 
-    def test_unbounded_uses_sigmoid_objective(self, mock_problem):
-        """5.41 unbounded=True → uses sigmoid_objective_function."""
+    def test_unbounded_maps_then_uses_objective_function(self, mock_problem):
+        """5.41 unbounded=True maps to bounds before objective_function."""
         obj = Objective(mock_problem, unbounded=True)
         obj.set_seed(42)
         obj.start_logging()
         params = obj.random_params_unbounded()
         loss = obj.value(params)
-        expected = mock_problem.sigmoid_objective_function(params)
+        expected = mock_problem.objective_function(obj._map_unbounded_to_bounded(params))
         np.testing.assert_allclose(float(loss), float(expected), atol=1e-6)
 
     def test_best_params_bounded_in_unbounded_mode(self, mock_problem):

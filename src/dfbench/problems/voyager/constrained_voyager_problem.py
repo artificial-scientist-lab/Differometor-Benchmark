@@ -6,7 +6,6 @@ from jaxtyping import Array, Float
 from differometor.setups import voyager
 from differometor.simulate import run_setups, simulate, run_build_step
 from differometor.utils import (
-    sigmoid_bounding,
     sensitivity_qamplfreq_noise,
     calculate_sensitivities,
     calculate_powers,
@@ -132,43 +131,6 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
         )
 
         @jax.jit
-        def sigmoid_objective_function(
-            optimized_parameters: Float[Array, "{self.n_params}"],
-        ) -> Float:
-            optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
-
-            # simulate the three modulation setups
-            q_results = simulate(
-                **{**self._q_arrays, "optimized_parameters": optimized_parameters}
-            )
-            ampl_results = simulate(
-                **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
-            )
-            freq_results = simulate(
-                **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
-            )
-            results = [
-                (*q_results, *self._q_metadata),
-                (*ampl_results, *self._ampl_metadata),
-                (*freq_results, *self._freq_metadata),
-            ]
-
-            # calculate the sensitivities taking into account the three noise sources
-            sensitivities = calculate_sensitivities(
-                results, self._sensitivity_function, self._frequencies, homodyne=True
-            )
-
-            # calculate the light power at all components within the setup
-            powers = calculate_powers(q_results[0], *self._q_metadata)
-
-            # calculate the loss taking into account power violations
-            sensitivity_loss, penalty, _ = self._calculate_loss(
-                sensitivities, self._target_sensitivities, powers
-            )
-
-            return sensitivity_loss + penalty
-
-        @jax.jit
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],
         ) -> Float:
@@ -203,7 +165,6 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
 
             return sensitivity_loss + penalty
 
-        self.sigmoid_objective_function = sigmoid_objective_function
         self.objective_function = objective_function
 
     @property

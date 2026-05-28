@@ -96,7 +96,6 @@ class LBFGSGD(OptimizationAlgorithm):
             **lbfgs_kwargs: Passed to ``optax.lbfgs()``.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
@@ -105,9 +104,9 @@ class LBFGSGD(OptimizationAlgorithm):
         else:
             params = init_params
 
-        # Build the JIT-compiled step using the sigmoid objective directly,
-        # since optax.lbfgs needs the raw value function for line-search.
-        value_fn = problem.sigmoid_objective_function
+        # Build the JIT-compiled step using an unlogged value function,
+        # since optax.lbfgs needs a raw callable for line-search.
+        value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
 
         optimizer = optax.lbfgs(**lbfgs_kwargs)

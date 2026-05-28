@@ -8,7 +8,7 @@ from jaxtyping import Array, Float
 from differometor.components import signal_detector
 from differometor.setups import voyager
 from differometor.simulate import run, run_build_step, simulate
-from differometor.utils import sigmoid_bounding, update_setup
+from differometor.utils import update_setup
 
 from ..base_problem import OpticalSetupProblem
 
@@ -133,27 +133,6 @@ class VoyagerProblem(OpticalSetupProblem):
             return jnp.sum(jnp.log10(sensitivities)) - target_loss
 
         self.objective_function = objective_function
-
-        @jax.jit
-        def sigmoid_objective_function(
-            optimized_parameters: Float[Array, "{self.n_params}"],
-        ) -> Float:
-            optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
-            carrier, signal, noise = simulate(
-                **{
-                    **self._simulation_arrays,
-                    "optimized_parameters": optimized_parameters,
-                }
-            )
-            powers = signal_detector(carrier, signal)
-            powers = powers[self._detector_ports]
-            powers = powers[0] - powers[1]
-            sensitivities = noise / jnp.abs(powers)
-
-            # loss relative to target loss => loss < 0 is better than voyager setup
-            return jnp.sum(jnp.log10(sensitivities)) - target_loss
-
-        self.sigmoid_objective_function = sigmoid_objective_function
 
     @property
     def optimization_pairs(self) -> list[tuple]:

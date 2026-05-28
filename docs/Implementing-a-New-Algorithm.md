@@ -254,6 +254,7 @@ while not obj.budget_exceeded:
 | `obj.vmap_value_and_grad(batch)` | Batched gradient-based | batch losses, grads, params |
 | `obj.vmap_hessian(batch)` | Batched second-order optimization | batch hessians, batch params |
 | `obj.vmap_value_grad_and_hessian(batch)` | Batched second-order optimization | batch losses, grads, hessians, params |
+| `obj.value_function(…)` | Raw JAX callable for custom JIT loops | nothing; use `log_evaluation` afterwards |
 | `obj.log_evaluation(…)` | Custom JIT'd loop | whatever you pass, including optional Hessians |
 
 **Important:** `obj.grad()` and `obj.hessian()` do **not** log a loss value. If you need the loss too, use `obj.value_and_grad()` or `obj.value_grad_and_hessian()`.
@@ -262,13 +263,15 @@ while not obj.budget_exceeded:
 
 Some optimizers (e.g. Optax's L-BFGS) need to call `value_and_grad` *inside* a JIT-compiled function — for instance because the optimizer's line-search requires the raw value function. In that case you can't use `obj.value_and_grad()` (which has Python-side logging). Instead:
 
-1. Get the raw function from `obj.problem` (e.g. `problem.sigmoid_objective_function`)
+1. Get an unlogged raw value function from `obj.value_function(...)`
 2. Build your own JIT-compiled step
 3. After each step, call `obj.log_evaluation(params, loss, grad, hessian=None)` to record the results
 
+`obj.value_function(unbounded=None)` follows the Objective's active space mode by default. Pass `unbounded=True` when the JIT loop works in unbounded coordinates and needs Objective's mapping into problem bounds; pass `unbounded=False` for bounded coordinates. The callable deliberately does not log anything.
+
 ```python
 # Get the raw function for JIT compilation
-value_fn = problem.sigmoid_objective_function
+value_fn = obj.value_function(unbounded=True)
 value_and_grad_fn = jax.value_and_grad(value_fn)
 
 @jax.jit
@@ -388,7 +391,7 @@ params = optax.apply_updates(params, updates)
 - [ ] `algorithm_type` is set correctly
 - [ ] `optimize()` accepts `objective: Objective` as first arg
 - [ ] `optimize()` returns `None` (the `Objective` is mutated in place)
-- [ ] All evaluations go through `Objective` (no direct `problem.objective_function()` calls)
+- [ ] All evaluations go through `Objective` (`value*`, `vmap_*`, or `value_function(...)` plus `log_evaluation(...)`; no direct `problem.objective_function()` calls)
 - [ ] JIT warmup happens before `obj.start_logging()`
 - [ ] `random_seed` is accepted, set, and printed
 - [ ] Early stopping uses `obj.evals_since_improvement` (or custom logic)

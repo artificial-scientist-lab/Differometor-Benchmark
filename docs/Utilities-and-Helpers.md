@@ -39,9 +39,9 @@ inverse_sigmoid_bounding(
 ) -> Float[Array, "N"]
 ```
 
-Maps parameters from bounded space $[\text{lb}, \text{ub}]$ back to the unbounded space $(-\infty, +\infty)$ that `sigmoid_objective_function` expects.
+Maps parameters from bounded space $[\text{lb}, \text{ub}]$ back to the unbounded space $(-\infty, +\infty)$ used by `Objective` in unbounded mode.
 
-The forward transform (applied inside the problem) is:
+The default forward transform is:
 
 $$x_{\text{bounded}} = \text{lb} + (\text{ub} - \text{lb}) \cdot \sigma(x_{\text{unbounded}})$$
 

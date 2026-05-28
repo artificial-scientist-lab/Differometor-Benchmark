@@ -37,9 +37,6 @@ class _StubProblem(OpticalSetupProblem):
     def objective_function(self, params):
         return jnp.sum(params**2)
 
-    def sigmoid_objective_function(self, params):
-        return self.objective_function(params)
-
     def calculate_sensitivity(self, optimized_parameters):
         return jnp.ones(10)
 

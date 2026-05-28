@@ -69,7 +69,7 @@ When running algorithms through `Benchmark`, this type is used to choose the def
 
 ## Gradient-Based Algorithms
 
-These algorithms use gradient information for optimization. Most are configured to work in unbounded $(-\infty, +\infty)$ space via sigmoid-transformed objectives, though some can work directly in bounded space depending on their implementation.
+These algorithms use gradient information for optimization. Most are configured to work in unbounded $(-\infty, +\infty)$ coordinates, with `Objective` mapping candidates into the bounded problem space before evaluation, though some can work directly in bounded space depending on their implementation.
 
 ### AdamGD
 
@@ -160,7 +160,7 @@ optimizer.optimize(
 
 L-BFGS optimizer from Optax. Uses second-order curvature information for faster convergence on smooth landscapes.
 
-> **Note:** Because `optax.lbfgs` needs the raw value function for its internal line-search, this algorithm JIT-compiles the full optimization step and uses `obj.log_evaluation()` to record results after each step (instead of calling `obj.value_and_grad()` directly). This makes it a useful reference for implementing other algorithms that require custom JIT-compiled evaluation loops — see `src/dfbench/algorithms/gradient_based/lbfgs_gd.py`.
+> **Note:** Because `optax.lbfgs` needs a raw value function for its internal line-search, this algorithm gets one from `obj.value_function(unbounded=True)`, JIT-compiles the full optimization step, and uses `obj.log_evaluation()` to record results after each step instead of calling `obj.value_and_grad()` directly. This makes it a useful reference for implementing other algorithms that require custom JIT-compiled evaluation loops — see `src/dfbench/algorithms/gradient_based/lbfgs_gd.py`.
 
 ```python
 optimizer = LBFGSGD()
@@ -181,7 +181,7 @@ The SciPy-backed optimizers follow the same `Objective` contract as the Optax-ba
 
 Bounded-vs-unbounded behavior is explicit in each class:
 
-- Unbounded sigmoid-space defaults: `BFGS`, `NonlinearCG`, `NewtonCG`, `TrustNCG`, `TrustKrylov`, `Dogleg`
+- Unbounded-coordinate defaults: `BFGS`, `NonlinearCG`, `NewtonCG`, `TrustNCG`, `TrustKrylov`, `Dogleg`
 - Bounded physical-space defaults: `LBFGSB`, `TrustConstr`, `TNC`, `SLSQP`, `COBYQA`, `COBYLA`, `SR1`
 
 See `src/dfbench/algorithms/gradient_based/scipy/_common.py` and `scripts/voyager_scipy_benchmark.py` for the shared wrapper and a benchmark example.

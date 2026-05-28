@@ -51,14 +51,16 @@ class TestVoyagerProblem:
         assert jnp.isfinite(loss)
         assert loss.ndim == 0
 
-    def test_sigmoid_objective_at_midpoint(self):
-        """4.5 sigmoid_objective_function at inverse(midpoint) is finite."""
+    def test_unbounded_objective_at_midpoint(self):
+        """4.5 Objective unbounded value at inverse(midpoint) is finite."""
+        from dfbench.core.objective import Objective
         from dfbench.core.utils import inverse_sigmoid_bounding
 
         b = self.problem.bounds
         mid = (b[0] + b[1]) / 2
         unbounded = inverse_sigmoid_bounding(mid, b)
-        loss = self.problem.sigmoid_objective_function(unbounded)
+        obj = Objective(self.problem, unbounded=True)
+        loss = obj.value_function(unbounded=True)(unbounded)
         assert jnp.isfinite(loss)
 
     def test_grad_at_midpoint(self):
@@ -69,14 +71,16 @@ class TestVoyagerProblem:
         assert g.shape == (self.problem.n_params,)
         assert jnp.all(jnp.isfinite(g))
 
-    def test_grad_sigmoid_at_midpoint(self):
-        """4.7 jax.grad(sigmoid_obj) at unbounded midpoint is finite."""
+    def test_grad_unbounded_at_midpoint(self):
+        """4.7 jax.grad of Objective unbounded value is finite."""
+        from dfbench.core.objective import Objective
         from dfbench.core.utils import inverse_sigmoid_bounding
 
         b = self.problem.bounds
         mid = (b[0] + b[1]) / 2
         unbounded = inverse_sigmoid_bounding(mid, b)
-        g = jax.grad(self.problem.sigmoid_objective_function)(unbounded)
+        obj = Objective(self.problem, unbounded=True)
+        g = jax.grad(obj.value_function(unbounded=True))(unbounded)
         assert g.shape == (self.problem.n_params,)
         assert jnp.all(jnp.isfinite(g))
 

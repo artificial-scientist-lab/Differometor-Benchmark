@@ -245,7 +245,6 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         **lbfgs_kwargs,
     ) -> None:
         obj = objective
-        problem = obj.problem
         _, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -256,7 +255,7 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         )
         adam_state = adam_opt.init(params)
 
-        value_fn = problem.sigmoid_objective_function
+        value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
         lbfgs_opt = optax.lbfgs(**lbfgs_kwargs)
         lbfgs_state = lbfgs_opt.init(params)

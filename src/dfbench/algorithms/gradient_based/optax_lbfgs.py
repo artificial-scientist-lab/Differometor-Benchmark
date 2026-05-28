@@ -72,7 +72,6 @@ class OptaxLBFGS(OptimizationAlgorithm):
             **lbfgs_kwargs: Forwarded to ``optax.lbfgs()``.
         """
         obj = objective
-        problem = obj.problem
 
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 
@@ -81,7 +80,7 @@ class OptaxLBFGS(OptimizationAlgorithm):
         else:
             params = init_params
 
-        value_fn = problem.sigmoid_objective_function
+        value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
 
         optimizer = optax.lbfgs(**lbfgs_kwargs)

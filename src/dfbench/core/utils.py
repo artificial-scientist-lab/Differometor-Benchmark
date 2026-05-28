@@ -45,7 +45,7 @@ def inverse_sigmoid_bounding(
         bounds: Shape (2, n_params) array where bounds[0] is lower and bounds[1] is upper.
 
     Returns:
-        Unbounded parameters suitable for use with sigmoid_objective_function.
+        Unbounded parameters suitable for Objective's unbounded mode.
     """
     normalised = (bounded_params - bounds[0]) / (bounds[1] - bounds[0])
     normalised = jnp.clip(normalised, 1e-7, 1.0 - 1e-7)

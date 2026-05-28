@@ -87,8 +87,7 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 
 3.1  [P0] ContinuousProblem cannot be instantiated directly (abstract).
 3.2  [P0] A minimal concrete subclass must implement bounds,
-          optimization_pairs, objective_function, and
-          sigmoid_objective_function.
+          optimization_pairs, and objective_function.
 3.3  [P0] n_params equals len(optimization_pairs).
 
 
@@ -107,11 +106,11 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
           Using the midpoint avoids randomness while guaranteeing a valid
           in-bounds point. Also test once with a seeded random sample for
           broader coverage, but the midpoint is the canonical regression point.
-4.5  [P0] sigmoid_objective_function at the inverse-sigmoid of the bounds
-          midpoint returns a finite scalar.
+4.5  [P0] Objective unbounded value function at the inverse-sigmoid of the
+          bounds midpoint returns a finite scalar.
 4.6  [P0] jax.grad(objective_function)(midpoint) returns a finite array of
           shape (n_params,).
-4.7  [P0] jax.grad(sigmoid_objective_function)(unbounded_midpoint) returns a
+4.7  [P0] jax.grad(Objective unbounded value)(unbounded_midpoint) returns a
           finite array of shape (n_params,).
 4.8  [P1] objective_function evaluated at the target setup parameters gives
           loss ≈ 0 (by construction — sanity check).
@@ -294,8 +293,8 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 --- Bounded / unbounded mode ---
 
 5.40 [P0] With unbounded=False, Objective uses problem.objective_function.
-5.41 [P0] With unbounded=True, Objective uses
-          problem.sigmoid_objective_function.
+5.41 [P0] With unbounded=True, Objective maps into bounds before using
+          problem.objective_function.
 5.42 [P0] best_params_bounded in unbounded mode: applies sigmoid_bounding and
           result is within bounds.
 5.43 [P0] params_history_bounded in unbounded mode applies sigmoid_bounding to

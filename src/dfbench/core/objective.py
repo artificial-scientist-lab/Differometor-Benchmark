@@ -400,21 +400,26 @@ class Objective:
             return self._inverse_unit_mapping_vmap(normalized)
         return self._inverse_sigmoid_bounding(params, self._problem.bounds)
 
+    def value_function(self, *, unbounded: bool | None = None) -> Callable:
+        """Return an unlogged JAX-compatible scalar value function.
+
+        Args:
+            unbounded: If True, map unbounded params to bounded space before
+                calling the problem objective. If False, call the problem
+                objective directly. None uses the Objective's active mode.
+        """
+        use_unbounded = self.unbounded if unbounded is None else unbounded
+        if use_unbounded:
+            def _unbounded_value(params):
+                bounded = self._map_unbounded_to_bounded(params)
+                return self._problem.objective_function(bounded)
+
+            return _unbounded_value
+        return self._problem.objective_function
+
     def _bind_evaluation_functions(self) -> None:
         """Bind evaluation callables for the currently active search space."""
-        problem = self._problem
-        if self.unbounded:
-            if self._unit_mapping is None:
-                self._func = problem.sigmoid_objective_function
-            else:
-
-                def _mapped_unbounded_objective(params):
-                    bounded = self._map_unbounded_to_bounded(params)
-                    return problem.objective_function(bounded)
-
-                self._func = _mapped_unbounded_objective
-        else:
-            self._func = problem.objective_function
+        self._func = self.value_function()
         self._grad_func = jax.jit(jax.grad(self._func))
         self._value_and_grad_func = jax.jit(jax.value_and_grad(self._func))
 
@@ -1525,7 +1530,7 @@ class Objective:
             self._deterministic_warmup_params()[0],
         )
 
-    def warmup_vmap_value(self, batch_size: int) -> None:
+    def warmup_vmap_value(self, batch_size: int = 2) -> None:
         """Warm up ``vmap_value()`` twice on a deterministic batch.
 
         Args:
@@ -1536,7 +1541,7 @@ class Objective:
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_grad(self, batch_size: int) -> None:
+    def warmup_vmap_grad(self, batch_size: int = 2) -> None:
         """Warm up ``vmap_grad()`` twice on a deterministic batch.
 
         Args:
@@ -1547,7 +1552,7 @@ class Objective:
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_hessian(self, batch_size: int) -> None:
+    def warmup_vmap_hessian(self, batch_size: int = 2) -> None:
         """Warm up ``vmap_hessian()`` twice on a deterministic batch.
 
         Args:
@@ -1558,7 +1563,7 @@ class Objective:
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_value_and_grad(self, batch_size: int) -> None:
+    def warmup_vmap_value_and_grad(self, batch_size: int = 2) -> None:
         """Warm up ``vmap_value_and_grad()`` twice on a deterministic batch.
 
         Args:
@@ -1569,7 +1574,7 @@ class Objective:
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_value_grad_and_hessian(self, batch_size: int) -> None:
+    def warmup_vmap_value_grad_and_hessian(self, batch_size: int = 2) -> None:
         """Warm up ``vmap_value_grad_and_hessian()`` twice on a deterministic batch.
 
         Args:

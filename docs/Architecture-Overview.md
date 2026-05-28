@@ -45,17 +45,16 @@ A problem defines *what* is being optimised. Every problem subclasses `Continuou
 | Attribute | Purpose |
 |-----------|---------|
 | `objective_function` | Loss in **bounded** parameter space — used by evolutionary / surrogate algorithms |
-| `sigmoid_objective_function` | Loss in **unbounded** space via sigmoid transform — used by gradient methods |
 | `bounds` | `(2, n_params)` lower / upper limits |
 | `optimization_pairs` | `[(component, property), …]` mapping each parameter index to a Differometor component |
 
-**Rationale — two objective functions:** Some optimization methods benefit from unconstrained $(-\infty, +\infty)$ space where gradients flow smoothly without hitting box-constraint boundaries. Population-based methods naturally respect bound constraints by sampling and clamping. Providing both variants lets algorithms choose their preferred space without adapter code.
+**Rationale — one bounded problem function:** Some optimization methods benefit from unconstrained $(-\infty, +\infty)$ space where gradients flow smoothly without hitting box-constraint boundaries. `Objective` provides that mapping layer so problem implementations only need to define the bounded loss.
 
 ### 2. Objective Layer (`core/objective.py`)
 
 `Objective` is the **sole interface** between any algorithm and its problem. It transparently:
 
-- Dispatches to the correct objective function (bounded or sigmoid)
+- Maps unbounded coordinates into problem bounds when needed, then evaluates the bounded problem objective
 - Prepares `jax.grad`, `jax.hessian`, `jax.value_and_grad`, and `jax.vmap` variants
 - Records every evaluation with aligned loss / gradient / Hessian / params / timestamp histories
 - Enforces wall-clock time and evaluation-count budgets
@@ -91,10 +90,10 @@ Algorithms **never** create their own `Objective`; they receive one from the cal
  Objective._func / _value_and_grad_func / _hessian_func / _vmap_func
                     │
                     ▼
-         ┌─────────────────────┐
-         │  problem.objective  │   (or sigmoid variant)
-         │  _function(params)  │
-         └─────────┬───────────┘
+     ┌──────────────────────────────┐
+     │ optional Objective mapping   │
+     │ problem.objective_function   │
+     └──────────────┬───────────────┘
                    │
                    ▼
            Differometor.simulate()
@@ -120,7 +119,7 @@ Algorithms **never** create their own `Objective`; they receive one from the cal
 
 Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this exact pipeline. The internal `_log()` coordinator handles time-step recording, delegates to `_log_evals()` for history tracking, and triggers `_log_to_file()` for periodic checkpoints. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
 
-For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.log_evaluation(params, loss, grad, hessian=None)` provides the same pipeline as a public API — it delegates to `_log()` internally. Do not call the private methods directly.
+For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.value_function(...)` provides the same Objective-owned bounded/unbounded mapping without Python-side logging, and `obj.log_evaluation(params, loss, grad, hessian=None)` records the completed evaluation through the same logging pipeline. Do not call the private methods directly.
 
 ---
 

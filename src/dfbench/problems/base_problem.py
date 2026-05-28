@@ -200,9 +200,8 @@ class OpticalSetupProblem(ContinuousProblem):
         """List of (component, property) pairs to be optimized."""
         pass
 
-    # objective_function and sigmoid_objective_function are set as instance
-    # attributes by subclasses (as JIT-compiled callables), following the
-    # pattern defined in ContinuousProblem protocol.
+    # objective_function is set as an instance attribute by subclasses (as a
+    # JIT-compiled callable), following the ContinuousProblem protocol.
 
     @abstractmethod
     def calculate_sensitivity(

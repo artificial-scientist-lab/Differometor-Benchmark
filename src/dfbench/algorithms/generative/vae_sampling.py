@@ -183,8 +183,8 @@ class VAESampling(OptimizationAlgorithm):
         algorithm_type (AlgorithmType): Type classification (GENERATIVE).
 
     Note:
-        This algorithm uses `problem.sigmoid_objective_function` which applies
-        sigmoid bounding to handle infinite parameter spaces during VAE training.
+        Objective owns any bounded/unbounded-space mapping needed during VAE
+        training and candidate evaluation.
     """
 
     algorithm_str: str = "vae_sampling"

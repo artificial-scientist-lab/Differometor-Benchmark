@@ -218,9 +218,9 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         bounds_jax = jnp.asarray(problem.bounds)
         params = inverse_sigmoid_bounding(best_bounded, bounds_jax)
 
-        # Build JIT-compiled L-BFGS step using the sigmoid objective,
-        # which lives entirely in unbounded space.
-        value_fn = problem.sigmoid_objective_function
+        # Build JIT-compiled L-BFGS step using an unlogged value function
+        # that maps from unbounded coordinates into problem bounds.
+        value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
 
         def _to_bounded(unbounded_params):
