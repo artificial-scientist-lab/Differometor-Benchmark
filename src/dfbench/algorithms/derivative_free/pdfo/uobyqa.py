@@ -48,7 +48,7 @@ class PDFOUOBYQA(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "pdfo_uobyqa"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,

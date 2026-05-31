@@ -171,7 +171,8 @@ def _botorch_kwargs(max_evals: int) -> dict[str, Any]:
     return {"max_iterations": 2, "n_initial": min(5, max(2, max_evals // 4))}
 
 
-# Order: misc gradient → optax → scipy → evolutionary → surrogate → generative.
+# Order: misc gradient → optax → scipy → evolutionary → derivative-free
+# → global search → surrogate → generative.
 # To add a new algorithm, append one AlgoSpec entry here.
 REGISTRY: list[AlgoSpec] = [
     # -- misc gradient-based --------------------------------------------------
@@ -261,8 +262,6 @@ REGISTRY: list[AlgoSpec] = [
     AlgoSpec(NevergradOnePlusOne, AlgorithmType.EVOLUTIONARY, unbounded=False),
     AlgoSpec(NevergradTBPSA, AlgorithmType.EVOLUTIONARY, unbounded=False),
     AlgoSpec(NevergradNGOpt, AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(OmadsMADS, AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(OmadsOrthoMADS, AlgorithmType.EVOLUTIONARY, unbounded=False),
     # -- CMA family -----------------------------------------------------------
     AlgoSpec(PyCMACMAES, AlgorithmType.EVOLUTIONARY, unbounded=False),
     AlgoSpec(PyCMAActiveCMAES, AlgorithmType.EVOLUTIONARY, unbounded=False),
@@ -274,16 +273,18 @@ REGISTRY: list[AlgoSpec] = [
     AlgoSpec(JAXOnePlusOneES, AlgorithmType.EVOLUTIONARY, unbounded=False),
     AlgoSpec(JAXMuLambdaES, AlgorithmType.EVOLUTIONARY, unbounded=False),
     # -- derivative-free / Powell DFO ----------------------------------------
-    AlgoSpec(PDFOUOBYQA, AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(PDFONEWUOA, AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(PDFOLINCOA, AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(PyBOBYQA, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(OmadsMADS, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(OmadsOrthoMADS, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(PDFOUOBYQA, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(PDFONEWUOA, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(PDFOLINCOA, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(PyBOBYQA, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
     # -- derivative-free / SciPy classics ------------------------------------
-    AlgoSpec(NelderMead, AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(Powell, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(NelderMead, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(Powell, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
     # -- global search (SciPy) -----------------------------------------------
-    AlgoSpec(BasinHopping, AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(DualAnnealing, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(BasinHopping, AlgorithmType.GLOBAL_SEARCH, unbounded=False),
+    AlgoSpec(DualAnnealing, AlgorithmType.GLOBAL_SEARCH, unbounded=False),
     # -- surrogate-based ------------------------------------------------------
     AlgoSpec(
         BotorchBO,
@@ -395,6 +396,12 @@ GRADIENT_PARAMS = [
 ]
 EVOLUTIONARY_PARAMS = [
     _apply_marks(s) for s in REGISTRY if s.family == AlgorithmType.EVOLUTIONARY
+]
+DERIVATIVE_FREE_PARAMS = [
+    _apply_marks(s) for s in REGISTRY if s.family == AlgorithmType.DERIVATIVE_FREE
+]
+GLOBAL_SEARCH_PARAMS = [
+    _apply_marks(s) for s in REGISTRY if s.family == AlgorithmType.GLOBAL_SEARCH
 ]
 SURROGATE_PARAMS = [
     _apply_marks(s) for s in REGISTRY if s.family == AlgorithmType.SURROGATE_BASED

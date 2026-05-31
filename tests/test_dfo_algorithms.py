@@ -41,9 +41,9 @@ class TestDFOCommon:
         assert isinstance(algo.algorithm_str, str) and len(algo.algorithm_str) > 0
 
     @pytest.mark.parametrize("cls", DFO_ALGORITHMS, ids=lambda c: c.__name__)
-    def test_algorithm_type_evolutionary(self, cls):
-        """algorithm_type is EVOLUTIONARY (DFO methods are population-free but bounded)."""
-        assert cls.algorithm_type == AlgorithmType.EVOLUTIONARY
+    def test_algorithm_type_derivative_free(self, cls):
+        """algorithm_type is DERIVATIVE_FREE."""
+        assert cls.algorithm_type == AlgorithmType.DERIVATIVE_FREE
 
     @pytest.mark.parametrize("cls", DFO_ALGORITHMS, ids=lambda c: c.__name__)
     def test_optimize_produces_evals(self, cls, mock_problem):

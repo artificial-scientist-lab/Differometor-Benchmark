@@ -78,7 +78,7 @@ problem = VoyagerProblem()
 obj = Objective(problem, max_time=120, verbose=1)
 
 optimizer = AdamGD()
-obj = optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 
 print(obj.best_loss, obj.best_params_bounded)
 ```

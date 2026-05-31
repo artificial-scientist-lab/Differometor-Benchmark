@@ -245,7 +245,7 @@ class OmadsMADS(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "omads_mads"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,
@@ -328,7 +328,7 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "omads_orthomads"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,

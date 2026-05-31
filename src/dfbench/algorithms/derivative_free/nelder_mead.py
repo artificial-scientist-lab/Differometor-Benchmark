@@ -27,11 +27,11 @@ class NelderMead(OptimizationAlgorithm):
 
     Attributes:
         algorithm_str: ``"nelder_mead"``
-        algorithm_type: :attr:`AlgorithmType.EVOLUTIONARY`
+        algorithm_type: :attr:`AlgorithmType.DERIVATIVE_FREE`
     """
 
     algorithm_str: str = "nelder_mead"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(self) -> None:
         pass

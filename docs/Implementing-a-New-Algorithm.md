@@ -62,7 +62,7 @@ class MyAlgorithm(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "my_algorithm"          # unique identifier
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY  # or GRADIENT_BASED, etc.
+    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY  # match the algorithms/ subfolder
 
     def __init__(self, batch_size: int = 50) -> None:
         """Initialize with algorithm-level meta-parameters.
@@ -101,7 +101,11 @@ class MyAlgorithm(OptimizationAlgorithm):
         problem = obj.problem
 
         # Sets unbounded mode, algorithm_str, seeds np/JAX, returns resolved seed + JAX key
-        random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+        random_seed, key = self.prepare(
+            obj,
+            unbounded=False,
+            random_seed=random_seed,
+        )
         # torch.manual_seed(random_seed)  # add if you use PyTorch
 
         # ─── 3. Initialize parameters ───
@@ -176,13 +180,17 @@ The base class `OptimizationAlgorithm.optimize()` contains a commented blueprint
 ```python
 obj = objective
 problem = obj.problem
-random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+random_seed, key = self.prepare(
+    obj,
+    unbounded=False,
+    random_seed=random_seed,
+)
 ```
 
-`prepare()` sets `obj.unbounded`, `obj.algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. If `random_seed=None` is passed, a seed is generated via system entropy. You can also configure the Objective manually instead of calling `prepare()`.
+`prepare()` is called as `prepare(obj, unbounded, random_seed, algorithm_str=None, **kwargs)`. It sets `obj.unbounded`, `obj.algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. If `random_seed=None` is passed, a seed is generated via system entropy. You can also configure the Objective manually instead of calling `prepare()`.
 
 **Choose `unbounded`:**
-- `False` if your algorithm naturally handles bound constraints (evolutionary, surrogate-based)
+- `False` if your algorithm naturally handles bound constraints (evolutionary, derivative-free, global-search, surrogate-based)
 - `True` if you want smooth unconstrained space where gradients never hit box boundaries (via sigmoid transform)
 
 ### 2. Set random seeds
@@ -190,7 +198,11 @@ random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 `prepare()` handles `np.random`, JAX, and the seed print. If your algorithm uses PyTorch or another framework, seed it with the returned value:
 
 ```python
-random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+random_seed, key = self.prepare(
+    obj,
+    unbounded=False,
+    random_seed=random_seed,
+)
 torch.manual_seed(random_seed)   # only needed for PyTorch-based libraries
 ```
 
@@ -303,13 +315,17 @@ See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/lbfgs_gd.py` for a compl
 - Parameters live in `[lower, upper]` for each dimension.
 - Use `obj.value()` or `obj.vmap_value()`.
 - Algorithms must keep parameters within bounds (via clamping, constrained sampling, etc.).
-- Useful for evolutionary methods, surrogate-based methods.
+- Useful for evolutionary, derivative-free, global-search, and surrogate-based methods.
 
 Be careful!
 - Ask for a `batch_size` in the `__init__()` and try different sizes.
-- Changing the `batch_size` causes a recompile which can take a wile.
+- Changing the `batch_size` causes a recompile which can take a while.
 ```python
-random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+random_seed, key = self.prepare(
+    obj,
+    unbounded=False,
+    random_seed=random_seed,
+)
 params = obj.random_params_bounded(n_samples=100)
 losses = obj.vmap_value(params)
 ```
@@ -321,7 +337,11 @@ losses = obj.vmap_value(params)
 - To get final results in the physical space: `obj.best_params_bounded`.
 
 ```python
-random_seed, key = self.prepare(obj, unbounded=True, random_seed=random_seed)
+random_seed, key = self.prepare(
+    obj,
+    unbounded=True,
+    random_seed=random_seed,
+)
 params = obj.random_params_unbounded()
 loss, grad = obj.value_and_grad(params)
 ```

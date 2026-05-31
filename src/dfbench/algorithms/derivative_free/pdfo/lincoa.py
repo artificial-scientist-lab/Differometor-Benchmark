@@ -49,7 +49,7 @@ class PDFOLINCOA(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "pdfo_lincoa"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,

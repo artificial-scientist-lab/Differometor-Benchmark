@@ -69,7 +69,7 @@ An algorithm defines *how* to search. Every algorithm subclasses `OptimizationAl
 | Attribute / Method | Purpose |
 |--------------------|---------|
 | `algorithm_str` | Unique identifier (e.g. `"adam_gd"`, `"evox_cmaes"`) |
-| `algorithm_type` | One of `GRADIENT_BASED`, `EVOLUTIONARY`, `SURROGATE_BASED`, `GENERATIVE` |
+| `algorithm_type` | One of `GRADIENT_BASED`, `EVOLUTIONARY`, `DERIVATIVE_FREE`, `GLOBAL_SEARCH`, `SURROGATE_BASED`, `GENERATIVE` |
 | `optimize(objective, …)` | Main entry point — receives a pre-configured `Objective`, runs the loop, returns it |
 
 Algorithms **never** create their own `Objective`; they receive one from the caller (or from the `Benchmark` harness). This inversion of control ensures the harness can set budget limits, select seeds, and configure history storage uniformly.
@@ -164,5 +164,5 @@ The `Benchmark` class:
 | **Time-sampled metrics** | Evaluating metrics at fixed time points (not iteration counts) normalises for per-eval cost differences between algorithms. |
 | **Atomic checkpoints** | Long HPC jobs are killed without warning. Writing to `.tmp.npz` and then calling `os.replace` avoids half-written files. |
 | **`_init_env.py` setting `MPLCONFIGDIR`** | On shared HPC filesystems, matplotlib's default config directory may be read-only. Setting a temp directory before any import prevents cryptic crashes. |
-| **`AlgorithmType` enum** | The benchmark uses the type as a default hint: gradient-based algorithms typically get `unbounded=True`, while evolutionary/surrogate methods get `unbounded=False`. Algorithms can override this in their implementation if needed. |
+| **`AlgorithmType` enum** | The enum mirrors the `algorithms/` package families. The benchmark uses it as a default hint: gradient-based algorithms typically get `unbounded=True`, while evolutionary, derivative-free, global-search, surrogate, and generative methods get `unbounded=False` unless their implementation overrides the mode. |
 | **Reduced history properties** | Batched algorithms produce `(batch, …)` shaped histories. The `*_reduced` properties collapse each batch to a single representative (argmin of loss) so downstream analysis code never needs to handle ragged shapes. |

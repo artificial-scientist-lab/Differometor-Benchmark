@@ -66,7 +66,7 @@ class PyBOBYQA(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "pybobyqa"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,

@@ -54,12 +54,14 @@ The source tree groups algorithms by implementation family under `src/dfbench/al
 | `surrogate_based/` | BoTorch, Ax, HEBO, SMAC, ReSTIR, and TuRBO/L-BFGS hybrids |
 | `generative/` | VAE-based sampling and latent-space BO |
 
-Each class also declares an `AlgorithmType` enum value used by the benchmark harness as a space-mode hint. The enum is intentionally coarser than the package layout: derivative-free and global-search algorithms currently use `AlgorithmType.EVOLUTIONARY` because they run in bounded physical space by default.
+Each class also declares an `AlgorithmType` enum value matching its package directory. The benchmark harness still uses this value as a default space-mode hint: gradient-based algorithms default to unbounded space, while the other built-in categories default to bounded physical space unless an algorithm overrides that in its own `prepare()` call.
 
 | `AlgorithmType` | Default space | Common evaluation methods | Examples |
 |-----------------|---------------|---------------------------|----------|
 | `GRADIENT_BASED` | unbounded | `value_and_grad()`, Hessian callbacks where needed | Adam, SA-GD, L-BFGS, Optax, SciPy gradient/trust methods |
-| `EVOLUTIONARY` | bounded | `value()`, `vmap_value()` | Random Search, PSO, CMA-ES, OMADS, PDFO, BasinHopping |
+| `EVOLUTIONARY` | bounded | `value()`, `vmap_value()` | Random Search, PSO, CMA-ES, evosax, Nevergrad |
+| `DERIVATIVE_FREE` | bounded | `value()`, sometimes solver callback adapters | OMADS, PDFO, Py-BOBYQA, Nelder-Mead, Powell |
+| `GLOBAL_SEARCH` | bounded | `value()` through SciPy global-optimizer callbacks | BasinHopping, DualAnnealing |
 | `SURROGATE_BASED` | bounded | `value()`, `vmap_value()`, sometimes gradients | Bayesian Optimization, TuRBO, ReSTIR, GEBO |
 | `GENERATIVE` | varies | `value()`, `vmap_value()` | VAE Sampling |
 

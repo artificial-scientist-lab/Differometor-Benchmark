@@ -230,7 +230,7 @@ Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
 
 | Status | Count | Categories Covered |
 |--------|------:|--------------------|
-| **Finished** (on `main`) | 11 classes (22 runnable via variants) | Gradient, Evolutionary, Surrogate, Generative |
+| **Finished** (on `main`) | 11 classes (22 runnable via variants) | Gradient, Evolutionary, Derivative-Free, Global Search, Surrogate, Generative |
 | **Future branch** | 5 | Derivative-Free, Evolutionary, Gradient |
 | **Branch** (merge-ready) | 74 classes (88 runnable via variants) | Gradient (Optax, SciPy, JAX), Evolutionary, Derivative-Free, Global Search, Surrogate |
 | **Total unique runnable algorithms** | ~115 | 6 categories |

@@ -28,11 +28,11 @@ class DualAnnealing(OptimizationAlgorithm):
 
     Attributes:
         algorithm_str: ``"dual_annealing"``
-        algorithm_type: :attr:`AlgorithmType.EVOLUTIONARY`
+        algorithm_type: :attr:`AlgorithmType.GLOBAL_SEARCH`
     """
 
     algorithm_str: str = "dual_annealing"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.GLOBAL_SEARCH
 
     def __init__(self) -> None:
         pass

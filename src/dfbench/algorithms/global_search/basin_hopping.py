@@ -35,13 +35,13 @@ class BasinHopping(OptimizationAlgorithm):
 
     Attributes:
         algorithm_str: ``"basin_hopping"``
-        algorithm_type: :attr:`AlgorithmType.EVOLUTIONARY`
+        algorithm_type: :attr:`AlgorithmType.GLOBAL_SEARCH`
         local_method: SciPy minimizer name used for the local search
             (default ``"L-BFGS-B"``).
     """
 
     algorithm_str: str = "basin_hopping"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.GLOBAL_SEARCH
 
     # Local solvers that accept a jac argument
     _GRADIENT_METHODS = frozenset(

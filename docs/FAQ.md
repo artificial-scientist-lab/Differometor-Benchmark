@@ -15,6 +15,8 @@
 | Algorithm type | Typical choice | Why |
 |----------------|----------------|-----|
 | Evolutionary | `False` | Populations naturally respect bound constraints. |
+| Derivative-free | `False` | Direct-search and Powell-style solvers usually operate on native box bounds. |
+| Global search | `False` | SciPy global optimizers sample and perturb candidates in bounded physical space. |
 | Surrogate-based | `False` | GP/BO acquisitions work in bounded space. |
 | Gradient-based | Either | Use `True` if you want smooth unconstrained space for gradient flow. Use `False` if your method handles box constraints directly. |
 | Generative | Either | Depends on internal representation. |

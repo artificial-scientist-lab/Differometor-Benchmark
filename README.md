@@ -297,7 +297,7 @@ class MyAlgorithm(OptimizationAlgorithm):
     """My optimization algorithm."""
 
     algorithm_str = "my_algorithm"
-    algorithm_type = AlgorithmType.EVOLUTIONARY  # or GRADIENT_BASED, SURROGATE_BASED, GENERATIVE
+    algorithm_type = AlgorithmType.EVOLUTIONARY  # match one of the algorithms/ subfolders
 
     def __init__(self, batch_size: int = 50) -> None:
         """Algorithm-level meta-parameters that don't change between runs."""
@@ -314,7 +314,11 @@ class MyAlgorithm(OptimizationAlgorithm):
     ) -> None:
         # 1. Setup + seed all RNGs
         obj = objective
-        random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+        random_seed, key = self.prepare(
+            obj,
+            unbounded=False,
+            random_seed=random_seed,
+        )
         torch.manual_seed(random_seed)  # for frameworks beyond np/jax
 
         # 3. Initialize parameters
@@ -351,8 +355,8 @@ class MyAlgorithm(OptimizationAlgorithm):
 
 - **`__init__` takes only algorithm meta-parameters** (batch size, network architecture, etc.), not the problem, not the budget.
 - **`optimize()` receives a pre-configured `Objective`**, the algorithm does not create it.
-- **`prepare()`** configures `unbounded`, `algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. For PyTorch-based algorithms, call `torch.manual_seed(random_seed)` afterwards.
-- **Choose `unbounded`:** Set to `True` if your algorithm benefits from smooth unconstrained space (via sigmoid transform). Most evolutionary and surrogate methods use `False` (bounded space).
+- **`prepare()`** is called as `prepare(obj, unbounded, random_seed, algorithm_str=None, **kwargs)`. It configures the Objective space mode and algorithm identifier, seeds `np.random` and JAX, and returns `(random_seed, key)`. For PyTorch-based algorithms, call `torch.manual_seed(random_seed)` afterwards.
+- **Choose `unbounded`:** Set to `True` if your algorithm benefits from smooth unconstrained space (via sigmoid transform). Most evolutionary, derivative-free, global-search, and surrogate methods use `False` (bounded space).
 - **JIT warmup before `start_logging()`**, compilation time doesn't count against the budget. Use the matching `warmup_*()` helper; the single-point helpers take no arguments, while batched helpers take the batch size you will use during optimization.
 - **`budget_exceeded`** checks both time and eval limits, please use it as your loop condition.
 
