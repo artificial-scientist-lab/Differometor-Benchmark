@@ -29,6 +29,7 @@ class AlgorithmType(Enum):
     GLOBAL_SEARCH = "global_search"
     DERIVATIVE_FREE = "derivative_free"
     GENERATIVE = "generative"
+    LEARNED = "learned"
 
 
 class OptimizationAlgorithm(ABC):

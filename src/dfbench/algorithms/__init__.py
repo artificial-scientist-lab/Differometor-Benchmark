@@ -114,6 +114,12 @@ try:
 except ImportError:
     pass
 
+# Learned optimizers: imported only when their dependencies exist.
+try:
+    from dfbench.algorithms.learned.velo import VeLO
+except ImportError:
+    pass
+
 __all__ = [
     "BasinHopping",
     "DualAnnealing",
@@ -218,4 +224,5 @@ __all__ = [
     "OptaxSignum",
     "OptaxSM3",
     "OptaxLBFGS",
+    "VeLO",
 ]
