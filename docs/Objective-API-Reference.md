@@ -33,8 +33,15 @@ Objective(
     print_every: int = 100,
     algorithm_str: str | None = None,
     save_to_file_every: int | None = None,
+    display_mode: str = "live",
     unit_mapping: Callable | None = None,
     inverse_unit_mapping: Callable | None = None,
+    hessian_batch_size: int = 1,
+    checkpoint_manager: CheckpointManager | None = None,
+    checkpoint_serializer: CheckpointSerializer | None = None,
+    storage_backend: StorageBackend | None = None,
+    run_data_path_resolver: RunPathResolver | None = None,
+    run_data_exporter: RunDataExporter | None = None,
 )
 ```
 
@@ -61,6 +68,12 @@ Objective(
 | `save_to_file_every` | `int \| None` | `None` | Automatically checkpoint to an NPZ-file every N evaluations. `None` disables auto-saving. The time spent saving is excluded from the elapsed-time clock. |
 | `unit_mapping` | `Callable \| None` | `None` | Optional function mapping unbounded params to the **[0, 1] range**. Can be scalar (e.g. `jax.nn.sigmoid`) or element-wise vector. The Objective handles scaling to actual bounds: `bounded = lb + (ub - lb) * f(x)`. If omitted, the default sigmoid is used. |
 | `inverse_unit_mapping` | `Callable \| None` | `None` | Inverse of the forward mapping, mapping [0, 1] → unbounded space. The Objective normalises bounded params to [0, 1] before calling this: `unbounded = f_inv((bounded - lb) / (ub - lb))`. Must be provided whenever `unit_mapping` is provided. |
+| `hessian_batch_size` | `int` | `1` | Number of Hessian columns to compute simultaneously via `vmap`. `1` (default) is the most memory-efficient (sequential `lax.map`); set to `n_params` for full `jax.hessian` parallelism. |
+| `checkpoint_manager` | `CheckpointManager \| None` | `None` | Fully-configured checkpoint manager. If given, the four storage parameters below are ignored. If `None`, a manager is built from them (or sensible defaults). See [Storage & Checkpointing](Storage-and-Checkpointing). |
+| `checkpoint_serializer` | `CheckpointSerializer \| None` | `None` | Serializer for checkpoints. Defaults to `NpzCheckpointSerializer`. |
+| `storage_backend` | `StorageBackend \| None` | `None` | Where checkpoints are physically stored. Defaults to a `LocalFilesystemBackend` rooted at the resolver's `root`. |
+| `run_data_path_resolver` | `RunPathResolver \| None` | `None` | Controls checkpoint path layout. Defaults to `RunPathResolver` with the historical `./data/objective_run_data` root. |
+| `run_data_exporter` | `RunDataExporter \| None` | `None` | Controls human-readable JSON/PNG output. Defaults to `RunDataExporter` with the historical `./data/problem_output` root. |
 
 ### Choosing `unbounded`
 
@@ -125,6 +138,28 @@ obj = Objective(
 ```
 
 You do **not** need to handle bounds scaling — the Objective does that automatically.
+
+### Injecting storage components (optional)
+
+All file I/O is delegated to the modular `dfbench.core.storage` layer. Every component is injectable via the constructor so you can swap formats, locations, or path layout without editing library code:
+
+```python
+from dfbench.core.storage import (
+    JsonCheckpointSerializer,
+    RunPathResolver,
+    RunDataExporter,
+)
+
+obj = Objective(
+    problem,
+    save_to_file_every=1000,
+    checkpoint_serializer=JsonCheckpointSerializer(),       # pickle-free format
+    run_data_path_resolver=RunPathResolver(root="/scratch/my_run"),
+    run_data_exporter=RunDataExporter(root="/scratch/my_output"),
+)
+```
+
+See [Storage & Checkpointing](Storage-and-Checkpointing) for the full architecture and the individual component APIs.
 
 ---
 
@@ -388,25 +423,38 @@ These properties return **copies** to prevent external mutation.
 
 ## I/O Methods
 
+All file I/O is delegated to the modular `dfbench.core.storage` layer (see [Storage & Checkpointing](Storage-and-Checkpointing)). `Objective` only builds and applies the canonical `RunState` data contract; the *how* (NPZ vs JSON) and *where* (local disk vs S3) are determined by the injected serializer/backend/resolver.
+
 ### `save_run_data(algorithm_name=None, filepath=None, hyper_param_str=None) → Path`
 
-Saves the full optimization state to a compressed NPZ file. Writes atomically (to `.tmp.npz` first, then `os.replace`) to prevent corruption from interrupted HPC jobs. If `algorithm_name` is not provided it defaults to `self.algorithm_str` (or `"unknown"` when that is also unset).
+Saves the full optimization state to a checkpoint file via `CheckpointManager.save()`. The serializer (default `NpzCheckpointSerializer`) encodes a `RunState` snapshot; the backend (default `LocalFilesystemBackend`) writes it **atomically** (temp file in the same directory + `os.replace`), so an interrupted job never leaves a half-written file. If `algorithm_name` is not provided it defaults to `self.algorithm_str` (or `"unknown"`).
 
-Default path: `data/objective_run_data/{budget_dir}/{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`
+The checkpoint embeds `RunMetadata` (problem/algo/budget identity) plus the problem's `to_spec()` reconstructive dict, so the file is fully self-describing.
+
+Default path (built by `RunPathResolver`): `data/objective_run_data/{budget_dir}/{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`
+
+The first save without explicit overrides caches the path; subsequent periodic saves overwrite the same file.
 
 ### `load_run_data(filepath)`
 
-Restores all tracking state from a previously saved NPZ file. Adjusts `start_time` so that `time_elapsed` continues seamlessly from where the checkpoint left off.
+Restores all tracking state from a checkpoint via `CheckpointManager.load()` → `Objective._apply_run_state()`. Adjusts `start_time` so that `time_elapsed` continues seamlessly from where the checkpoint left off. The loaded path is cached so a later `save_run_data()` overwrites the same file.
 
-### `output_to_files(hyper_param_str="", …) → Path`
+The originating `Problem` can be rebuilt from the embedded `problem_spec`:
 
-Writes human-readable outputs:
-- JSON with best parameters
+```python
+state = obj._checkpoint_manager.load(path)
+problem = CheckpointManager.reconstruct_problem(state)
+```
+
+### `output_to_files(hyper_param_str="", hyper_param_str_in_filename=True) → Path`
+
+Writes human-readable outputs via `RunDataExporter.export()`, which derives everything from a `RunState` snapshot (not a second write path):
+- JSON with best parameters (bounded space)
 - JSON with loss history
 - PNG plot of the loss curve
 - (For optical problems) PNG plot of the sensitivity curve vs. target
 
-Output directory: `data/problem_output/{problem_name}/{algorithm_str}/{hyper_param_str}/`
+Output directory (built by the exporter): `data/problem_output/{problem_name}/{algorithm_str}/{hyper_param_str}/`
 
 ### `get_summary() → dict`
 
@@ -435,7 +483,7 @@ Every evaluation method follows the same pipeline internally:
 1. **Execute** the JAX function (`_func`, `_value_and_grad_func`, `_vmap_func`, etc.)
 2. **`_log(params, loss, grad, hessian)`** — the coordinator: checks `time_exceeded`, appends to `_time_steps`, then delegates to `_log_evals()` and `_log_to_file()`.
 3. **`_log_evals(params, loss, grad, hessian, time_exceeded)`** — record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget. Receives `time_exceeded` as an explicit parameter from `_log()` to ensure a consistent time snapshot.
-4. **`_log_to_file()`** — if `save_to_file_every` is set, trigger a periodic checkpoint.
+4. **`_log_to_file()`** — if `save_to_file_every` is set, calls `CheckpointManager.maybe_save()`, which lazily builds a `RunState` only when a checkpoint is due and writes it through the configured `StorageBackend`. The Objective times the save and advances `_start_time` by the save duration so the checkpoint write does not consume wall-clock budget.
 
 > **Important:** These are private methods — do not call `_log()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad, hessian=None)` method instead, which delegates to `_log()`. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm.md#custom-jit-compiled-loops-with-log_evaluation) for details.
 

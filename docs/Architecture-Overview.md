@@ -10,7 +10,14 @@ src/dfbench/
 │   ├── algorithm.py          # OptimizationAlgorithm ABC + AlgorithmType enum
 │   ├── config.py             # CLI argument parser helper
 │   ├── objective.py          # Objective wrapper (central piece)
-│   ├── problem.py            # ContinuousProblem ABC
+│   ├── problem.py            # ContinuousProblem ABC + problem registry / spec
+│   ├── storage/              # Modular checkpointing & export
+│   │   ├── state.py          # RunState + RunMetadata (canonical data contract)
+│   │   ├── backends.py       # StorageBackend protocol + LocalFilesystemBackend
+│   │   ├── serializers.py    # NpzCheckpointSerializer, JsonCheckpointSerializer
+│   │   ├── resolver.py       # RunPathResolver (structured path layout)
+│   │   ├── exporter.py       # RunDataExporter (human-readable JSON + PNG view)
+│   │   └── manager.py        # CheckpointManager (facade used by Objective)
 │   └── utils.py              # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
 │   ├── derivative_free/      # OMADS, PDFO/Py-BOBYQA, NelderMead, Powell
@@ -24,9 +31,9 @@ src/dfbench/
 │   ├── surrogate_based/      # BoTorch/Ax/HEBO/SMAC/ReSTIR/TuRBO-LBFGS
 │   └── generative/           # VAESampling
 ├── problems/
-│   ├── base_problem.py       # OpticalSetupProblem (shared optics logic)
+│   ├── base_problem.py       # OpticalSetupProblem (shared optics logic + spec helper)
 │   ├── voyager/              # VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem
-    └── uifo/                 # UIFOProblem
+│   └── uifo/                 # UIFOProblem
 └── benchmark/
     ├── benchmark.py          # Benchmark orchestrator, AlgorithmConfig
     └── metrics.py            # Per-run, aggregation, and multi-run metrics
@@ -47,8 +54,11 @@ A problem defines *what* is being optimised. Every problem subclasses `Continuou
 | `objective_function` | Loss in **bounded** parameter space — used by evolutionary / surrogate algorithms |
 | `bounds` | `(2, n_params)` lower / upper limits |
 | `optimization_pairs` | `[(component, property), …]` mapping each parameter index to a Differometor component |
+| `to_spec() → dict` | Reconstructive spec: a small, JSON-serialisable dict sufficient to rebuild an equivalent problem instance (see [Problems](Problems)) |
 
 **Rationale — one bounded problem function:** Some optimization methods benefit from unconstrained $(-\infty, +\infty)$ space where gradients flow smoothly without hitting box-constraint boundaries. `Objective` provides that mapping layer so problem implementations only need to define the bounded loss.
+
+**Rationale — reconstructive spec:** A checkpoint is only useful for resume or provenance if the originating problem can be rebuilt. `to_spec()` encodes the problem's constructor arguments (and, for UIFO, its topology string) so a saved run is fully self-describing. See [Storage & Checkpointing](Storage-and-Checkpointing).
 
 ### 2. Objective Layer (`core/objective.py`)
 
@@ -59,8 +69,11 @@ A problem defines *what* is being optimised. Every problem subclasses `Continuou
 - Records every evaluation with aligned loss / gradient / Hessian / params / timestamp histories
 - Enforces wall-clock time and evaluation-count budgets
 - Provides deterministic random sampling via a splittable JAX PRNG
+- Delegates all file I/O to the modular `dfbench.core.storage` layer (see [Storage & Checkpointing](Storage-and-Checkpointing))
 
 **Rationale — why a wrapper instead of bare functions?** Without it, every algorithm would need to independently implement timing, budget checks, history logging, checkpointing, and bounded↔unbounded transforms. This both duplicates code and makes cross-algorithm comparison unreliable because each implementation might measure time or count evaluations slightly differently.
+
+**Rationale — decoupled storage:** `Objective` only builds/applies the canonical `RunState` data contract; the *how* (NPZ vs JSON) and *where* (local disk vs S3) of saving are injectable via the constructor (`checkpoint_serializer`, `storage_backend`, `run_data_path_resolver`, `run_data_exporter`). No `./data/...` path is hardcoded in `Objective`.
 
 ### 3. Algorithm Layer (`core/algorithm.py`, `algorithms/`)
 
@@ -73,6 +86,19 @@ An algorithm defines *how* to search. Every algorithm subclasses `OptimizationAl
 | `optimize(objective, …)` | Main entry point — receives a pre-configured `Objective`, runs the loop, returns it |
 
 Algorithms **never** create their own `Objective`; they receive one from the caller (or from the `Benchmark` harness). This inversion of control ensures the harness can set budget limits, select seeds, and configure history storage uniformly.
+
+### 4. Storage Layer (`core/storage/`)
+
+A modular package that decouples *what* is saved from *how* and *where*:
+
+- `RunState` / `RunMetadata` — the canonical, serializer-agnostic data contract (including the embedded `problem_spec`).
+- `CheckpointSerializer` — format strategy (NPZ default, JSON alternative).
+- `StorageBackend` — byte-level destination (local filesystem default, trivially swappable for memory / S3).
+- `RunPathResolver` — structured path construction from components (no hardcoded paths in `Objective`).
+- `RunDataExporter` — human-readable JSON + PNG view derived from `RunState`.
+- `CheckpointManager` — the single facade `Objective` holds; wires the above together.
+
+See [Storage & Checkpointing](Storage-and-Checkpointing) for the full reference.
 
 ---
 
@@ -110,14 +136,14 @@ Algorithms **never** create their own `Objective`; they receive one from the cal
   time_steps   _log_evals()     _log_to_file()
   (append)         │                   │
        ▼           ▼                   ▼
-  _time_steps  _loss_history      periodic NPZ
-               _params_history    checkpoint
-               _grad_history
-               _hessian_history
-               _best_loss / _best_params
+   _time_steps  _loss_history      periodic
+                _params_history    checkpoint
+                _grad_history      via CheckpointManager
+                _hessian_history   → StorageBackend
+                _best_loss / _best_params
 ```
 
-Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this exact pipeline. The internal `_log()` coordinator handles time-step recording, delegates to `_log_evals()` for history tracking, and triggers `_log_to_file()` for periodic checkpoints. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
+Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this exact pipeline. The internal `_log()` coordinator handles time-step recording, delegates to `_log_evals()` for history tracking, and triggers `_log_to_file()` for periodic checkpoints. `_log_to_file()` calls `CheckpointManager.maybe_save()`, which lazily builds a `RunState` only when a checkpoint is due and writes it through the configured `StorageBackend`. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
 
 For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.value_function(...)` provides the same Objective-owned bounded/unbounded mapping without Python-side logging, and `obj.log_evaluation(params, loss, grad, hessian=None)` records the completed evaluation through the same logging pipeline. Do not call the private methods directly.
 
@@ -162,7 +188,9 @@ The `Benchmark` class:
 | **Sigmoid bounding option** | Optimization in clipped-bounded space can produce zero gradients at boundaries. The sigmoid map $\sigma(x) \cdot (\text{ub} - \text{lb}) + \text{lb}$ provides an alternative where gradients remain nonzero everywhere in unconstrained space. |
 | **Wall-clock time as primary budget** | Evaluation cost varies across problems (12 ms for Voyager, 500 ms for UIFO). Time-based budgets make cross-problem comparisons meaningful. |
 | **Time-sampled metrics** | Evaluating metrics at fixed time points (not iteration counts) normalises for per-eval cost differences between algorithms. |
-| **Atomic checkpoints** | Long HPC jobs are killed without warning. Writing to `.tmp.npz` and then calling `os.replace` avoids half-written files. |
+| **Atomic checkpoints** | Long HPC jobs are killed without warning. The `LocalFilesystemBackend` writes to a sibling temp file and calls `os.replace`; a reader always sees either the previous complete file or the new one, never a partial one. The previous good file is never destroyed before the new one is in place. |
+| **Modular storage layer** | `Objective` delegates all I/O to `dfbench.core.storage`, so formats (NPZ/JSON), locations (disk/S3), and path layout are injectable without editing library code. A single canonical `RunState` contract prevents format drift. |
+| **Self-describing checkpoints** | Each checkpoint embeds `RunMetadata` (problem/algo/budget identity) plus the problem's `to_spec()` reconstructive dict, so a saved run can be audited and resumed in any process without the caller holding the original `Problem` object. |
 | **`_init_env.py` setting `MPLCONFIGDIR`** | On shared HPC filesystems, matplotlib's default config directory may be read-only. Setting a temp directory before any import prevents cryptic crashes. |
 | **`AlgorithmType` enum** | The enum mirrors the `algorithms/` package families. The benchmark uses it as a default hint: gradient-based algorithms typically get `unbounded=True`, while evolutionary, derivative-free, global-search, surrogate, and generative methods get `unbounded=False` unless their implementation overrides the mode. |
 | **Reduced history properties** | Batched algorithms produce `(batch, …)` shaped histories. The `*_reduced` properties collapse each batch to a single representative (argmin of loss) so downstream analysis code never needs to handle ragged shapes. |
