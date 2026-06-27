@@ -37,6 +37,8 @@ from dfbench.core.storage.serializers import (
     CheckpointSerializer,
     NpzCheckpointSerializer,
     JsonCheckpointSerializer,
+    RunCollectionSerializer,
+    NpzRunCollectionSerializer,
 )
 from dfbench.core.storage.resolver import RunPathResolver
 from dfbench.core.storage.exporter import RunDataExporter
@@ -45,6 +47,7 @@ from dfbench.core.problem import (
     ContinuousProblem,
     build_problem_from_spec,
     register_problem,
+    validate_spec_round_trip,
 )
 
 __all__ = [
@@ -55,6 +58,8 @@ __all__ = [
     "CheckpointSerializer",
     "NpzCheckpointSerializer",
     "JsonCheckpointSerializer",
+    "RunCollectionSerializer",
+    "NpzRunCollectionSerializer",
     "RunPathResolver",
     "RunDataExporter",
     "CheckpointManager",
@@ -62,4 +67,5 @@ __all__ = [
     "ContinuousProblem",
     "build_problem_from_spec",
     "register_problem",
+    "validate_spec_round_trip",
 ]

@@ -27,6 +27,7 @@ from dfbench.core.problem import (
     ContinuousProblem,
     build_problem_from_spec,
     register_problem,
+    validate_spec_round_trip,
 )
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 
@@ -62,6 +63,7 @@ __all__ = [
     # Problem reconstruction
     "build_problem_from_spec",
     "register_problem",
+    "validate_spec_round_trip",
     # Utilities
     "create_parser",
     "t2j",
