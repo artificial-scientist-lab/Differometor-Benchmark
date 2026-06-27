@@ -33,6 +33,20 @@ from dfbench.core.utils import t2j, j2t
 # Import Objective for external use
 from dfbench.core.objective import Objective
 
+# Import modular storage components
+from dfbench.core.storage import (
+    CheckpointManager,
+    CheckpointSerializer,
+    JsonCheckpointSerializer,
+    LocalFilesystemBackend,
+    NpzCheckpointSerializer,
+    RunDataExporter,
+    RunMetadata,
+    RunPathResolver,
+    RunState,
+    StorageBackend,
+)
+
 
 __all__ = [
     # Core
@@ -45,4 +59,15 @@ __all__ = [
     "create_parser",
     "t2j",
     "j2t",
+    # Modular storage
+    "CheckpointManager",
+    "CheckpointSerializer",
+    "JsonCheckpointSerializer",
+    "LocalFilesystemBackend",
+    "NpzCheckpointSerializer",
+    "RunDataExporter",
+    "RunMetadata",
+    "RunPathResolver",
+    "RunState",
+    "StorageBackend",
 ]

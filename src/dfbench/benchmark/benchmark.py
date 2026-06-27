@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import csv
+import io
 import json
 import numpy as np
 import jax.numpy as jnp
@@ -36,6 +37,10 @@ from jaxtyping import Array, Float
 from dfbench import Objective
 from dfbench.core.problem import ContinuousProblem
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
+from dfbench.core.storage import (
+    LocalFilesystemBackend,
+    StorageBackend,
+)
 from dfbench.benchmark.metrics import (
     run_min_loss,
     run_has_success,
@@ -242,6 +247,7 @@ class Benchmark:
         max_time: float = 300.0,
         n_time_samples: int = 100,
         random_baseline_loss: float | None = None,
+        storage_backend: StorageBackend | None = None,
     ):
         """Initialize the benchmark suite.
 
@@ -256,6 +262,10 @@ class Benchmark:
                 If None, AUC normalization is disabled.
             random_seed: Master random seed for reproducibility. If provided, generates
                 deterministic per-run seeds.
+            storage_backend: Where benchmark run data (NPZ/JSON) is
+                physically stored. Defaults to a local filesystem backend
+                (current working directory). Swapping this redirects all
+                benchmark artifacts without code changes here.
         """
         self._problem = problem
         self._success_loss = success_loss
@@ -265,6 +275,9 @@ class Benchmark:
         self._n_time_samples = n_time_samples
         self._random_baseline_loss = random_baseline_loss
         self._random_seed = random_seed
+        self._storage_backend: StorageBackend = (
+            storage_backend or LocalFilesystemBackend()
+        )
 
         # Generate time sample points (excluding 0, evenly spaced up to max_time)
         # E.g., n_time_samples=10, max_time=30 -> [3, 6, 9, 12, 15, 18, 21, 24, 27, 30]
@@ -608,13 +621,19 @@ class Benchmark:
         algo_data: AlgorithmRunData,
         save_dir: Path,
     ) -> Path:
-        """Save one algorithm's run data to NPZ file."""
+        """Save one algorithm's run data to an NPZ file via the storage backend.
+
+        The bytes are produced in-memory and handed to
+        :attr:`_storage_backend`, which writes them atomically (on the
+        local filesystem) instead of the old direct ``np.savez``.
+        """
         safe_name = algo_data.algorithm_name.replace("/", "_").replace(" ", "_")
         npz_path = save_dir / f"{safe_name}.npz"
 
-        # Extract arrays from runs
+        # Build the NPZ payload in memory so the backend owns the write
+        buffer = io.BytesIO()
         np.savez(
-            npz_path,
+            buffer,
             algorithm_name=algo_data.algorithm_name,
             hyperparameters=json.dumps(algo_data.hyperparameters),
             n_runs=len(algo_data.runs),
@@ -633,6 +652,7 @@ class Benchmark:
             ),
             eval_counts=np.array([r.eval_count for r in algo_data.runs]),
         )
+        self._storage_backend.save_bytes(npz_path, buffer.getvalue())
 
         print(f"  Saved {len(algo_data.runs)} runs to {npz_path.name}")
         return npz_path
@@ -642,7 +662,7 @@ class Benchmark:
         all_run_data: list[AlgorithmRunData],
         save_dir: Path,
     ) -> None:
-        """Save metadata.json file."""
+        """Save metadata.json file via the storage backend."""
         metadata = {
             "problem_name": getattr(self._problem, "name", "problem"),
             "success_loss": self._success_loss,
@@ -662,18 +682,20 @@ class Benchmark:
             ],
         }
 
-        with open(save_dir / "metadata.json", "w") as f:
-            json.dump(metadata, f, indent=2)
+        metadata_path = save_dir / "metadata.json"
+        self._storage_backend.save_bytes(
+            metadata_path, json.dumps(metadata, indent=2).encode("utf-8")
+        )
 
-        print(f"\nMetadata saved to: {save_dir / 'metadata.json'}")
+        print(f"\nMetadata saved to: {metadata_path}")
 
     def _load_run_data(self, data_dir: Path) -> list[AlgorithmRunData]:
-        """Load saved run data from disk.
+        """Load saved run data from disk via the storage backend.
 
         Supports both new format (with time_steps) and legacy format (with wall_time_indices).
         """
-        with open(data_dir / "metadata.json", "r") as f:
-            metadata = json.load(f)
+        metadata_bytes = self._storage_backend.load_bytes(data_dir / "metadata.json")
+        metadata = json.loads(metadata_bytes.decode("utf-8"))
 
         print(f"\nLoading run data from: {data_dir}")
         print(f"  Saved max_time: {metadata.get('max_time', 'N/A')}")
@@ -684,7 +706,8 @@ class Benchmark:
             npz_path = data_dir / algo_info["file"]
             print(f"  Loading {algo_info['name']}...")
 
-            with np.load(npz_path, allow_pickle=True) as data:
+            data_bytes = self._storage_backend.load_bytes(npz_path)
+            with np.load(io.BytesIO(data_bytes), allow_pickle=True) as data:
                 # Check if this is new format or legacy format
                 if "time_steps_list" in data:
                     # New format
@@ -883,40 +906,41 @@ class Benchmark:
         print("=" * 90)
 
     def _save_results_to_csv(self, results: list[BenchmarkResult]) -> None:
-        """Save benchmark results to CSV file."""
+        """Save benchmark results to a CSV file via the storage backend."""
         output_dir = Path("./data/benchmark_results")
-        output_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         problem_name = getattr(self._problem, "name", "problem")
         output_path = output_dir / f"benchmark_{problem_name}_{timestamp}.csv"
 
-        with open(output_path, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
 
-            # Header
-            header = ["algorithm_name", "time_sample"]
-            for fld in fields(BenchmarkResult):
-                if fld.name in ("algorithm_name", "time_samples", "n_runs"):
-                    continue
-                header.extend([f"{fld.name}_mean", f"{fld.name}_std"])
-            writer.writerow(header)
+        # Header
+        header = ["algorithm_name", "time_sample"]
+        for fld in fields(BenchmarkResult):
+            if fld.name in ("algorithm_name", "time_samples", "n_runs"):
+                continue
+            header.extend([f"{fld.name}_mean", f"{fld.name}_std"])
+        writer.writerow(header)
 
-            # Data rows
-            for result in results:
-                for i, t in enumerate(self._time_samples):
-                    row = [result.algorithm_name, float(t)]
+        # Data rows
+        for result in results:
+            for i, t in enumerate(self._time_samples):
+                row = [result.algorithm_name, float(t)]
 
-                    for fld in fields(BenchmarkResult):
-                        if fld.name in ("algorithm_name", "time_samples", "n_runs"):
-                            continue
-                        metric = getattr(result, fld.name)
+                for fld in fields(BenchmarkResult):
+                    if fld.name in ("algorithm_name", "time_samples", "n_runs"):
+                        continue
+                    metric = getattr(result, fld.name)
 
-                        if isinstance(metric, SingleMetric):
-                            row.extend([float(metric.value[i]), 0.0])
-                        elif isinstance(metric, AggregateMetric):
-                            row.extend([float(metric.mean[i]), float(metric.std[i])])
+                    if isinstance(metric, SingleMetric):
+                        row.extend([float(metric.value[i]), 0.0])
+                    elif isinstance(metric, AggregateMetric):
+                        row.extend([float(metric.mean[i]), float(metric.std[i])])
 
-                    writer.writerow(row)
+                writer.writerow(row)
+
+        self._storage_backend.save_bytes(output_path, buffer.getvalue().encode("utf-8"))
 
         print(f"\nResults saved to: {output_path}")
