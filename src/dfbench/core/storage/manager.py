@@ -178,3 +178,27 @@ class CheckpointManager:
         if not self.should_checkpoint(eval_count, save_every):
             return None
         return self.save(state_factory())
+
+    # ------------------------------------------------------------------
+    # problem reconstruction
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def extract_problem_spec(state: RunState) -> dict | None:
+        """Return the embedded ``problem_spec`` from a loaded state, if any."""
+        return state.metadata.extra.get("problem_spec")
+
+    @staticmethod
+    def reconstruct_problem(state: RunState):
+        """Rebuild the :class:`ContinuousProblem` recorded in ``state``.
+
+        Returns ``None`` if the run did not record a problem spec (e.g. the
+        problem did not implement ``to_spec``). Requires the relevant
+        problem module to be imported so its class is registered.
+        """
+        spec = CheckpointManager.extract_problem_spec(state)
+        if spec is None:
+            return None
+        from dfbench.core.problem import build_problem_from_spec
+
+        return build_problem_from_spec(spec)

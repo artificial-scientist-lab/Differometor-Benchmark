@@ -23,7 +23,11 @@ Usage:
 import dfbench.core._init_env  # noqa: F401
 
 # Import protocols
-from dfbench.core.problem import ContinuousProblem
+from dfbench.core.problem import (
+    ContinuousProblem,
+    build_problem_from_spec,
+    register_problem,
+)
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 
 # Import core utilities
@@ -55,6 +59,9 @@ __all__ = [
     "ContinuousProblem",
     "OptimizationAlgorithm",
     "AlgorithmType",
+    # Problem reconstruction
+    "build_problem_from_spec",
+    "register_problem",
     # Utilities
     "create_parser",
     "t2j",

@@ -41,6 +41,11 @@ from dfbench.core.storage.serializers import (
 from dfbench.core.storage.resolver import RunPathResolver
 from dfbench.core.storage.exporter import RunDataExporter
 from dfbench.core.storage.manager import CheckpointManager
+from dfbench.core.problem import (
+    ContinuousProblem,
+    build_problem_from_spec,
+    register_problem,
+)
 
 __all__ = [
     "RunState",
@@ -53,4 +58,8 @@ __all__ = [
     "RunPathResolver",
     "RunDataExporter",
     "CheckpointManager",
+    # Problem reconstruction contract
+    "ContinuousProblem",
+    "build_problem_from_spec",
+    "register_problem",
 ]

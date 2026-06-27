@@ -40,6 +40,9 @@ class _StubProblem(OpticalSetupProblem):
     def calculate_sensitivity(self, optimized_parameters):
         return jnp.ones(10)
 
+    def to_spec(self) -> dict:
+        return self._base_spec() | {"type": "_StubProblem"}
+
 
 # ======================================================================
 # _apply_property_bounds_overrides (4.21–4.23)

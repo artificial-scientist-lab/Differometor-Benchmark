@@ -1,7 +1,7 @@
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 import numpy as np
 import jax
 import jax.numpy as jnp
@@ -1837,7 +1837,23 @@ class Objective:
     # --------- public API for I/O ---------
 
     def _build_metadata(self, algorithm_name: str | None = None) -> RunMetadata:
-        """Build a :class:`RunMetadata` snapshot for the current run."""
+        """Build a :class:`RunMetadata` snapshot for the current run.
+
+        If the wrapped problem implements the reconstructive
+        :meth:`~dfbench.core.problem.ContinuousProblem.to_spec` contract,
+        its spec is embedded in ``metadata.extra["problem_spec"]`` so the
+        checkpoint fully describes which problem instance produced the run.
+        """
+        extra: dict[str, Any] = {}
+        spec_fn = getattr(self._problem, "to_spec", None)
+        if callable(spec_fn):
+            try:
+                extra["problem_spec"] = spec_fn()
+            except Exception:
+                # A problem that fails to describe itself should not break
+                # checkpointing; the run is still saveable, just not
+                # self-reconstructing.
+                pass
         return RunMetadata(
             problem_name=(
                 self._problem.name if hasattr(self._problem, "name") else "problem"
@@ -1848,6 +1864,7 @@ class Objective:
             max_time=self._max_time,
             max_evals=self._max_evals,
             unbounded=self.unbounded,
+            extra=extra,
         )
 
     def _build_run_state(self, algorithm_name: str | None = None) -> RunState:

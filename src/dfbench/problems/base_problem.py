@@ -1,13 +1,9 @@
 """Base class for gravitational wave detector optimization problems."""
 
-import json
-import os
 from abc import abstractmethod
-from datetime import datetime
-from typing import Callable, Mapping
+from typing import Any, Callable, Mapping
 
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
 from jaxtyping import Array, Float
 
 from differometor.components import (
@@ -16,7 +12,7 @@ from differometor.components import (
     SOFT_SIDE_POWER_THRESHOLD,
 )
 
-from dfbench.core.problem import ContinuousProblem
+from dfbench.core.problem import ContinuousProblem, register_problem
 
 
 # ---------------------------------------------------------------------------
@@ -43,6 +39,40 @@ def zero_penalty(value, threshold):
     return jnp.zeros_like(value)
 
 
+# Registry of named penalty functions so they can be (de)serialised by name.
+_PENALTY_FUNCTIONS: dict[str, Callable] = {
+    "squashed_relu_penalty": squashed_relu_penalty,
+    "relu_penalty": relu_penalty,
+    "zero_penalty": zero_penalty,
+}
+
+
+def penalty_fn_to_name(fn: Callable | None) -> str | None:
+    """Return the registry name of a penalty function, or None for default."""
+    if fn is None:
+        return None
+    name = getattr(fn, "__name__", None)
+    if name is None or name not in _PENALTY_FUNCTIONS:
+        raise ValueError(
+            f"Cannot serialise power_penalty_fn {fn!r}: not a registered "
+            f"preset. Known: {sorted(_PENALTY_FUNCTIONS.keys())}."
+        )
+    return name
+
+
+def name_to_penalty_fn(name: str | None) -> Callable | None:
+    """Resolve a penalty-function name back to the callable, or None."""
+    if name is None:
+        return None
+    if name not in _PENALTY_FUNCTIONS:
+        raise ValueError(
+            f"Unknown power_penalty_fn name '{name}'. "
+            f"Known: {sorted(_PENALTY_FUNCTIONS.keys())}."
+        )
+    return _PENALTY_FUNCTIONS[name]
+
+
+@register_problem
 class OpticalSetupProblem(ContinuousProblem):
     """Abstract base class for optical setup optimization problems.
 
@@ -220,113 +250,22 @@ class OpticalSetupProblem(ContinuousProblem):
         """
         pass
 
-    def output_to_files(
-        self,
-        best_params: Float[Array, "{self.n_params}"] = None,
-        losses: Float[Array, "iterations"] = None,
-        population_losses: Float[Array, "iterations pop"] = None,
-        algorithm_str: str = "",
-        hyper_param_str: str = "",
-        hyper_param_str_in_filename: bool = True,
-    ) -> None:
-        """Output optimization results to files.
+    # --------- reconstructive spec ---------
 
-        Creates JSON files with parameters and losses, and PNG plots of
-        the optimization progress and final sensitivity curve.
+    def _base_spec(self) -> dict[str, Any]:
+        """Common optical-problem spec fields (subclass adds ``type`` + extras).
 
-        Args:
-            best_params: Best parameters found during optimization.
-            losses: Loss values over iterations/generations.
-            population_losses: All population losses (for genetic algorithms).
-            algorithm_str: Algorithm name for file naming.
-            hyper_param_str: Hyperparameter string for file naming.
-            hyper_param_str_in_filename: Whether to include hyperparameters in filename.
+        Encodes the penalty function by name so the dict is JSON-safe.
+        Subclasses append their own constructor args (n_frequencies,
+        bounds_overrides, topology, ...) and the ``"type"`` registry key.
         """
-        # Print best params and loss first
-        print(f"Parameters of the best solution : {best_params}")
-        print(
-            f"Fitness value of the best solution = {self.objective_function(best_params)}"
-        )
+        spec: dict[str, Any] = {
+            "n_frequencies": int(self._frequencies.shape[0]),
+            "power_penalty_fn": penalty_fn_to_name(self._power_penalty_fn),
+        }
+        return spec
 
-        # Prepare strings and timestamp
-        algorithm_str = f"_{algorithm_str.strip('_')}" if algorithm_str != "" else ""
-        hyper_param_str = (
-            f"_{hyper_param_str.strip('_')}" if hyper_param_str != "" else ""
-        )
-        timestamp = datetime.now().strftime("_%Y-%m-%d_%H-%M")
-
-        # Create output directory
-        output_path = os.path.join(
-            f"./data/problem_output/{self._name}/{algorithm_str.strip('_')}",
-            hyper_param_str.strip("_"),  # directory should not have leading underscore
-        )
-        os.makedirs(output_path, exist_ok=True)
-
-        # Send info to user
-        print(f"Output directory: {output_path}")
-
-        # Determine file name prefix and suffix
-        file_prefix = f"{self._name}{algorithm_str}{timestamp}"
-        file_suffix = hyper_param_str if hyper_param_str_in_filename else ""
-
-        # Output best parameters to JSON
-        with open(
-            os.path.join(output_path, f"{file_prefix}_parameters{file_suffix}.json"),
-            "w",
-        ) as f:
-            json.dump(best_params.tolist(), f, indent=4)
-
-        # Output historical losses to JSON
-        with open(
-            os.path.join(output_path, f"{file_prefix}_losses{file_suffix}.json"),
-            "w",
-        ) as f:
-            json.dump(losses.tolist(), f, indent=4)
-
-        is_genetic = population_losses is not None
-
-        plt.figure()
-        plt.plot(losses)
-        plt.xlabel("Generation" if is_genetic else "Iteration")
-        plt.ylabel("Best losses" if is_genetic else "Loss")
-        plt.axhline(0, color="red", linestyle="--")
-        plt.grid()
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_path, f"{file_prefix}_losses{file_suffix}.png"))
-
-        if population_losses is not None:
-            plt.figure()
-            plt.plot(population_losses)
-            plt.xlabel("Generation")
-            plt.ylabel("All losses")
-            plt.axhline(0, color="red", linestyle="--")
-            plt.grid()
-            plt.tight_layout()
-            plt.savefig(
-                os.path.join(
-                    output_path, f"{file_prefix}_population_losses{file_suffix}.png"
-                )
-            )
-
-        ### Calculate the sensitivity of the best found setup ###
-        # -------------------------------------------------------#
-
-        sensitivities = self.calculate_sensitivity(best_params)
-
-        plt.figure()
-        plt.plot(self._frequencies, sensitivities, label="Optimized Sensitivity")
-
-        plt.plot(
-            self._frequencies, self._target_sensitivities, label="Target Sensitivity"
-        )
-
-        plt.xscale("log")
-        plt.yscale("log")
-        plt.xlabel("Frequency (Hz)")
-        plt.ylabel("Sensitivity [/sqrt(Hz)]")
-        plt.legend()
-        plt.grid()
-        plt.tight_layout()
-        plt.savefig(
-            os.path.join(output_path, f"{file_prefix}_sensitivity{file_suffix}.png")
-        )
+    @staticmethod
+    def _spec_to_penalty_fn(spec: dict[str, Any]) -> Callable | None:
+        """Resolve a ``power_penalty_fn`` name from a spec to the callable."""
+        return name_to_penalty_fn(spec.get("power_penalty_fn"))
