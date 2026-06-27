@@ -12,6 +12,7 @@ from dfbench.core.storage import (
     JsonCheckpointSerializer,
     LocalFilesystemBackend,
     NpzCheckpointSerializer,
+    NpzRunCollectionSerializer,
     RunDataExporter,
     RunMetadata,
     RunPathResolver,
@@ -263,3 +264,59 @@ class TestRunDataExporter:
         assert len(params_files) == 1
         content = json.loads(params_files[0].read_text())
         assert content == [0.0, 0.0]
+
+
+# ---------------------------------------------------------------------
+# RunCollectionSerializer (used by Benchmark)
+# ---------------------------------------------------------------------
+
+
+class TestNpzRunCollectionSerializer:
+    def test_collection_round_trip(self):
+        """Serialize/deserialize a collection of RunState objects."""
+        ser = NpzRunCollectionSerializer()
+        states = [_make_state(eval_count=3), _make_state(eval_count=5)]
+        data = ser.serialize_collection(
+            algorithm_name="adam",
+            hyperparameters={"lr": 0.1},
+            runs=states,
+        )
+        assert isinstance(data, bytes)
+
+        name, hparams, loaded = ser.deserialize_collection(data)
+        assert name == "adam"
+        assert hparams == {"lr": 0.1}
+        assert len(loaded) == 2
+        assert loaded[0].eval_count == 3
+        assert loaded[1].eval_count == 5
+        # Metadata (including problem_spec) survives
+        assert loaded[0].metadata.problem_name == "test_problem"
+
+    def test_collection_empty_runs(self):
+        ser = NpzRunCollectionSerializer()
+        data = ser.serialize_collection("empty", {}, [])
+        name, hparams, loaded = ser.deserialize_collection(data)
+        assert name == "empty"
+        assert loaded == []
+
+    def test_extension_attribute(self):
+        assert NpzRunCollectionSerializer().extension == "npz"
+
+
+# ---------------------------------------------------------------------
+# Serializer extension sync (#5)
+# ---------------------------------------------------------------------
+
+
+class TestSerializerExtensionSync:
+    def test_json_serializer_produces_json_path(self, tmp_path):
+        """CheckpointManager with JsonCheckpointSerializer uses .json paths."""
+        manager = CheckpointManager(
+            backend=LocalFilesystemBackend(root=tmp_path),
+            serializer=JsonCheckpointSerializer(),
+            resolver=RunPathResolver(root=str(tmp_path)),
+        )
+        assert manager.resolver.extension == "json"
+        state = _make_state()
+        path = manager.save(state)
+        assert path.suffix == ".json"

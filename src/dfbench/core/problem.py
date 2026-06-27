@@ -69,6 +69,42 @@ def build_problem_from_spec(spec: dict[str, Any]) -> "ContinuousProblem":
     return cls(**kwargs)
 
 
+def validate_spec_round_trip(
+    problem: "ContinuousProblem",
+    *,
+    rtol: float = 1e-6,
+    atol: float = 1e-6,
+) -> "ContinuousProblem":
+    """Rebuild ``problem`` from its own spec and assert equivalence.
+
+    Reconstructs the problem via :func:`build_problem_from_spec` and checks
+    that the rebuilt instance has the same ``n_params`` and matching
+    ``bounds``. Returns the rebuilt problem on success.
+
+    Raises:
+        AssertionError: If the rebuilt problem's ``n_params`` or ``bounds``
+            differ from the original.
+    """
+    spec = problem.to_spec()
+    rebuilt = build_problem_from_spec(spec)
+
+    assert rebuilt.n_params == problem.n_params, (
+        f"Spec round-trip mismatch: original n_params={problem.n_params} "
+        f"but rebuilt n_params={rebuilt.n_params}."
+    )
+
+    import numpy as np
+
+    np.testing.assert_allclose(
+        np.asarray(rebuilt.bounds),
+        np.asarray(problem.bounds),
+        rtol=rtol,
+        atol=atol,
+        err_msg="Spec round-trip mismatch: rebuilt bounds differ from original.",
+    )
+    return rebuilt
+
+
 class ContinuousProblem(ABC):
     """Abstract base class for continuous optimization problems.
 
