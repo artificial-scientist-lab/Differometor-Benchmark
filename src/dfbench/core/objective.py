@@ -1519,14 +1519,14 @@ class Objective:
         return
 
     def _log_to_file(self) -> None:
-        """Internal: Save current run data to file if configured."""
+        """Internal: Save current run data to file if configured.
+
+        Delegates the checkpoint-due decision entirely to
+        :meth:`CheckpointManager.maybe_save`, which gates internally so
+        this method does not need a redundant check.
+        """
         # Execute this as late as possible in the logging sequence
         if self._start_time is None:
-            return
-
-        if not self._checkpoint_manager.should_checkpoint(
-            self._eval_count, self._save_to_file_every
-        ):
             return
 
         # Time the save and exclude that duration from elapsed time

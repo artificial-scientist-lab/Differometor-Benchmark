@@ -54,6 +54,12 @@ class CheckpointManager:
         )
         self.serializer: CheckpointSerializer = serializer or NpzCheckpointSerializer()
 
+        # Keep the resolver's extension in sync with the serializer's format
+        # so checkpoint paths match the on-disk artifact (e.g. .json vs .npz).
+        serializer_ext = getattr(self.serializer, "extension", None)
+        if serializer_ext is not None:
+            self.resolver.extension = serializer_ext
+
         self._cached_path: Path | None = None
         self.last_checkpoint_eval: int | None = None
 

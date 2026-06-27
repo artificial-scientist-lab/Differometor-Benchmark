@@ -38,6 +38,10 @@ from dfbench.core.storage.state import (
 class CheckpointSerializer(Protocol):
     """Encode/decode a :class:`RunState` to/from bytes."""
 
+    #: File extension (without dot) implied by this serializer's format,
+    #: used by :class:`CheckpointManager` to keep the path resolver in sync.
+    extension: str
+
     def serialize(self, state: RunState) -> bytes:
         """Encode ``state`` to a byte string."""
         ...
@@ -75,6 +79,8 @@ class NpzCheckpointSerializer:
     histories: missing keys fall back to empty defaults.
     """
 
+    extension: str = "npz"
+
     def serialize(self, state: RunState) -> bytes:
         buffer = io.BytesIO()
         np.savez_compressed(
@@ -99,11 +105,8 @@ class NpzCheckpointSerializer:
                 state.evals_since_improvement, dtype=np.int64
             ),
             log_call_count=np.array(state.log_call_count, dtype=np.int64),
-            eval_type_counts_keys=np.array(
-                list(state.eval_type_counts.keys()), dtype=np.int64
-            ),
-            eval_type_counts_vals=np.array(
-                list(state.eval_type_counts.values()), dtype=np.int64
+            eval_type_counts=np.array(
+                json.dumps({str(k): v for k, v in state.eval_type_counts.items()})
             ),
         )
         return buffer.getvalue()
@@ -133,15 +136,16 @@ class NpzCheckpointSerializer:
                     return d[key]
                 return _empty_object_array()
 
-            # Rebuild eval_type_counts dict
+            # Rebuild eval_type_counts dict — single source of truth is the
+            # JSON-encoded "eval_type_counts" field.  For legacy files that
+            # predate this field, fall back to rebuilding from
+            # eval_type_history.
             counts: dict[int, int]
-            if "eval_type_counts_keys" in files:
-                counts = dict(
-                    zip(
-                        d["eval_type_counts_keys"].tolist(),
-                        d["eval_type_counts_vals"].tolist(),
-                    )
-                )
+            if "eval_type_counts" in files:
+                counts = {
+                    int(k): int(v)
+                    for k, v in json.loads(str(d["eval_type_counts"])).items()
+                }
             elif "eval_type_history" in files:
                 et = d["eval_type_history"].tolist()
                 counts = {}
@@ -188,6 +192,8 @@ class JsonCheckpointSerializer:
     Histories are stored as nested lists. Slower and larger than NPZ but
     safe to load from untrusted sources and trivially inspectable.
     """
+
+    extension: str = "json"
 
     def serialize(self, state: RunState) -> bytes:
         def _tolist(a: np.ndarray):
@@ -251,3 +257,99 @@ class JsonCheckpointSerializer:
             },
             metadata=metadata,
         )
+
+
+# ------------------------------------------------------------------
+# Multi-run collection serializer (used by Benchmark)
+# ------------------------------------------------------------------
+
+
+@runtime_checkable
+class RunCollectionSerializer(Protocol):
+    """Encode/decode a collection of :class:`RunState` objects.
+
+    Used by :class:`~dfbench.benchmark.benchmark.Benchmark` to persist all
+    runs for one algorithm configuration as a single self-describing
+    artifact. The collection carries the algorithm name, hyperparameters,
+    and one :class:`RunState` per run — each encoded by a per-run
+    :class:`CheckpointSerializer`.
+    """
+
+    extension: str
+
+    def serialize_collection(
+        self,
+        algorithm_name: str,
+        hyperparameters: dict,
+        runs: list[RunState],
+    ) -> bytes: ...
+
+    def deserialize_collection(self, data: bytes) -> tuple[str, dict, list[RunState]]:
+        """Return ``(algorithm_name, hyperparameters, runs)``."""
+        ...
+
+
+class NpzRunCollectionSerializer:
+    """NPZ-backed :class:`RunCollectionSerializer`.
+
+    Packs all runs into a single compressed ``.npz``. Each run's full
+    :class:`RunState` is serialized by the per-run ``run_serializer``
+    (default :class:`NpzCheckpointSerializer`) and stored as a base64
+    string, so the per-run schema (including ``format_version``,
+    ``metadata``, and embedded ``problem_spec``) is preserved exactly.
+    A ``format_version`` and a ``collection_metadata`` JSON sidecar make
+    the collection self-describing.
+    """
+
+    extension: str = "npz"
+
+    def __init__(self, run_serializer: CheckpointSerializer | None = None) -> None:
+        self._run_serializer = run_serializer or NpzCheckpointSerializer()
+
+    def serialize_collection(
+        self,
+        algorithm_name: str,
+        hyperparameters: dict,
+        runs: list[RunState],
+    ) -> bytes:
+        import base64
+
+        run_blobs = [
+            base64.b64encode(self._run_serializer.serialize(r)).decode("ascii")
+            for r in runs
+        ]
+        collection_meta = {
+            "algorithm_name": algorithm_name,
+            "hyperparameters": hyperparameters,
+            "n_runs": len(runs),
+        }
+        buffer = io.BytesIO()
+        np.savez_compressed(
+            buffer,
+            collection_format_version=np.array(FORMAT_VERSION, dtype=np.int64),
+            collection_metadata=np.array(json.dumps(collection_meta)),
+            run_blobs=np.array(run_blobs, dtype=object),
+        )
+        return buffer.getvalue()
+
+    def deserialize_collection(self, data: bytes) -> tuple[str, dict, list[RunState]]:
+        import base64
+
+        buffer = io.BytesIO(data)
+        with np.load(buffer, allow_pickle=True) as d:
+            files = set(d.files)
+            if "collection_format_version" in files:
+                version = int(d["collection_format_version"])
+                if version > FORMAT_VERSION:
+                    raise ValueError(
+                        f"Collection format version {version} is newer than "
+                        f"supported {FORMAT_VERSION}. Please update dfbench."
+                    )
+            meta = json.loads(str(d["collection_metadata"]))
+            algorithm_name = meta["algorithm_name"]
+            hyperparameters = meta.get("hyperparameters", {})
+            blobs = d["run_blobs"].tolist()
+            runs = [
+                self._run_serializer.deserialize(base64.b64decode(b)) for b in blobs
+            ]
+        return algorithm_name, hyperparameters, runs
