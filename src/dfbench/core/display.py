@@ -258,8 +258,8 @@ class LiveDisplay:
         problem = obj.problem.name if hasattr(obj.problem, "name") else "problem"
         n_params = obj.n_params if obj.bounds is not None else "?"
         eval_count = obj.eval_count
-        max_evals = obj._max_evals
-        max_time = obj._max_time
+        max_evals = obj.max_evals
+        max_time = obj.max_time
         time_elapsed = obj.time_elapsed
         best_loss = obj.best_loss
         improvement_count = obj.improvement_count
@@ -483,8 +483,8 @@ class LogDisplay:
         last_ckpt = obj.last_checkpoint_eval
         avg_batch = (s["eval_count"] / log_calls) if log_calls > 0 else None
 
-        max_evals = obj._max_evals
-        max_time = obj._max_time
+        max_evals = obj.max_evals
+        max_time = obj.max_time
         evals_str = f"{s['eval_count']}"
         if max_evals is not None:
             evals_str += f" / {max_evals}"

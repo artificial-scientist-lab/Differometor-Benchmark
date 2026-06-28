@@ -566,6 +566,16 @@ class Objective:
         return self._eval_count
 
     @property
+    def max_evals(self) -> int | None:
+        """The evaluation budget, or ``None`` if unlimited."""
+        return self._max_evals
+
+    @property
+    def max_time(self) -> float | None:
+        """The wall-clock time budget in seconds, or ``None`` if unlimited."""
+        return self._max_time
+
+    @property
     def evals_left(self) -> int | None:
         """Number of evaluations remaining before budget is exceeded. None if no limit."""
         return self._evals_left

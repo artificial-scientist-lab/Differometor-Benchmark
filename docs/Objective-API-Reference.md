@@ -350,6 +350,8 @@ bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
 | Property | Type | Description |
 |----------|------|-------------|
 | `eval_count` | `int` | Total evaluations so far. |
+| `max_evals` | `int \| None` | The evaluation budget, or `None` if unlimited. |
+| `max_time` | `float \| None` | The wall-clock time budget in seconds, or `None` if unlimited. |
 | `evals_left` | `int \| None` | Remaining evaluation budget. `None` if unlimited. |
 | `evals_exceeded` | `bool` | Whether the evaluation cap has been reached. |
 | `evals_progress_fraction` | `float` | Fraction of eval budget consumed (0–1). |
@@ -360,6 +362,7 @@ bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
 | `budget_left_fraction` | `float` | Fraction of the tightest budget remaining. `min(1 - time_progress, 1 - evals_progress)`, considering only budgets that are set. 1.0 when no budget is configured. |
 | `budget_progress_fraction` | `float` | Fraction of the tightest budget consumed (`1 - budget_left_fraction`). 0.0 when no budget is configured. |
 | `budget_exceeded` | `bool` | `True` when **any** budget (time **or** evals) is exhausted. This is the main loop-termination check. |
+| `save_every` | `int \| None` | Periodic checkpoint cadence in evaluations, or `None` if disabled. |
 
 ### Best Results
 
