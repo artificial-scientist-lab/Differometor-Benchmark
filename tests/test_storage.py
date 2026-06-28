@@ -211,7 +211,7 @@ class TestCheckpointManager:
         path2 = manager.save(state)
         assert path2 == path
 
-    def test_maybe_save_skips_when_not_due(self, tmp_path):
+    def test_tick_skips_when_not_due(self, tmp_path):
         manager = CheckpointManager(
             backend=LocalFilesystemBackend(root=tmp_path),
             resolver=RunPathResolver(root=str(tmp_path)),
