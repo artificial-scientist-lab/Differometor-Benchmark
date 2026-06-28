@@ -330,8 +330,7 @@ class TestHistoryTracking:
         """Second-order history aligns with loss history when enabled."""
         obj = Objective(
             mock_problem,
-            save_grad_history=True,
-            save_hessian_history=True,
+            save=["grad", "hessian"],
             save_params_history=True,
         )
         obj.set_seed(42)
@@ -458,7 +457,9 @@ class TestBoundedUnbounded:
         obj.start_logging()
         params = obj.random_params_unbounded()
         loss = obj.value(params)
-        expected = mock_problem.objective_function(obj._map_unbounded_to_bounded(params))
+        expected = mock_problem.objective_function(
+            obj._map_unbounded_to_bounded(params)
+        )
         np.testing.assert_allclose(float(loss), float(expected), atol=1e-6)
 
     def test_best_params_bounded_in_unbounded_mode(self, mock_problem):
@@ -506,7 +507,7 @@ class TestReducedHistory:
 
     def test_loss_history_reduced_batched(self, mock_problem):
         """5.44 Batched entries → returns nanmin."""
-        obj = Objective(mock_problem, save_batched_losses_history=True)
+        obj = Objective(mock_problem, save=["batched_losses"])
         obj.set_seed(42)
         obj.start_logging()
         batch = obj.random_params_bounded(n_samples=5)
@@ -540,10 +541,7 @@ class TestReducedHistory:
         """Second-order reduced history returns one Hessian per logged batch."""
         obj = Objective(
             mock_problem,
-            save_grad_history=True,
-            save_hessian_history=True,
-            save_batched_losses_history=True,
-            save_batched_hessians_history=True,
+            save=["grad", "hessian", "batched_losses", "batched_hessians"],
         )
         obj.set_seed(42)
         obj.start_logging()
@@ -576,7 +574,7 @@ class TestReducedHistory:
 class TestEvalTypeTracking:
     def test_eval_type_counts(self, mock_problem):
         """5.48 Distinguishes value-only (1), grad-only (2), value+grad (3)."""
-        obj = Objective(mock_problem, save_eval_type_history=True)
+        obj = Objective(mock_problem, save=["eval_type"])
         obj.set_seed(42)
         obj.start_logging()
         p = obj.random_params_bounded()
@@ -590,7 +588,7 @@ class TestEvalTypeTracking:
 
     def test_eval_type_counts_include_hessians(self, mock_problem):
         """Eval type tracking distinguishes second-order call variants."""
-        obj = Objective(mock_problem, save_eval_type_history=True)
+        obj = Objective(mock_problem, save=["eval_type"])
         obj.set_seed(42)
         obj.start_logging()
         p = obj.random_params_bounded()
@@ -627,8 +625,7 @@ class TestLogEvaluation:
         """5.50 log_evaluation updates histories like value_and_grad."""
         obj = Objective(
             mock_problem,
-            save_grad_history=True,
-            save_hessian_history=True,
+            save=["grad", "hessian"],
         )
         obj.set_seed(42)
         obj.start_logging()
@@ -673,7 +670,7 @@ class TestReset:
 
     def test_reset_clears_hessian_history(self, mock_problem):
         """Second-order history is also cleared by reset()."""
-        obj = Objective(mock_problem, save_hessian_history=True)
+        obj = Objective(mock_problem, save=["hessian"])
         obj.set_seed(42)
         obj.start_logging()
         obj.hessian(obj.random_params_bounded())
@@ -716,14 +713,14 @@ class TestCheckpointing:
 
     def test_load_restores_hessian_history(self, mock_problem, tmp_path):
         """Checkpoint round-trip preserves Hessian history when enabled."""
-        obj = Objective(mock_problem, save_hessian_history=True, max_evals=100)
+        obj = Objective(mock_problem, save=["hessian"], max_evals=100)
         obj.set_seed(42)
         obj.start_logging()
         obj.hessian(obj.random_params_bounded())
         fpath = str(tmp_path / "checkpoint_hessian.npz")
         obj.save_run_data(filepath=fpath)
 
-        obj2 = Objective(mock_problem, save_hessian_history=True, max_evals=100)
+        obj2 = Objective(mock_problem, save=["hessian"], max_evals=100)
         obj2.load_run_data(fpath)
         assert len(obj2.hessian_history) == 1
         np.testing.assert_allclose(

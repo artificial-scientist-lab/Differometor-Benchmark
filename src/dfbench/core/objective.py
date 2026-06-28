@@ -18,6 +18,7 @@ from dfbench.core.storage import (
     RunMetadata,
     RunPathResolver,
     RunState,
+    SaveConfig,
     StorageBackend,
     LocalFilesystemBackend,
 )
@@ -46,8 +47,11 @@ class Objective:
        flag is raised and further evaluations are no longer logged.
 
     3. **History tracking** – maintains aligned histories of losses, params,
-       gradients, evaluation types, and elapsed time.  Configurable flags
-       control what is stored (see constructor args).
+       gradients, evaluation types, and elapsed time.  The ``save`` list of
+       string tokens (plus the two standard flags ``save_time_steps`` and
+       ``save_params_history``) controls what is stored; the active
+       configuration is recorded as a :class:`SaveConfig` and embedded in
+       every checkpoint so a resumed run can detect mismatches.
 
         4. **Bounded / unbounded mode** – when ``unbounded=True`` the objective
              is evaluated through a configurable mapping from unbounded to bounded
@@ -212,13 +216,7 @@ class Objective:
         max_time: float | None = None,
         save_time_steps: bool = True,
         save_params_history: bool = True,
-        save_grad_history: bool = False,
-        save_hessian_history: bool = False,
-        save_batched_losses_history: bool = False,
-        save_batched_grads_history: bool = False,
-        save_batched_hessians_history: bool = False,
-        save_batched_history: bool = False,
-        save_eval_type_history: bool = False,
+        save: list[str] | None = None,
         verbose: int = 0,
         print_every: int = 100,
         algorithm_str: str | None = None,
@@ -243,14 +241,12 @@ class Objective:
             max_time: Maximum wall-clock time in seconds. None for unlimited.
             save_time_steps: Whether to track timestamps for each evaluation.
             save_params_history: Whether to save parameter history.
-            save_grad_history: Whether to save gradient history.
-            save_hessian_history: Whether to save Hessian history.
-            save_batched_losses_history: Whether to save full batched losses.
-            save_batched_grads_history: Whether to save full batched gradients.
-            save_batched_hessians_history: Whether to save full batched Hessians.
-            save_batched_history: Whether to save full batched params, losses,
-                and any enabled derivative histories.
-            save_eval_type_history: Whether to save evaluation types in a separate history.
+            save: List of advanced save tokens for recording additional /
+                batched histories. Valid tokens: ``"grad"``, ``"hessian"``,
+                ``"eval_type"``, ``"batched_losses"``, ``"batched_grads"``,
+                ``"batched_hessians"``, ``"batched_params"``, ``"batched"``
+                (convenience alias expanding to all four batched tokens).
+                Defaults to ``None`` (no advanced histories).
             verbose: Verbosity level (0=silent, 1=warnings, 2=info). Defaults to 0.
             print_every: Print progress every N evaluations (if verbose >= 1). Defaults to 100.
             algorithm_str: String identifier for the optimization algorithm.
@@ -308,21 +304,11 @@ class Objective:
         self._max_evals = max_evals
         self._print_every = print_every
         self._verbose = verbose
-        self._save_time_steps = save_time_steps
-        self._save_params_history = save_params_history
-        self._save_grad_history = save_grad_history
-        self._save_hessian_history = save_hessian_history
-        self._save_batched_params_history = save_batched_history
-        self._save_batched_losses_history = (
-            save_batched_losses_history or save_batched_history
+        self._save_config = SaveConfig.from_flags(
+            save_time_steps=save_time_steps,
+            save_params_history=save_params_history,
+            save=save,
         )
-        self._save_batched_grads_history = (
-            save_batched_grads_history or save_batched_history
-        )
-        self._save_batched_hessians_history = (
-            save_batched_hessians_history or save_batched_history
-        )
-        self._save_eval_type_history = save_eval_type_history
         self._save_to_file_every = save_to_file_every
         self._display_mode = display_mode
         self._hessian_batch_size = hessian_batch_size
@@ -827,6 +813,11 @@ class Objective:
         """Eval count at which the most recent checkpoint was written, or None."""
         return self._checkpoint_manager.last_checkpoint_eval
 
+    @property
+    def save_config(self) -> SaveConfig:
+        """The :class:`SaveConfig` describing which histories are recorded."""
+        return self._save_config
+
     # --------- Reduced (non-batched) history properties ---------
 
     @property
@@ -1326,7 +1317,11 @@ class Objective:
         if self._start_time is None:
             return
         time_exceeded = self.time_exceeded
-        if self._save_time_steps and not time_exceeded and not self._evals_exceeded:
+        if (
+            self._save_config.time_steps
+            and not time_exceeded
+            and not self._evals_exceeded
+        ):
             self._time_steps.append(self.time_elapsed)
         self._log_evals(params, loss, grad, hessian, time_exceeded=time_exceeded)
         self._log_to_file()
@@ -1378,7 +1373,7 @@ class Objective:
                 self._evals_exceeded = True
                 self._evals_left = 0
                 # Remove the time step that was just added by _log_time() to keep alignment
-                if self._save_time_steps and self._time_steps:
+                if self._save_config.time_steps and self._time_steps:
                     self._time_steps.pop()
                 return
 
@@ -1390,7 +1385,7 @@ class Objective:
                 self._evals_left = max(0, self._max_evals - self._eval_count)
                 self._evals_exceeded = True
                 # Remove the time step that was just added by _log_time() to keep alignment
-                if self._save_time_steps and self._time_steps:
+                if self._save_config.time_steps and self._time_steps:
                     self._time_steps.pop()
                 return
 
@@ -1411,7 +1406,7 @@ class Objective:
                 | int(grad is not None) << 1
                 | int(loss is not None)
             )
-        if self._save_eval_type_history:
+        if self._save_config.eval_type:
             self._eval_type_history.append(eval_type)
         # Always track call count and type distribution (O(1), no allocation)
         self._log_call_count += 1
@@ -1423,7 +1418,7 @@ class Objective:
 
         # log losses
         if loss is not None:
-            if self._ndim(loss) == 0 or self._save_batched_losses_history:
+            if self._ndim(loss) == 0 or self._save_config.batched_losses:
                 self._loss_history.append(loss)
             else:  # batched case but not saving batched history -> store min
                 self._loss_history.append(jnp.nanmin(loss))
@@ -1431,14 +1426,14 @@ class Objective:
             # insert NaN(s) to keep alignment
             self._loss_history.append(
                 jnp.array([jnp.nan] * n_items)
-                if (n_items > 1 and self._save_batched_losses_history)
+                if (n_items > 1 and self._save_config.batched_losses)
                 else _nan_entry()
             )
 
         # log grads (only when saving grads)
-        if self._save_grad_history:
+        if self._save_config.grad:
             if grad is not None:
-                if self._ndim(grad) == 1 or self._save_batched_grads_history:
+                if self._ndim(grad) == 1 or self._save_config.batched_grads:
                     self._grad_history.append(grad)
                 else:
                     idx = self._representative_index(
@@ -1449,9 +1444,9 @@ class Objective:
                 self._grad_history.append(None)
 
         # log Hessians (only when saving Hessians)
-        if self._save_hessian_history:
+        if self._save_config.hessian:
             if hessian is not None:
-                if self._ndim(hessian) == 2 or self._save_batched_hessians_history:
+                if self._ndim(hessian) == 2 or self._save_config.batched_hessians:
                     self._hessian_history.append(hessian)
                 else:
                     idx = self._representative_index(
@@ -1462,9 +1457,9 @@ class Objective:
                 self._hessian_history.append(None)
 
         # params history (store raw params; use *_bounded properties for bounded access)
-        if self._save_params_history:
+        if self._save_config.params:
             if params is not None:
-                if self._ndim(params) == 1 or self._save_batched_params_history:
+                if self._ndim(params) == 1 or self._save_config.batched_params:
                     self._params_history.append(params)
                 else:  # batched case but not saving batched history
                     idx = self._representative_index(
@@ -1844,7 +1839,7 @@ class Objective:
         its spec is embedded in ``metadata.extra["problem_spec"]`` so the
         checkpoint fully describes which problem instance produced the run.
         """
-        extra: dict[str, Any] = {}
+        extra: dict[str, Any] = {"save_config": self._save_config.to_dict()}
         spec_fn = getattr(self._problem, "to_spec", None)
         if callable(spec_fn):
             try:
@@ -2019,6 +2014,18 @@ class Objective:
 
         state = self._checkpoint_manager.load(filepath)
         self._apply_run_state(state)
+
+        # Warn if the checkpoint's save config differs from this Objective's
+        loaded_cfg = state.metadata.extra.get("save_config")
+        if loaded_cfg is not None:
+            ckpt_cfg = SaveConfig.from_dict(loaded_cfg)
+            diffs = self._save_config.mismatch(ckpt_cfg)
+            if diffs and self._verbose >= 1:
+                print(
+                    "Warning: checkpoint save_config differs from current "
+                    f"Objective in: {', '.join(diffs)}. Histories may be "
+                    "inconsistent."
+                )
 
         if self._verbose >= 1:
             print(f"Checkpoint loaded from {filepath}")

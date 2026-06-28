@@ -49,6 +49,7 @@ from dfbench.core.storage import (
     RunMetadata,
     RunPathResolver,
     RunState,
+    SaveConfig,
     StorageBackend,
 )
 
@@ -78,5 +79,6 @@ __all__ = [
     "RunMetadata",
     "RunPathResolver",
     "RunState",
+    "SaveConfig",
     "StorageBackend",
 ]

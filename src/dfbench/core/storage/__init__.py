@@ -29,6 +29,7 @@ Typical usage from inside an Objective::
 """
 
 from dfbench.core.storage.state import RunState, RunMetadata
+from dfbench.core.storage.saveconfig import SaveConfig
 from dfbench.core.storage.backends import (
     StorageBackend,
     LocalFilesystemBackend,
@@ -53,6 +54,7 @@ from dfbench.core.problem import (
 __all__ = [
     "RunState",
     "RunMetadata",
+    "SaveConfig",
     "StorageBackend",
     "LocalFilesystemBackend",
     "CheckpointSerializer",

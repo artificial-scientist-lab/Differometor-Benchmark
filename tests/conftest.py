@@ -72,7 +72,7 @@ def seeded_obj(mock_problem):
         mock_problem,
         max_evals=200,
         max_time=60.0,
-        save_grad_history=True,
+        save=["grad"],
         save_params_history=True,
         save_time_steps=True,
     )
@@ -88,7 +88,7 @@ def seeded_obj_unbounded(mock_problem):
         unbounded=True,
         max_evals=200,
         max_time=60.0,
-        save_grad_history=True,
+        save=["grad"],
         save_params_history=True,
         save_time_steps=True,
     )

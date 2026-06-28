@@ -28,7 +28,7 @@ class TestSciPyObjectiveAdapter:
             mock_problem,
             unbounded=True,
             max_evals=10,
-            save_grad_history=True,
+            save=["grad"],
         )
         adapter = SciPyObjectiveAdapter(
             obj,
@@ -52,7 +52,7 @@ class TestSciPyObjectiveAdapter:
             mock_problem,
             unbounded=True,
             max_evals=10,
-            save_grad_history=True,
+            save=["grad"],
         )
         adapter = SciPyObjectiveAdapter(
             obj,
