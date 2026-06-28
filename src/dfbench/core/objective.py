@@ -12,14 +12,12 @@ from dfbench.core.problem import ContinuousProblem
 from dfbench.core.display import LiveDisplay, LogDisplay
 from dfbench.core.storage import (
     CheckpointManager,
-    CheckpointSerializer,
     NpzCheckpointSerializer,
     RunDataExporter,
     RunMetadata,
     RunPathResolver,
     RunState,
     SaveConfig,
-    StorageBackend,
     LocalFilesystemBackend,
 )
 
@@ -225,11 +223,6 @@ class Objective:
         unit_mapping: Callable | None = None,
         inverse_unit_mapping: Callable | None = None,
         hessian_batch_size: int = 1,
-        checkpoint_manager: CheckpointManager | None = None,
-        checkpoint_serializer: CheckpointSerializer | None = None,
-        storage_backend: StorageBackend | None = None,
-        run_data_path_resolver: RunPathResolver | None = None,
-        run_data_exporter: RunDataExporter | None = None,
     ):
         """Initialize the Objective wrapper for optimization problems.
 
@@ -250,7 +243,9 @@ class Objective:
             verbose: Verbosity level (0=silent, 1=warnings, 2=info). Defaults to 0.
             print_every: Print progress every N evaluations (if verbose >= 1). Defaults to 100.
             algorithm_str: String identifier for the optimization algorithm.
-            save_to_file_every: Save checkpoint every N evaluations. None to disable.
+            save_to_file_every: Save checkpoint every N evaluations. None to
+                disable. The time spent saving is excluded from the
+                elapsed-time clock.
             display_mode: How to display progress when ``verbose >= 1``.
                 ``"live"`` (default) shows a continuously-refreshing in-place
                 dashboard with progress bars.  ``"log"`` prints traditional
@@ -275,26 +270,6 @@ class Objective:
                 (sequential ``lax.map``); set to ``n_params`` to recover
                 full ``jax.hessian`` parallelism.  Values between 1 and
                 ``n_params`` compute columns in chunks.
-            checkpoint_manager: Optional fully-configured
-                :class:`~dfbench.core.storage.CheckpointManager` to use for
-                all save/load. If given, ``checkpoint_serializer``,
-                ``storage_backend``, and ``run_data_path_resolver`` are
-                ignored. If ``None`` (default), a manager is built from
-                those optional components (or sensible defaults).
-            checkpoint_serializer: Serializer for checkpoints. Defaults to
-                :class:`~dfbench.core.storage.NpzCheckpointSerializer`.
-            storage_backend: Where checkpoints are physically stored.
-                Defaults to a
-                :class:`~dfbench.core.storage.LocalFilesystemBackend`
-                rooted at the resolver's ``root``.
-            run_data_path_resolver: Controls checkpoint path layout.
-                Defaults to
-                :class:`~dfbench.core.storage.RunPathResolver` with the
-                historical ``./data/objective_run_data`` root.
-            run_data_exporter: Controls human-readable JSON/PNG output.
-                Defaults to
-                :class:`~dfbench.core.storage.RunDataExporter` with the
-                historical ``./data/problem_output`` root.
         """
 
         self.unbounded = unbounded
@@ -309,7 +284,6 @@ class Objective:
             save_params_history=save_params_history,
             save=save,
         )
-        self._save_to_file_every = save_to_file_every
         self._display_mode = display_mode
         self._hessian_batch_size = hessian_batch_size
 
@@ -325,18 +299,21 @@ class Objective:
         self._start_time = None
         self._time_offset = 0.0
 
-        # --- Modular storage -------------------------------------------------
-        self._resolver = run_data_path_resolver or RunPathResolver()
-        self._backend = storage_backend or LocalFilesystemBackend(
-            root=self._resolver.root
-        )
-        self._serializer = checkpoint_serializer or NpzCheckpointSerializer()
-        self._checkpoint_manager = checkpoint_manager or CheckpointManager(
+        # --- Modular storage (internal, not user-configurable) -------------
+        # The storage stack is assembled here with sensible defaults.
+        # The components are modular and testable in isolation; swapping
+        # a serializer, backend, or resolver is done by subclassing or
+        # by modifying these lines, not by cluttering the constructor.
+        self._resolver = RunPathResolver()
+        self._backend = LocalFilesystemBackend(root=self._resolver.root)
+        self._serializer = NpzCheckpointSerializer()
+        self._exporter = RunDataExporter()
+        self._checkpoint_manager = CheckpointManager(
             backend=self._backend,
             serializer=self._serializer,
             resolver=self._resolver,
+            save_every=save_to_file_every,
         )
-        self._exporter = run_data_exporter or RunDataExporter()
 
         self._eval_count = 0
         self._evals_left = self._max_evals
@@ -817,6 +794,11 @@ class Objective:
     def save_config(self) -> SaveConfig:
         """The :class:`SaveConfig` describing which histories are recorded."""
         return self._save_config
+
+    @property
+    def save_every(self) -> int | None:
+        """Periodic checkpoint cadence in evaluations, or ``None`` if disabled."""
+        return self._checkpoint_manager.save_every
 
     # --------- Reduced (non-batched) history properties ---------
 
@@ -1514,33 +1496,18 @@ class Objective:
         return
 
     def _log_to_file(self) -> None:
-        """Internal: Save current run data to file if configured.
+        """Internal: checkpoint via :meth:`CheckpointManager.tick`.
 
-        Delegates the checkpoint-due decision entirely to
-        :meth:`CheckpointManager.maybe_save`, which gates internally so
-        this method does not need a redundant check.
+        The manager owns the cadence (``save_every``) and the save-timing;
+        it returns the wall-clock duration of the save so the Objective can
+        exclude it from the elapsed-time clock.
         """
-        # Execute this as late as possible in the logging sequence
         if self._start_time is None:
             return
 
-        # Time the save and exclude that duration from elapsed time
-        t0 = time.time() if self._start_time is not None else None
-        try:
-            self._checkpoint_manager.maybe_save(
-                self._build_run_state,
-                self._eval_count,
-                self._save_to_file_every,
-            )
-        except Exception:
-            # propagate; do not adjust start_time on failure
-            raise
-        else:
-            if t0 is not None:
-                dt = time.time() - t0
-                # advance start_time so elapsed = (now - start_time) excludes dt
-                self._start_time += dt
-        return
+        dt = self._checkpoint_manager.tick(self._eval_count, self._build_run_state)
+        if dt > 0:
+            self._start_time += dt
 
     # --------- public API for optimization ---------
 
@@ -2090,11 +2057,13 @@ class Objective:
         self._log_call_count = 0
         self._eval_type_counts = {}
         self._display = None  # re-create on next render
-        # Reset checkpoint bookkeeping so the next run starts fresh
+        # Reset checkpoint bookkeeping so the next run starts fresh,
+        # preserving the save_every cadence.
         self._checkpoint_manager = CheckpointManager(
             backend=self._backend,
             serializer=self._serializer,
             resolver=self._resolver,
+            save_every=self._checkpoint_manager.save_every,
         )
 
     def output_to_files(

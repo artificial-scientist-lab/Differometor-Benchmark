@@ -266,7 +266,7 @@ class LiveDisplay:
         evals_since_imp = obj.evals_since_improvement
         log_calls = obj.log_call_count
         type_counts = obj.eval_type_counts
-        ckpt_every = obj._save_to_file_every
+        ckpt_every = obj.save_every
         last_ckpt = obj.last_checkpoint_eval
 
         # Track first-eval wall time for throughput
@@ -479,7 +479,7 @@ class LogDisplay:
         s = obj.get_summary()
         log_calls = obj.log_call_count
         type_counts = obj.eval_type_counts
-        ckpt_every = obj._save_to_file_every
+        ckpt_every = obj.save_every
         last_ckpt = obj.last_checkpoint_eval
         avg_batch = (s["eval_count"] / log_calls) if log_calls > 0 else None
 

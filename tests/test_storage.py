@@ -215,6 +215,7 @@ class TestCheckpointManager:
         manager = CheckpointManager(
             backend=LocalFilesystemBackend(root=tmp_path),
             resolver=RunPathResolver(root=str(tmp_path)),
+            save_every=5,
         )
         called = {"n": 0}
 
@@ -222,11 +223,12 @@ class TestCheckpointManager:
             called["n"] += 1
             return _make_state()
 
-        # eval_count=3, save_every=5 -> not due
-        assert manager.maybe_save(factory, 3, 5) is None
+        # eval_count=3, save_every=5 -> not due, returns 0.0
+        assert manager.tick(3, factory) == 0.0
         assert called["n"] == 0
-        # eval_count=5 -> due
-        assert manager.maybe_save(factory, 5, 5) is not None
+        # eval_count=5 -> due, returns positive duration
+        dt = manager.tick(5, factory)
+        assert dt >= 0.0
         assert called["n"] == 1
 
     def test_explicit_path_overrides_resolver(self, tmp_path):

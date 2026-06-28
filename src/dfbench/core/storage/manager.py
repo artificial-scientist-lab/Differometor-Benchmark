@@ -2,19 +2,22 @@
 
 A :class:`CheckpointManager` wires together a serializer, a storage
 backend, and a path resolver, and provides the high-level
-``save``/``load``/``maybe_save`` operations the Objective needs. This is
-the *only* storage object the Objective holds, so swapping formats
+``save``/``load``/``tick`` operations the Objective needs. This is the
+*only* storage object the Objective holds, so swapping formats
 (NPZ <-> JSON), locations (local disk <-> S3), or naming conventions is
 a one-line change at construction time.
 
-The manager also owns the cached checkpoint path so that periodic saves
-overwrite the same file rather than creating timestamped duplicates, and
-it exposes the ``last_checkpoint_eval`` counter used by the display
-layer.
+The manager also owns the periodic-checkpoint cadence (``save_every``)
+and the wall-clock-exclusion timing, so the Objective's
+``_log_to_file`` is reduced to a single ``tick()`` call. It owns the
+cached checkpoint path so that periodic saves overwrite the same file
+rather than creating timestamped duplicates, and it exposes
+``last_checkpoint_eval`` and ``save_every`` for the display layer.
 """
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -40,6 +43,9 @@ class CheckpointManager:
             NPZ serializer.
         resolver: How paths are built from components. Defaults to the
             historical ``./data/objective_run_data`` layout.
+        save_every: Periodic checkpoint cadence in evaluations. ``None``
+            disables auto-saving. The manager owns this so the Objective
+            does not need to pass it on every call.
     """
 
     def __init__(
@@ -47,6 +53,7 @@ class CheckpointManager:
         backend: StorageBackend | None = None,
         serializer: CheckpointSerializer | None = None,
         resolver: RunPathResolver | None = None,
+        save_every: int | None = None,
     ) -> None:
         self.resolver = resolver or RunPathResolver()
         self.backend: StorageBackend = backend or LocalFilesystemBackend(
@@ -60,6 +67,7 @@ class CheckpointManager:
         if serializer_ext is not None:
             self.resolver.extension = serializer_ext
 
+        self.save_every: int | None = save_every
         self._cached_path: Path | None = None
         self.last_checkpoint_eval: int | None = None
 
@@ -162,28 +170,32 @@ class CheckpointManager:
     # periodic checkpointing
     # ------------------------------------------------------------------
 
-    def should_checkpoint(self, eval_count: int, save_every: int | None) -> bool:
+    def should_checkpoint(self, eval_count: int) -> bool:
         """Return whether a periodic checkpoint is due at ``eval_count``."""
-        if save_every is None or save_every <= 0:
+        if self.save_every is None or self.save_every <= 0:
             return False
-        return eval_count % save_every == 0
+        return eval_count % self.save_every == 0
 
-    def maybe_save(
+    def tick(
         self,
-        state_factory: Callable[[], RunState],
         eval_count: int,
-        save_every: int | None,
-    ) -> Path | None:
-        """Periodic save hook called by the Objective after each eval.
+        state_factory: Callable[[], RunState],
+    ) -> float:
+        """Periodic checkpoint hook called by the Objective after each eval.
 
-        Returns the written path if a checkpoint was taken, else
-        ``None``. ``state_factory`` is called lazily so building the
-        (potentially large) :class:`RunState` snapshot is skipped when no
-        checkpoint is due.
+        If a checkpoint is due (per ``save_every``), builds a
+        :class:`RunState` via ``state_factory`` and saves it. Returns the
+        wall-clock time spent saving (0.0 if no checkpoint was taken) so
+        the caller can exclude that duration from its elapsed-time clock.
+
+        ``state_factory`` is called lazily so building the (potentially
+        large) snapshot is skipped when no checkpoint is due.
         """
-        if not self.should_checkpoint(eval_count, save_every):
-            return None
-        return self.save(state_factory())
+        if not self.should_checkpoint(eval_count):
+            return 0.0
+        t0 = time.time()
+        self.save(state_factory())
+        return time.time() - t0
 
     # ------------------------------------------------------------------
     # problem reconstruction
