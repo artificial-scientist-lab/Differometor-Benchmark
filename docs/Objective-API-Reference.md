@@ -22,13 +22,7 @@ Objective(
     max_time: float | None = None,
     save_time_steps: bool = True,
     save_params_history: bool = True,
-    save_grad_history: bool = False,
-    save_hessian_history: bool = False,
-    save_batched_losses_history: bool = False,
-    save_batched_grads_history: bool = False,
-    save_batched_hessians_history: bool = False,
-    save_batched_history: bool = False,
-    save_eval_type_history: bool = False,
+    save: list[str] | None = None,
     verbose: int = 0,
     print_every: int = 100,
     algorithm_str: str | None = None,
@@ -55,13 +49,7 @@ Objective(
 | `max_time` | `float \| None` | `None` | Maximum wall-clock seconds beginning at the time `obj.start_logging()` was called. `None` = unlimited. |
 | `save_time_steps` | `bool` | `True` | Record elapsed-time timestamp for each evaluation. |
 | `save_params_history` | `bool` | `True` | Record the parameter vector at each evaluation. |
-| `save_grad_history` | `bool` | `False` | Record gradient vectors. Off by default to save memory. |
-| `save_hessian_history` | `bool` | `False` | Record Hessian matrices. Off by default because this can become memory-heavy quickly. |
-| `save_batched_losses_history` | `bool` | `False` | When using `vmap_*` methods, store the full `(batch,)` loss vector instead of just the minimum loss of the batch. |
-| `save_batched_grads_history` | `bool` | `False` | Store full batched gradient arrays. Careful: As the gradients are of dim `(n_params,)`, the batched version is of dim `(batch, n_params)` with the batched history being `(n_evals, batch, n_params)`! |
-| `save_batched_hessians_history` | `bool` | `False` | Store full batched Hessian arrays with shape `(batch, n_params, n_params)`. Use sparingly for large batches or high-dimensional problems. |
-| `save_batched_history` | `bool` | `False` | Also stores batched params and enables the full batched loss / grad / Hessian histories when those derivative histories are enabled. |
-| `save_eval_type_history` | `bool` | `False` | Record a bitmask for each evaluation indicating whether it was a value, grad, hessian, combined call, and/or batched call. |
+| `save` | `list[str] \| None` | `None` | List of advanced save tokens for recording additional / batched histories. Valid tokens: `"grad"`, `"hessian"`, `"eval_type"`, `"batched_losses"`, `"batched_grads"`, `"batched_hessians"`, `"batched_params"`, `"batched"` (convenience alias expanding to all four batched tokens). The active configuration is recorded as a `SaveConfig` and embedded in every checkpoint so a resumed run can detect mismatches. |
 | `verbose` | `int` | `0` | Verbosity level. `0` = silent; `1` = periodic progress prints; `2` is WIP. |
 | `print_every` | `int` | `100` | When `verbose ≥ 1`, print a progress summary every N evaluations. |
 | `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
@@ -138,6 +126,38 @@ obj = Objective(
 ```
 
 You do **not** need to handle bounds scaling — the Objective does that automatically.
+
+### Choosing what to save
+
+The Objective always records losses. Two standard boolean flags control the most commonly toggled histories:
+
+| Flag | Default | Effect |
+|------|---------|--------|
+| `save_time_steps` | `True` | Record elapsed-time timestamps per evaluation |
+| `save_params_history` | `True` | Record parameter vectors (reduced for batches) |
+
+For advanced combinations (gradients, Hessians, eval types, full batched arrays), pass a list of string tokens to `save`:
+
+| Token | Effect |
+|-------|--------|
+| `"grad"` | Record gradient history (reduced to one entry per eval for batches) |
+| `"hessian"` | Record Hessian history (reduced to one entry per eval for batches) |
+| `"eval_type"` | Record per-eval type bitmask history |
+| `"batched_losses"` | Store full `(batch,)` loss vectors instead of batch min |
+| `"batched_grads"` | Store full `(batch, n_params)` gradient arrays |
+| `"batched_hessians"` | Store full `(batch, n_params, n_params)` Hessian arrays |
+| `"batched_params"` | Store full `(batch, n_params)` parameter arrays |
+| `"batched"` | Convenience alias — expands to all four `batched_*` tokens |
+
+```python
+# Record gradients and full batched losses
+obj = Objective(problem, save=["grad", "batched_losses"])
+
+# Record everything (gradients, Hessians, eval types, all batched arrays)
+obj = Objective(problem, save=["grad", "hessian", "eval_type", "batched"])
+```
+
+The active configuration is stored as a `SaveConfig` and embedded in every checkpoint's `RunMetadata`. On `load_run_data`, the Objective warns if the checkpoint's save config differs from the current Objective's, preventing silent inconsistency.
 
 ### Injecting storage components (optional)
 
