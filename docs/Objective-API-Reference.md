@@ -49,7 +49,7 @@ Objective(
 | `max_time` | `float \| None` | `None` | Maximum wall-clock seconds beginning at the time `obj.start_logging()` was called. `None` = unlimited. |
 | `save_time_steps` | `bool` | `True` | Record elapsed-time timestamp for each evaluation. |
 | `save_params_history` | `bool` | `True` | Record the parameter vector at each evaluation. |
-| `save` | `list[str] \| None` | `None` | List of advanced save tokens for recording additional / batched histories. Valid tokens: `"grad"`, `"hessian"`, `"eval_type"`, `"batched_losses"`, `"batched_grads"`, `"batched_hessians"`, `"batched_params"`, `"batched"` (convenience alias expanding to all four batched tokens). The active configuration is recorded as a `SaveConfig` and embedded in every checkpoint so a resumed run can detect mismatches. |
+| `save` | `list[str] \| None` | `None` | List of advanced save tokens for recording additional / batched histories. Valid tokens: `"grad"`, `"hessian"`, `"eval_type"`, `"batched_loss"`, `"batched_grad"`, `"batched_hessian"`, `"batched_param"`, `"batched"` (convenience alias expanding to all four batched tokens). The active configuration is recorded as a `SaveConfig` and embedded in every checkpoint so a resumed run can detect mismatches. |
 | `verbose` | `int` | `0` | Verbosity level. `0` = silent; `1` = periodic progress prints; `2` is WIP. |
 | `print_every` | `int` | `100` | When `verbose ≥ 1`, print a progress summary every N evaluations. |
 | `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
@@ -143,15 +143,15 @@ For advanced combinations (gradients, Hessians, eval types, full batched arrays)
 | `"grad"` | Record gradient history (reduced to one entry per eval for batches) |
 | `"hessian"` | Record Hessian history (reduced to one entry per eval for batches) |
 | `"eval_type"` | Record per-eval type bitmask history |
-| `"batched_losses"` | Store full `(batch,)` loss vectors instead of batch min |
-| `"batched_grads"` | Store full `(batch, n_params)` gradient arrays |
-| `"batched_hessians"` | Store full `(batch, n_params, n_params)` Hessian arrays |
-| `"batched_params"` | Store full `(batch, n_params)` parameter arrays |
+| `"batched_loss"` | Store full `(batch,)` loss vectors instead of batch min |
+| `"batched_grad"` | Store full `(batch, n_params)` gradient arrays |
+| `"batched_hessian"` | Store full `(batch, n_params, n_params)` Hessian arrays |
+| `"batched_param"` | Store full `(batch, n_params)` parameter arrays |
 | `"batched"` | Convenience alias — expands to all four `batched_*` tokens |
 
 ```python
 # Record gradients and full batched losses
-obj = Objective(problem, save=["grad", "batched_losses"])
+obj = Objective(problem, save=["grad", "batched_loss"])
 
 # Record everything (gradients, Hessians, eval types, all batched arrays)
 obj = Objective(problem, save=["grad", "hessian", "eval_type", "batched"])
@@ -224,7 +224,7 @@ obj.batched_value_and_grad(…)   # same as vmap_value_and_grad
 obj.batched_value_grad_and_hessian(…)  # same as vmap_value_grad_and_hessian
 ```
 
-Batched methods use `jax.vmap` and evaluate the entire batch as **one** history entry. The eval counter is incremented by the batch size. When `save_batched_losses_history` is off (default), only the batch minimum loss is stored.
+Batched methods use `jax.vmap` and evaluate the entire batch as **one** history entry. The eval counter is incremented by the batch size. When `"batched_loss"` is not in the `save` list (default), only the batch minimum loss is stored.
 
 ### Callable shorthand
 

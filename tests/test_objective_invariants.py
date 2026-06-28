@@ -507,7 +507,7 @@ class TestReducedHistory:
 
     def test_loss_history_reduced_batched(self, mock_problem):
         """5.44 Batched entries → returns nanmin."""
-        obj = Objective(mock_problem, save=["batched_losses"])
+        obj = Objective(mock_problem, save=["batched_loss"])
         obj.set_seed(42)
         obj.start_logging()
         batch = obj.random_params_bounded(n_samples=5)
@@ -541,7 +541,7 @@ class TestReducedHistory:
         """Second-order reduced history returns one Hessian per logged batch."""
         obj = Objective(
             mock_problem,
-            save=["grad", "hessian", "batched_losses", "batched_hessians"],
+            save=["grad", "hessian", "batched_loss", "batched_hessian"],
         )
         obj.set_seed(42)
         obj.start_logging()

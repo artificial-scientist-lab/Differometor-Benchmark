@@ -243,8 +243,8 @@ class Objective:
             save_params_history: Whether to save parameter history.
             save: List of advanced save tokens for recording additional /
                 batched histories. Valid tokens: ``"grad"``, ``"hessian"``,
-                ``"eval_type"``, ``"batched_losses"``, ``"batched_grads"``,
-                ``"batched_hessians"``, ``"batched_params"``, ``"batched"``
+                ``"eval_type"``, ``"batched_loss"``, ``"batched_grad"``,
+                ``"batched_hessian"``, ``"batched_param"``, ``"batched"``
                 (convenience alias expanding to all four batched tokens).
                 Defaults to ``None`` (no advanced histories).
             verbose: Verbosity level (0=silent, 1=warnings, 2=info). Defaults to 0.
@@ -1418,7 +1418,7 @@ class Objective:
 
         # log losses
         if loss is not None:
-            if self._ndim(loss) == 0 or self._save_config.batched_losses:
+            if self._ndim(loss) == 0 or self._save_config.batched_loss:
                 self._loss_history.append(loss)
             else:  # batched case but not saving batched history -> store min
                 self._loss_history.append(jnp.nanmin(loss))
@@ -1426,14 +1426,14 @@ class Objective:
             # insert NaN(s) to keep alignment
             self._loss_history.append(
                 jnp.array([jnp.nan] * n_items)
-                if (n_items > 1 and self._save_config.batched_losses)
+                if (n_items > 1 and self._save_config.batched_loss)
                 else _nan_entry()
             )
 
         # log grads (only when saving grads)
         if self._save_config.grad:
             if grad is not None:
-                if self._ndim(grad) == 1 or self._save_config.batched_grads:
+                if self._ndim(grad) == 1 or self._save_config.batched_grad:
                     self._grad_history.append(grad)
                 else:
                     idx = self._representative_index(
@@ -1446,7 +1446,7 @@ class Objective:
         # log Hessians (only when saving Hessians)
         if self._save_config.hessian:
             if hessian is not None:
-                if self._ndim(hessian) == 2 or self._save_config.batched_hessians:
+                if self._ndim(hessian) == 2 or self._save_config.batched_hessian:
                     self._hessian_history.append(hessian)
                 else:
                     idx = self._representative_index(
@@ -1459,7 +1459,7 @@ class Objective:
         # params history (store raw params; use *_bounded properties for bounded access)
         if self._save_config.params:
             if params is not None:
-                if self._ndim(params) == 1 or self._save_config.batched_params:
+                if self._ndim(params) == 1 or self._save_config.batched_param:
                     self._params_history.append(params)
                 else:  # batched case but not saving batched history
                     idx = self._representative_index(

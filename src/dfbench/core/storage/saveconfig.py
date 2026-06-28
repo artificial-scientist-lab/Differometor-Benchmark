@@ -15,12 +15,12 @@ Valid ``save`` tokens
 | ``"grad"``         | Record gradient history (reduced to one entry per eval for batches)|
 | ``"hessian"``      | Record Hessian history (reduced to one entry per eval for batches) |
 | ``"eval_type"``    | Record per-eval type bitmask history                                |
-| ``"batched_losses"``| Store full ``(batch,)`` loss vectors instead of batch min           |
-| ``"batched_grads"``| Store full ``(batch, n_params)`` gradient arrays                    |
-| ``"batched_hessians"``| Store full ``(batch, n_params, n_params)`` Hessian arrays       |
-| ``"batched_params"``| Store full ``(batch, n_params)`` parameter arrays                  |
-| ``"batched"``      | Convenience alias: expands to ``batched_params``, ``batched_losses``,|
-|                    | ``batched_grads``, ``batched_hessians``                            |
+| ``"batched_loss"`` | Store full ``(batch,)`` loss vectors instead of batch min           |
+| ``"batched_grad"`` | Store full ``(batch, n_params)`` gradient arrays                    |
+| ``"batched_hessian"``| Store full ``(batch, n_params, n_params)`` Hessian arrays       |
+| ``"batched_param"``| Store full ``(batch, n_params)`` parameter arrays                  |
+| ``"batched"``      | Convenience alias: expands to ``batched_param``, ``batched_loss``, |
+|                    | ``batched_grad``, ``batched_hessian``                              |
 
 The two standard flags (``save_time_steps``, ``save_params_history``)
 remain as explicit booleans because they are the most commonly toggled and
@@ -37,20 +37,20 @@ VALID_TOKENS: frozenset[str] = frozenset(
         "grad",
         "hessian",
         "eval_type",
-        "batched_losses",
-        "batched_grads",
-        "batched_hessians",
-        "batched_params",
+        "batched_loss",
+        "batched_grad",
+        "batched_hessian",
+        "batched_param",
         "batched",  # convenience alias, expanded at construction
     }
 )
 
 # Expansion of the "batched" convenience alias.
 _BATCHED_EXPANSION: list[str] = [
-    "batched_params",
-    "batched_losses",
-    "batched_grads",
-    "batched_hessians",
+    "batched_param",
+    "batched_loss",
+    "batched_grad",
+    "batched_hessian",
 ]
 
 
@@ -64,10 +64,10 @@ class SaveConfig:
         grad: Record gradient vectors (reduced for batches).
         hessian: Record Hessian matrices (reduced for batches).
         eval_type: Record per-eval type bitmask history.
-        batched_losses: Store full batched loss vectors.
-        batched_grads: Store full batched gradient arrays.
-        batched_hessians: Store full batched Hessian arrays.
-        batched_params: Store full batched parameter arrays.
+        batched_loss: Store full batched loss vectors.
+        batched_grad: Store full batched gradient arrays.
+        batched_hessian: Store full batched Hessian arrays.
+        batched_param: Store full batched parameter arrays.
     """
 
     time_steps: bool = True
@@ -75,10 +75,10 @@ class SaveConfig:
     grad: bool = False
     hessian: bool = False
     eval_type: bool = False
-    batched_losses: bool = False
-    batched_grads: bool = False
-    batched_hessians: bool = False
-    batched_params: bool = False
+    batched_loss: bool = False
+    batched_grad: bool = False
+    batched_hessian: bool = False
+    batched_param: bool = False
 
     @classmethod
     def from_flags(
@@ -122,14 +122,14 @@ class SaveConfig:
                     cfg.hessian = True
                 elif t == "eval_type":
                     cfg.eval_type = True
-                elif t == "batched_losses":
-                    cfg.batched_losses = True
-                elif t == "batched_grads":
-                    cfg.batched_grads = True
-                elif t == "batched_hessians":
-                    cfg.batched_hessians = True
-                elif t == "batched_params":
-                    cfg.batched_params = True
+                elif t == "batched_loss":
+                    cfg.batched_loss = True
+                elif t == "batched_grad":
+                    cfg.batched_grad = True
+                elif t == "batched_hessian":
+                    cfg.batched_hessian = True
+                elif t == "batched_param":
+                    cfg.batched_param = True
 
         return cfg
 
@@ -141,25 +141,31 @@ class SaveConfig:
             "grad": self.grad,
             "hessian": self.hessian,
             "eval_type": self.eval_type,
-            "batched_losses": self.batched_losses,
-            "batched_grads": self.batched_grads,
-            "batched_hessians": self.batched_hessians,
-            "batched_params": self.batched_params,
+            "batched_loss": self.batched_loss,
+            "batched_grad": self.batched_grad,
+            "batched_hessian": self.batched_hessian,
+            "batched_param": self.batched_param,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "SaveConfig":
-        """Reconstruct from a :meth:`to_dict` dict (missing keys → defaults)."""
+        """Reconstruct from a :meth:`to_dict` dict (missing keys → defaults).
+
+        Also accepts legacy plurals (``batched_losses`` etc.) for backward
+        compatibility with checkpoints written by earlier versions.
+        """
         return cls(
             time_steps=bool(d.get("time_steps", True)),
             params=bool(d.get("params", True)),
             grad=bool(d.get("grad", False)),
             hessian=bool(d.get("hessian", False)),
             eval_type=bool(d.get("eval_type", False)),
-            batched_losses=bool(d.get("batched_losses", False)),
-            batched_grads=bool(d.get("batched_grads", False)),
-            batched_hessians=bool(d.get("batched_hessians", False)),
-            batched_params=bool(d.get("batched_params", False)),
+            batched_loss=bool(d.get("batched_loss", d.get("batched_losses", False))),
+            batched_grad=bool(d.get("batched_grad", d.get("batched_grads", False))),
+            batched_hessian=bool(
+                d.get("batched_hessian", d.get("batched_hessians", False))
+            ),
+            batched_param=bool(d.get("batched_param", d.get("batched_params", False))),
         )
 
     def mismatch(self, other: "SaveConfig") -> list[str]:
