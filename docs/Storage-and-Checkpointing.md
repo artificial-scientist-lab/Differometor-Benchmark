@@ -206,7 +206,7 @@ Files written to `{root}/{problem_name}/{algorithm_name}/{hyper_param_str}/`:
 
 ## `CheckpointManager` — the facade
 
-The only storage object the `Objective` holds. It wires a serializer, backend, and resolver together and provides `save` / `load` / `maybe_save` operations. It also owns the cached checkpoint path so periodic saves overwrite the same file rather than creating timestamped duplicates, and exposes `last_checkpoint_eval` for the display layer.
+The only storage object the `Objective` holds. It wires a serializer, backend, and resolver together, owns the periodic-checkpoint cadence (`save_every`), and provides `save` / `load` / `tick` operations. It also owns the cached checkpoint path so periodic saves overwrite the same file rather than creating timestamped duplicates, and exposes `last_checkpoint_eval` and `save_every` for the display layer.
 
 ```python
 from dfbench.core.storage import CheckpointManager, LocalFilesystemBackend, NpzCheckpointSerializer, RunPathResolver
@@ -215,6 +215,7 @@ manager = CheckpointManager(
     backend=LocalFilesystemBackend(root="./data/objective_run_data"),
     serializer=NpzCheckpointSerializer(),
     resolver=RunPathResolver(root="./data/objective_run_data"),
+    save_every=1000,
 )
 
 # Save
@@ -224,9 +225,9 @@ path = manager.save(state)
 state = manager.load(path)
 
 # Periodic checkpoint (lazy: state_factory only called when due)
-manager.maybe_save(state_factory=lambda: obj._build_run_state(),
-                   eval_count=obj.eval_count,
-                   save_every=1000)
+# Returns wall-clock duration of the save (0.0 if no checkpoint was taken)
+dt = manager.tick(eval_count=obj.eval_count,
+                  state_factory=lambda: obj._build_run_state())
 
 # Reconstruct the problem from a loaded checkpoint
 problem = CheckpointManager.reconstruct_problem(state)
@@ -236,43 +237,21 @@ problem = CheckpointManager.reconstruct_problem(state)
 
 The first `save()` without explicit overrides caches the computed path. Subsequent saves without overrides overwrite the same file. Passing `explicit_path` or `hyper_param_str` bypasses the cache. `load()` caches the loaded path so a resume-then-save cycle overwrites the same file.
 
-### `maybe_save` — periodic checkpointing
+### `tick` — periodic checkpointing
 
-Called by `Objective._log_to_file` after each evaluation. The `state_factory` is invoked lazily, so the (potentially large) `RunState` snapshot is only built when a checkpoint is actually due. The Objective times the save and advances `_start_time` by the save duration so the checkpoint write does not consume wall-clock budget.
+Called by `Objective._log_to_file` after each evaluation. The manager checks the cadence (`save_every`), and if a checkpoint is due, lazily calls `state_factory` to build a `RunState`, saves it, and returns the wall-clock duration of the save. The Objective advances `_start_time` by that duration so the checkpoint write does not consume wall-clock budget. If no checkpoint is due, `tick` returns `0.0` and `state_factory` is never called.
 
 ---
 
-## Putting it together — custom storage
+## Relationship to `Objective`
 
-All storage components are injectable via the `Objective` constructor:
+The `Objective` assembles a `CheckpointManager` and `RunDataExporter` internally with sensible defaults — these are **not** user-facing constructor parameters. The only storage-related knob exposed to the user is `save_to_file_every`, which sets the `save_every` cadence on the internal manager:
 
 ```python
-from dfbench import Objective
-from dfbench.core.storage import (
-    CheckpointManager,
-    JsonCheckpointSerializer,
-    LocalFilesystemBackend,
-    RunPathResolver,
-    RunDataExporter,
-)
-
-obj = Objective(
-    problem,
-    save_to_file_every=1000,
-    # Swap any layer:
-    checkpoint_serializer=JsonCheckpointSerializer(),
-    run_data_path_resolver=RunPathResolver(root="/scratch/my_run"),
-    run_data_exporter=RunDataExporter(root="/scratch/my_output"),
-)
+obj = Objective(problem, save_to_file_every=1000)
 ```
 
-| `Objective` constructor argument | Default | What it controls |
-|----------------------------------|---------|------------------|
-| `checkpoint_manager` | built from the below | Fully-configured manager; overrides the three below |
-| `checkpoint_serializer` | `NpzCheckpointSerializer()` | Checkpoint format |
-| `storage_backend` | `LocalFilesystemBackend(root=resolver.root)` | Where bytes go |
-| `run_data_path_resolver` | `RunPathResolver()` | Checkpoint path layout |
-| `run_data_exporter` | `RunDataExporter()` | Human-readable output location |
+The storage components remain modular and individually testable (see the sections above). Advanced users who need to swap a serializer, backend, or resolver can subclass `Objective` and override the internal assembly, or use the storage classes directly outside the Objective.
 
 ---
 

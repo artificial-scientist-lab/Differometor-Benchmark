@@ -73,7 +73,7 @@ A problem defines *what* is being optimised. Every problem subclasses `Continuou
 
 **Rationale — why a wrapper instead of bare functions?** Without it, every algorithm would need to independently implement timing, budget checks, history logging, checkpointing, and bounded↔unbounded transforms. This both duplicates code and makes cross-algorithm comparison unreliable because each implementation might measure time or count evaluations slightly differently.
 
-**Rationale — decoupled storage:** `Objective` only builds/applies the canonical `RunState` data contract; the *how* (NPZ vs JSON) and *where* (local disk vs S3) of saving are injectable via the constructor (`checkpoint_serializer`, `storage_backend`, `run_data_path_resolver`, `run_data_exporter`). No `./data/...` path is hardcoded in `Objective`.
+**Rationale — decoupled storage:** `Objective` only builds/applies the canonical `RunState` data contract; the *how* (NPZ vs JSON) and *where* (local disk vs S3) of saving are handled by an internally-assembled `CheckpointManager`. The storage components (serializer, backend, resolver) are modular and testable in isolation but are not user-facing constructor parameters — the only storage knob exposed is `save_to_file_every`. No `./data/...` path is hardcoded in `Objective`.
 
 ### 3. Algorithm Layer (`core/algorithm.py`, `algorithms/`)
 
@@ -143,7 +143,7 @@ See [Storage & Checkpointing](Storage-and-Checkpointing) for the full reference.
                 _best_loss / _best_params
 ```
 
-Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this exact pipeline. The internal `_log()` coordinator handles time-step recording, delegates to `_log_evals()` for history tracking, and triggers `_log_to_file()` for periodic checkpoints. `_log_to_file()` calls `CheckpointManager.maybe_save()`, which lazily builds a `RunState` only when a checkpoint is due and writes it through the configured `StorageBackend`. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
+Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this exact pipeline. The internal `_log()` coordinator handles time-step recording, delegates to `_log_evals()` for history tracking, and triggers `_log_to_file()` for periodic checkpoints. `_log_to_file()` calls `CheckpointManager.tick()`, which checks the cadence (`save_every`), lazily builds a `RunState` only when a checkpoint is due, saves it through the internal `StorageBackend`, and returns the save duration so the Objective can exclude it from the elapsed-time clock. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
 
 For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.value_function(...)` provides the same Objective-owned bounded/unbounded mapping without Python-side logging, and `obj.log_evaluation(params, loss, grad, hessian=None)` records the completed evaluation through the same logging pipeline. Do not call the private methods directly.
 
@@ -189,7 +189,7 @@ The `Benchmark` class:
 | **Wall-clock time as primary budget** | Evaluation cost varies across problems (12 ms for Voyager, 500 ms for UIFO). Time-based budgets make cross-problem comparisons meaningful. |
 | **Time-sampled metrics** | Evaluating metrics at fixed time points (not iteration counts) normalises for per-eval cost differences between algorithms. |
 | **Atomic checkpoints** | Long HPC jobs are killed without warning. The `LocalFilesystemBackend` writes to a sibling temp file and calls `os.replace`; a reader always sees either the previous complete file or the new one, never a partial one. The previous good file is never destroyed before the new one is in place. |
-| **Modular storage layer** | `Objective` delegates all I/O to `dfbench.core.storage`, so formats (NPZ/JSON), locations (disk/S3), and path layout are injectable without editing library code. A single canonical `RunState` contract prevents format drift. |
+| **Modular storage layer** | `Objective` delegates all I/O to `dfbench.core.storage`, assembling the components internally with sensible defaults. Formats (NPZ/JSON), locations (disk/S3), and path layout are modular and testable in isolation but not user-facing. A single canonical `RunState` contract prevents format drift. |
 | **Self-describing checkpoints** | Each checkpoint embeds `RunMetadata` (problem/algo/budget identity) plus the problem's `to_spec()` reconstructive dict, so a saved run can be audited and resumed in any process without the caller holding the original `Problem` object. |
 | **`_init_env.py` setting `MPLCONFIGDIR`** | On shared HPC filesystems, matplotlib's default config directory may be read-only. Setting a temp directory before any import prevents cryptic crashes. |
 | **`AlgorithmType` enum** | The enum mirrors the `algorithms/` package families. The benchmark uses it as a default hint: gradient-based algorithms typically get `unbounded=True`, while evolutionary, derivative-free, global-search, surrogate, and generative methods get `unbounded=False` unless their implementation overrides the mode. |
