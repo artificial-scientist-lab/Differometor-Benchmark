@@ -116,7 +116,7 @@ def _run_omads(
         baseline = np.array(init, dtype=np.float64).tolist()
 
     # OMADS budget — set generously; Objective budget is the real limiter.
-    omads_budget = obj._max_evals if obj._max_evals is not None else 1_000_000
+    omads_budget = obj.max_evals if obj.max_evals is not None else 1_000_000
 
     # --- blackbox callable ---------------------------------------------------
 

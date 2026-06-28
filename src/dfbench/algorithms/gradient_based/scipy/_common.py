@@ -42,7 +42,7 @@ class SciPyObjectiveAdapter:
         self.obj = obj
         self.config = config
 
-        func = obj._func
+        func = obj.value_function(unbounded=config.unbounded)
         grad_fn = jax.grad(func)
 
         self._value_fn = jax.jit(func)
@@ -114,7 +114,7 @@ class SciPyObjectiveAdapter:
 
     def warmup(self) -> None:
         """Warm up the exact JAX paths this SciPy adapter will use."""
-        params = jnp.asarray(self.obj._deterministic_warmup_params()[0])
+        params = jnp.asarray(self.obj.random_params_bounded())
         self._warmup_twice(self._value_fn, params)
 
         if self._value_and_grad_fn is not None:
