@@ -43,6 +43,24 @@ class TestVoyagerProblem:
         assert len(pairs) > 0
         assert len(pairs) == self.problem.bounds.shape[1]
 
+    def test_search_space_matches_implicit_schema(self):
+        """4.3a explicit search_space mirrors optimization_pairs and bounds."""
+        space = self.problem.search_space
+        assert space.name == self.problem.name
+        assert space.n_params == self.problem.n_params
+        assert space.optimization_pairs() == tuple(self.problem.optimization_pairs)
+        np.testing.assert_allclose(space.bounds_array(), self.problem.bounds)
+        assert set(space.property_names()) <= {
+            "reflectivity",
+            "tuning",
+            "db",
+            "angle",
+            "power",
+            "mass",
+            "length",
+            "phase",
+        }
+
     def test_objective_at_midpoint(self):
         """4.4 objective_function at midpoint returns finite scalar."""
         b = self.problem.bounds
