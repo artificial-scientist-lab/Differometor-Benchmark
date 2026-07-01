@@ -7,11 +7,11 @@ from typing import Callable
 import numpy as np
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
 from jaxtyping import Float, Array
 
 from differometor.utils import sigmoid_bounding
 from dfbench.core.problem import ContinuousProblem
+from dfbench.core.search_space import SearchSpace
 from dfbench.core.display import LiveDisplay, LogDisplay
 
 
@@ -410,6 +410,7 @@ class Objective:
         """
         use_unbounded = self.unbounded if unbounded is None else unbounded
         if use_unbounded:
+
             def _unbounded_value(params):
                 bounded = self._map_unbounded_to_bounded(params)
                 return self._problem.objective_function(bounded)
@@ -547,6 +548,11 @@ class Objective:
     def problem(self) -> ContinuousProblem:
         """The underlying optimization problem."""
         return self._problem
+
+    @property
+    def search_space(self) -> SearchSpace:
+        """Explicit schema for the underlying problem's parameter domain."""
+        return self._problem.search_space
 
     # --------- Optimization Tracking Functions/Properties ---------
 
@@ -2074,6 +2080,8 @@ class Objective:
             json.dump(losses.tolist(), f, indent=4)
 
         # Plot losses
+        import matplotlib.pyplot as plt  # noqa: E402
+
         plt.figure()
         plt.plot(losses)
         plt.xlabel("Iteration")

@@ -12,6 +12,7 @@ from differometor.utils import (
 )
 
 from ..base_problem import OpticalSetupProblem
+from dfbench.core.search_space import SearchSpace
 
 
 # ---------------------------------------------------------------------------
@@ -387,7 +388,23 @@ class UIFOProblem(OpticalSetupProblem):
         self._bounds = np.array([lower_bounds, upper_bounds])
 
         # abstract for pure objective_function
-        bounds = self._bounds
+        bounds = self._bounds  # noqa: F841
+
+        self._search_space = SearchSpace.from_bounds(
+            bounds=self._bounds,
+            optimization_pairs=self._optimization_pairs,
+            name=self.name,
+            metadata={
+                "source": self.__class__.__name__,
+                "size": self._size,
+                "topology_seed": self._topology_seed,
+                "topology_string": self._topology_string,
+                "centers": dict(self._centers),
+                "boundaries": dict(self._boundaries),
+                "optimized_properties": tuple(optimized_properties),
+                "coupled_lengths": True,
+            },
+        )
 
         # build the three modulation setups and store as instance attributes
         self._q_arrays, *self._q_metadata = run_build_step(
@@ -540,6 +557,15 @@ class UIFOProblem(OpticalSetupProblem):
         )
 
         return sensitivities
+
+    @property
+    def search_space(self) -> SearchSpace:
+        """Explicit schema for this problem's implicit parameter domain.
+
+        Returns:
+            SearchSpace instance describing the parameter space.
+        """
+        return self._search_space
 
 
 # Backwards compatibility alias

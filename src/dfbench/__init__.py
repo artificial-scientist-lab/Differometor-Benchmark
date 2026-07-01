@@ -25,6 +25,13 @@ import dfbench.core._init_env  # noqa: F401
 # Import protocols
 from dfbench.core.problem import ContinuousProblem
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
+from dfbench.core.parameters import (
+    DiscreteParameter,
+    FloatParameter,
+    IntegerParameter,
+    Parameter,
+)
+from dfbench.core.search_space import SearchDimension, SearchSpace, TargetRef
 
 # Import core utilities
 from dfbench.core.config import create_parser
@@ -37,6 +44,13 @@ from dfbench.core.objective import Objective
 __all__ = [
     # Core
     "Objective",
+    "Parameter",
+    "FloatParameter",
+    "IntegerParameter",
+    "DiscreteParameter",
+    "TargetRef",
+    "SearchDimension",
+    "SearchSpace",
     # Protocols
     "ContinuousProblem",
     "OptimizationAlgorithm",

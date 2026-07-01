@@ -3,6 +3,8 @@ from typing import Callable
 
 from jaxtyping import Array, Float
 
+from dfbench.core.search_space import SearchSpace
+
 
 class ContinuousProblem(ABC):
     """Abstract base class for continuous optimization problems.
@@ -34,6 +36,16 @@ class ContinuousProblem(ABC):
         Returns:
             Array of shape (2, n_params) where bounds[0] are lower bounds
             and bounds[1] are upper bounds for each parameter.
+        """
+        pass
+
+    @property
+    @abstractmethod
+    def search_space(self) -> SearchSpace:
+        """Explicit schema for this problem's implicit parameter domain.
+
+        Returns:
+            SearchSpace instance describing the parameter space.
         """
         pass
 

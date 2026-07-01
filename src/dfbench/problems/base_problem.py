@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Callable, Mapping
 
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
 from jaxtyping import Array, Float
 
 from differometor.components import (
@@ -17,6 +16,7 @@ from differometor.components import (
 )
 
 from dfbench.core.problem import ContinuousProblem
+from dfbench.core.search_space import SearchSpace
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +242,8 @@ class OpticalSetupProblem(ContinuousProblem):
             hyper_param_str: Hyperparameter string for file naming.
             hyper_param_str_in_filename: Whether to include hyperparameters in filename.
         """
+        import matplotlib.pyplot as plt  # noqa: E402
+
         # Print best params and loss first
         print(f"Parameters of the best solution : {best_params}")
         print(
@@ -330,3 +332,13 @@ class OpticalSetupProblem(ContinuousProblem):
         plt.savefig(
             os.path.join(output_path, f"{file_prefix}_sensitivity{file_suffix}.png")
         )
+
+    @property
+    @abstractmethod
+    def search_space(self) -> SearchSpace:
+        """Explicit schema for this problem's implicit parameter domain.
+
+        Returns:
+            SearchSpace instance describing the parameter space.
+        """
+        pass

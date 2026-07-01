@@ -9,6 +9,7 @@ from differometor.components import signal_detector
 from differometor.setups import voyager
 from differometor.simulate import run, run_build_step, simulate
 from differometor.utils import update_setup
+from dfbench.core.search_space import SearchSpace
 
 from ..base_problem import OpticalSetupProblem
 
@@ -111,8 +112,15 @@ class VoyagerProblem(OpticalSetupProblem):
             ]
         ).T
 
-        # abstract for pure objective_function
-        bounds = self._bounds
+        self._search_space = SearchSpace.from_bounds(
+            bounds=self._bounds,
+            optimization_pairs=self._optimization_pairs,
+            name=self.name,
+            metadata={
+                "source": self.__class__.__name__,
+                "optimized_properties": tuple(optimized_properties),
+            },
+        )
 
         @jax.jit
         def objective_function(
@@ -174,3 +182,12 @@ class VoyagerProblem(OpticalSetupProblem):
         sensitivities = noise / jnp.abs(powers)
 
         return sensitivities
+
+    @property
+    def search_space(self) -> SearchSpace:
+        """Explicit schema for this problem's implicit parameter domain.
+
+        Returns:
+            SearchSpace instance describing the parameter space.
+        """
+        return self._search_space
