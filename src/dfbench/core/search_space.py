@@ -302,8 +302,8 @@ class SearchSpace:
         raise KeyError(name)
 
     def validate(self, sample: NativeSample) -> None:
-        missing = set(self.names()) - set(sample)
-        extra = set(sample) - set(self.names())
+        missing = set(self.names) - set(sample)
+        extra = set(sample) - set(self.names)
         if missing:
             raise ValueError(f"Sample is missing parameters: {sorted(missing)}.")
         if extra:
