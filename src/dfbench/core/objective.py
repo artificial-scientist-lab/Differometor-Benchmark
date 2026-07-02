@@ -12,12 +12,15 @@ from dfbench.core.problem import ContinuousProblem
 from dfbench.core.display import LiveDisplay, LogDisplay
 from dfbench.core.storage import (
     CheckpointManager,
+    CheckpointSerializer,
+    JsonCheckpointSerializer,
     NpzCheckpointSerializer,
     RunDataExporter,
     RunMetadata,
     RunPathResolver,
     RunState,
     SaveConfig,
+    StorageBackend,
     LocalFilesystemBackend,
 )
 
@@ -223,6 +226,8 @@ class Objective:
         unit_mapping: Callable | None = None,
         inverse_unit_mapping: Callable | None = None,
         hessian_batch_size: int = 1,
+        checkpoint_format: str = "npz",
+        checkpoint_dir: str | Path | None = None,
     ):
         """Initialize the Objective wrapper for optimization problems.
 
@@ -270,6 +275,19 @@ class Objective:
                 (sequential ``lax.map``); set to ``n_params`` to recover
                 full ``jax.hessian`` parallelism.  Values between 1 and
                 ``n_params`` compute columns in chunks.
+            checkpoint_format: On-disk format for checkpoints. ``"npz"``
+                (default) writes compressed NumPy archives; ``"json"`` writes a
+                pickle-free, human-readable JSON file — useful when loading
+                checkpoints from untrusted sources or when you want to inspect
+                them by hand. No extra imports needed.
+            checkpoint_dir: Root directory for checkpoint and output artifacts.
+                Defaults to ``./data/objective_run_data``. Pass a path to
+                redirect all artifacts (e.g. to a scratch disk or a
+                ``tmp_path`` in tests) without importing any storage class.
+
+        To customise the storage stack beyond these two knobs (e.g. a custom
+        serializer or a non-filesystem backend), subclass :class:`Objective`
+        and override :meth:`_build_storage`.
         """
 
         self.unbounded = unbounded
@@ -299,21 +317,16 @@ class Objective:
         self._start_time = None
         self._time_offset = 0.0
 
-        # --- Modular storage (internal, not user-configurable) -------------
-        # The storage stack is assembled here with sensible defaults.
-        # The components are modular and testable in isolation; swapping
-        # a serializer, backend, or resolver is done by subclassing or
-        # by modifying these lines, not by cluttering the constructor.
-        self._resolver = RunPathResolver()
-        self._backend = LocalFilesystemBackend(root=self._resolver.root)
-        self._serializer = NpzCheckpointSerializer()
-        self._exporter = RunDataExporter()
-        self._checkpoint_manager = CheckpointManager(
-            backend=self._backend,
-            serializer=self._serializer,
-            resolver=self._resolver,
-            save_every=save_to_file_every,
-        )
+        # --- Modular storage ----------------------------------------------
+        # Assembled by _build_storage from the user-facing checkpoint_format
+        # and checkpoint_dir knobs. Subclasses override _build_storage to swap
+        # a custom serializer / backend / resolver / exporter.
+        self._resolver: RunPathResolver
+        self._serializer: CheckpointSerializer
+        self._backend: StorageBackend
+        self._exporter: RunDataExporter
+        self._checkpoint_manager: CheckpointManager
+        self._build_storage(checkpoint_format, checkpoint_dir, save_to_file_every)
 
         self._eval_count = 0
         self._evals_left = self._max_evals
@@ -365,6 +378,54 @@ class Objective:
         )
         self._inverse_unit_mapping_vmap = (
             jax.vmap(inverse_unit_mapping) if inverse_unit_mapping is not None else None
+        )
+
+    # ------------------------------------------------------------------
+    # Storage assembly
+    # ------------------------------------------------------------------
+
+    _SERIALIZERS: dict[str, CheckpointSerializer] = {
+        "npz": NpzCheckpointSerializer(),
+        "json": JsonCheckpointSerializer(),
+    }
+
+    def _build_storage(
+        self,
+        checkpoint_format: str,
+        checkpoint_dir: str | Path | None,
+        save_every: int | None,
+    ) -> None:
+        """Assemble the storage stack from user-facing knobs.
+
+        Maps ``checkpoint_format`` to a serializer, roots the resolver and
+        backend at ``checkpoint_dir`` (defaulting to the historical
+        ``./data/objective_run_data``), and wires the
+        :class:`CheckpointManager`. Subclasses override this to swap a custom
+        serializer / backend / resolver / exporter.
+        """
+        fmt = checkpoint_format.lower()
+        if fmt not in self._SERIALIZERS:
+            raise ValueError(
+                f"Unknown checkpoint_format '{checkpoint_format}'. "
+                f"Valid formats: {sorted(self._SERIALIZERS)}."
+            )
+        self._checkpoint_format = fmt
+        self._checkpoint_dir = checkpoint_dir
+        self._serializer = self._SERIALIZERS[fmt]
+        self._resolver = RunPathResolver(
+            root=(
+                str(checkpoint_dir)
+                if checkpoint_dir is not None
+                else "./data/objective_run_data"
+            )
+        )
+        self._backend = LocalFilesystemBackend(root=self._resolver.root)
+        self._exporter = RunDataExporter()
+        self._checkpoint_manager = CheckpointManager(
+            backend=self._backend,
+            serializer=self._serializer,
+            resolver=self._resolver,
+            save_every=save_every,
         )
 
     def _map_unbounded_to_bounded(
@@ -809,6 +870,16 @@ class Objective:
     def save_every(self) -> int | None:
         """Periodic checkpoint cadence in evaluations, or ``None`` if disabled."""
         return self._checkpoint_manager.save_every
+
+    @property
+    def checkpoint_format(self) -> str:
+        """On-disk checkpoint format (``"npz"`` or ``"json"``)."""
+        return self._checkpoint_format
+
+    @property
+    def checkpoint_dir(self) -> str | Path | None:
+        """Root directory for checkpoint artifacts, or ``None`` for the default."""
+        return self._checkpoint_dir
 
     # --------- Reduced (non-batched) history properties ---------
 
@@ -2067,14 +2138,17 @@ class Objective:
         self._log_call_count = 0
         self._eval_type_counts = {}
         self._display = None  # re-create on next render
-        # Reset checkpoint bookkeeping so the next run starts fresh,
-        # preserving the save_every cadence.
-        self._checkpoint_manager = CheckpointManager(
-            backend=self._backend,
-            serializer=self._serializer,
-            resolver=self._resolver,
-            save_every=self._checkpoint_manager.save_every,
+        # Rebuild the storage stack so the next run starts with fresh path
+        # caching / last-checkpoint state, preserving the format, directory,
+        # and save_every cadence configured at construction.
+        self._build_storage(
+            self._checkpoint_format,
+            self._checkpoint_dir,
+            self._checkpoint_manager.save_every,
         )
+        # New run -> new timestamp so saves do not silently overwrite the
+        # previous run's checkpoint at the cached path.
+        self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     def output_to_files(
         self,

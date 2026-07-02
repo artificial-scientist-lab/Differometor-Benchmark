@@ -31,6 +31,8 @@ Objective(
     unit_mapping: Callable | None = None,
     inverse_unit_mapping: Callable | None = None,
     hessian_batch_size: int = 1,
+    checkpoint_format: str = "npz",
+    checkpoint_dir: str | Path | None = None,
 )
 ```
 
@@ -52,6 +54,10 @@ Objective(
 | `unit_mapping` | `Callable \| None` | `None` | Optional function mapping unbounded params to the **[0, 1] range**. Can be scalar (e.g. `jax.nn.sigmoid`) or element-wise vector. The Objective handles scaling to actual bounds: `bounded = lb + (ub - lb) * f(x)`. If omitted, the default sigmoid is used. |
 | `inverse_unit_mapping` | `Callable \| None` | `None` | Inverse of the forward mapping, mapping [0, 1] → unbounded space. The Objective normalises bounded params to [0, 1] before calling this: `unbounded = f_inv((bounded - lb) / (ub - lb))`. Must be provided whenever `unit_mapping` is provided. |
 | `hessian_batch_size` | `int` | `1` | Number of Hessian columns to compute simultaneously via `vmap`. `1` (default) is the most memory-efficient (sequential `lax.map`); set to `n_params` for full `jax.hessian` parallelism. |
+| `checkpoint_format` | `str` | `"npz"` | On-disk format for checkpoints. `"npz"` writes compressed NumPy archives; `"json"` writes a pickle-free, human-readable JSON file — useful when loading checkpoints from untrusted sources or when you want to inspect them by hand. No extra imports needed. |
+| `checkpoint_dir` | `str \| Path \| None` | `None` | Root directory for checkpoint and output artifacts. Defaults to `./data/objective_run_data`. Pass a path to redirect all artifacts (e.g. to a scratch disk or a `tmp_path` in tests) without importing any storage class. |
+
+To customise the storage stack beyond these two knobs (e.g. a custom serializer or a non-filesystem backend), subclass `Objective` and override `_build_storage`.
 
 ### Choosing `unbounded`
 

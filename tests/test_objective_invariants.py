@@ -756,6 +756,78 @@ class TestCheckpointing:
 
 
 # ======================================================================
+# Storage configuration  (checkpoint_format / checkpoint_dir knobs)
+# ======================================================================
+
+
+class TestStorageConfig:
+    """The Objective exposes checkpoint_format / checkpoint_dir as the
+    user-facing storage knobs — no imports required for the common cases."""
+
+    def test_defaults(self, mock_problem):
+        obj = Objective(mock_problem)
+        assert obj.checkpoint_format == "npz"
+        assert obj.checkpoint_dir is None
+
+    def test_json_format_no_imports(self, mock_problem, tmp_path):
+        """A pypi user selects JSON with a string, no serializer import."""
+        obj = Objective(
+            mock_problem,
+            checkpoint_format="json",
+            checkpoint_dir=str(tmp_path),
+        )
+        assert obj.checkpoint_format == "json"
+        obj.set_seed(42)
+        obj.start_logging()
+        obj.value(obj.random_params_bounded())
+        path = obj.save_run_data(algorithm_name="test")
+        assert path.suffix == ".json"
+        assert path.exists()
+        # Round-trip through a fresh Objective with the same format.
+        obj2 = Objective(
+            mock_problem,
+            checkpoint_format="json",
+            checkpoint_dir=str(tmp_path),
+        )
+        obj2.load_run_data(path)
+        assert obj2.eval_count == obj.eval_count
+
+    def test_checkpoint_dir_redirects_artifacts(self, mock_problem, tmp_path):
+        """checkpoint_dir sends artifacts to the given path, not ./data."""
+        obj = Objective(mock_problem, checkpoint_dir=str(tmp_path))
+        obj.set_seed(42)
+        obj.start_logging()
+        obj.value(obj.random_params_bounded())
+        path = obj.save_run_data(algorithm_name="test")
+        # The checkpoint lives under tmp_path, not the default ./data/...
+        assert str(path).startswith(str(tmp_path))
+
+    def test_unknown_format_raises(self, mock_problem):
+        with pytest.raises(ValueError, match="Unknown checkpoint_format"):
+            Objective(mock_problem, checkpoint_format="xml")
+
+    def test_format_and_dir_survive_reset(self, mock_problem, tmp_path):
+        """reset() preserves the configured format and directory."""
+        obj = Objective(
+            mock_problem,
+            checkpoint_format="json",
+            checkpoint_dir=str(tmp_path),
+        )
+        obj.reset()
+        assert obj.checkpoint_format == "json"
+        assert obj.checkpoint_dir == str(tmp_path)
+
+    def test_reset_refreshes_timestamp(self, mock_problem):
+        """reset() produces a new timestamp so saves do not overwrite the
+        previous run's checkpoint at the cached path."""
+        obj = Objective(mock_problem)
+        ts_before = obj._timestamp
+        time.sleep(1.05)  # timestamp format has second resolution
+        obj.reset()
+        assert obj._timestamp != ts_before
+
+
+# ======================================================================
 # get_summary  (5.58)
 # ======================================================================
 
