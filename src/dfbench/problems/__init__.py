@@ -1,5 +1,7 @@
 """Optimization problems and scripts."""
 
+from collections.abc import Mapping
+
 # Import base class
 from dfbench.problems.base_problem import OpticalSetupProblem
 
@@ -32,3 +34,7 @@ __all__ = [
     "UIFOProblem",
     "RandomUIFOProblem",
 ]
+
+problems: Mapping[str, type[OpticalSetupProblem]] = {
+    _name: globals()[_name] for _name in __all__ if _name in globals()
+}

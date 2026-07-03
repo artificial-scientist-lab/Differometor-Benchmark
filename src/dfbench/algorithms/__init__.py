@@ -1,5 +1,8 @@
 """Optimization algorithms."""
 
+from collections.abc import Mapping
+from typing import Any
+
 from dfbench.algorithms.derivative_free.nelder_mead import NelderMead
 from dfbench.algorithms.derivative_free.omads_mads import OmadsMADS, OmadsOrthoMADS
 from dfbench.algorithms.derivative_free.powell import Powell
@@ -219,3 +222,8 @@ __all__ = [
     "OptaxSM3",
     "OptaxLBFGS",
 ]
+
+
+algorithms: Mapping[str, Any] = {
+    _name: globals()[_name] for _name in __all__ if _name in globals()
+}
