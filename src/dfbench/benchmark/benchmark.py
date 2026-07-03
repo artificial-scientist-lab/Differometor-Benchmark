@@ -33,7 +33,8 @@ from dataclasses import dataclass, fields, field
 from typing import Any
 from jaxtyping import Array, Float
 
-from dfbench import Objective
+from dfbench.core.objective import Objective
+from dfbench.core.constants import DATA_DIR
 from dfbench.core.problem import ContinuousProblem
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 from dfbench.benchmark.metrics import (
@@ -205,7 +206,20 @@ class AlgorithmConfig:
         """
         self.algorithm = algorithm
         self.hyperparameters = hyperparameters or {}
+
+        # TODO: Better name might be `f{algorithm_str}_{hps}`
         self.name = name or algorithm.algorithm_str
+
+    @classmethod
+    def from_str(
+        cls,
+        algorithm_str: str,
+        hyperparameters: dict[str, Any] | None = None,
+    ):
+        from dfbench.algorithms import algorithms
+
+        algorithm = algorithms[algorithm_str]
+        return cls(algorithm, hyperparameters)
 
     def __repr__(self) -> str:
         return f"AlgorithmConfig({self.name}, {self.hyperparameters})"
@@ -235,13 +249,15 @@ class Benchmark:
     def __init__(
         self,
         problem: ContinuousProblem,
-        success_loss: float,
+        success_loss: float,  # TODO: Why is this necessary? If so, why not optional?
         configs: list[AlgorithmConfig],
         random_seed: int | None = None,
         n_runs: int = 100,
         max_time: float = 300.0,
+        max_evals: int | None = None,
         n_time_samples: int = 100,
         random_baseline_loss: float | None = None,
+        data_dir: str | Path = DATA_DIR,
     ):
         """Initialize the benchmark suite.
 
@@ -251,20 +267,24 @@ class Benchmark:
             configs: List of algorithm configurations to benchmark
             n_runs: Number of independent runs per algorithm configuration
             max_time: Maximum wall-clock time per run in seconds
+            max_evals: Maximum number of allowed evaluations. `None` for unlimited.
             n_time_samples: Number of time points to sample for metrics (default: 100)
             random_baseline_loss: Expected loss of a random guess for normalized AUC.
                 If None, AUC normalization is disabled.
             random_seed: Master random seed for reproducibility. If provided, generates
                 deterministic per-run seeds.
+            data_dir: Base directory for saving run data and results (default: ./data)
         """
         self._problem = problem
         self._success_loss = success_loss
         self._configs = configs
         self._n_runs = n_runs
         self._max_time = max_time
+        self._max_evals = max_evals
         self._n_time_samples = n_time_samples
         self._random_baseline_loss = random_baseline_loss
         self._random_seed = random_seed
+        self._data_dir = data_dir
 
         # Generate time sample points (excluding 0, evenly spaced up to max_time)
         # E.g., n_time_samples=10, max_time=30 -> [3, 6, 9, 12, 15, 18, 21, 24, 27, 30]
@@ -282,10 +302,10 @@ class Benchmark:
     def run(
         self,
         verbose: int = 1,
+        print_every: int = 100,
         save_csv: bool = True,
         save_run_data: bool = False,
         load_from: str | Path | None = None,
-        output_dir: str | Path = "./data/benchmark_run_data",
     ) -> list[BenchmarkResult]:
         """Run the benchmark and return results.
 
@@ -302,11 +322,16 @@ class Benchmark:
         """
         self._verbose = verbose  # TODO implement verbosity levels
         self._print_header(load_from)
+        output_dir = self._data_dir / "benchmark_run_data"
 
         if load_from is not None:
             all_run_data = self._load_run_data(Path(load_from))
         else:
-            all_run_data = self._collect_all_run_data(save_run_data, output_dir)
+            all_run_data = self._collect_all_run_data(
+                save_incrementally=save_run_data,
+                output_dir=output_dir,
+                print_every=print_every,
+            )
 
         # Evaluate metrics for each algorithm
         results = []
@@ -329,12 +354,14 @@ class Benchmark:
         self,
         save_incrementally: bool,
         output_dir: str | Path,
+        print_every: int = 100,
     ) -> list[AlgorithmRunData]:
         """Run all algorithms and collect data.
 
         Args:
             save_incrementally: Whether to save data after each algorithm
             output_dir: Directory for saving
+            print_every: Print progress every N evaluations
 
         Returns:
             List of AlgorithmRunData, one per configuration
@@ -356,7 +383,9 @@ class Benchmark:
             print(f"Runs: {self._n_runs}, Max time: {self._max_time}s")
             print(f"{'=' * 70}")
 
-            algo_data = self._collect_algorithm_runs(config, run_seeds)
+            algo_data = self._collect_algorithm_runs(
+                config=config, run_seeds=run_seeds, print_every=print_every
+            )
             all_run_data.append(algo_data)
 
             if save_dir is not None:
@@ -380,12 +409,14 @@ class Benchmark:
         self,
         config: AlgorithmConfig,
         run_seeds: list[int] | None,
+        print_every: int = 100,
     ) -> AlgorithmRunData:
         """Run a single algorithm multiple times and collect data.
 
         Args:
             config: Algorithm configuration
             run_seeds: Per-run random seeds (or None for non-deterministic)
+            print_every: Print progress every N evaluations
 
         Returns:
             AlgorithmRunData with all runs
@@ -396,7 +427,7 @@ class Benchmark:
             print(f"  Run {i_run + 1}/{self._n_runs}...", end=" ", flush=True)
 
             # Prepare hyperparameters
-            kwargs = config.hyperparameters.copy()
+            kwargs = config.hyperparameters.copy()  # TODO: Obj hps or Algorithm?
 
             # Determine unbounded based on algorithm type
             # Gradient-based algorithms use unbounded space, others use bounded
@@ -406,17 +437,20 @@ class Benchmark:
                 problem=self._problem,
                 unbounded=unbounded,
                 max_time=self._max_time,
+                max_evals=self._max_evals,
                 save_time_steps=True,
                 save_params_history=True,
-                verbose=self._verbose - 1,
-                print_every=100,  # Print every 100 evals if verbose >= 1
+                verbose=self._verbose,
+                print_every=print_every,
             )
 
             if run_seeds is not None:
-                kwargs["random_seed"] = run_seeds[i_run]
+                kwargs["random_seed"] = run_seeds[
+                    i_run
+                ]  # TODO: Possibly declaring seeds twice
 
             # Run optimization acts on Objective
-            config.algorithm.optimize(objective=obj, **kwargs)
+            obj._run(config.algorithm)
 
             # Extract data
             run_data = RunData.from_objective(obj)
@@ -884,7 +918,7 @@ class Benchmark:
 
     def _save_results_to_csv(self, results: list[BenchmarkResult]) -> None:
         """Save benchmark results to CSV file."""
-        output_dir = Path("./data/benchmark_results")
+        output_dir = self._data_dir / "benchmark_results"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")

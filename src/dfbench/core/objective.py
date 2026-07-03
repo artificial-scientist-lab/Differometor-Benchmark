@@ -7,11 +7,15 @@ from typing import Callable
 import numpy as np
 import jax
 import jax.numpy as jnp
+import secrets
 from jaxtyping import Float, Array
 
+from dfbench.core.algorithm import OptimizationAlgorithm
 from differometor.utils import sigmoid_bounding
+from dfbench.core.parameter_config import ParameterConfig
 from dfbench.core.problem import ContinuousProblem
 from dfbench.core.search_space import SearchSpace
+from dfbench.core.state import OptimizationState
 from dfbench.core.display import LiveDisplay, LogDisplay
 
 
@@ -323,6 +327,8 @@ class Objective:
         # Random seed for reproducibility (set by algorithm via set_seed method)
         self._seed = None
         self._rng_key = None
+        self._optimization_state: OptimizationState | None = None
+        self._loaded_run_metadata: dict | None = None
 
         # Lightweight call-type tracking (always active, O(1) per call)
         self._log_call_count: int = 0
@@ -331,6 +337,71 @@ class Objective:
 
         # Display renderer (lazy-initialised on first use)
         self._display: LiveDisplay | LogDisplay | None = None
+
+    def _run(
+        self,
+        algorithm: OptimizationAlgorithm,
+    ) -> None:
+        """Core optimization loop using the ask-tell interface of the
+        OptimizationAlgorithm.
+        """
+
+        seed, key = self.prepare_run(
+            self,
+            unbounded=self.unbounded,
+            random_seed=self._seed,
+        )
+
+        self.warmup_vmap_value()
+        self.start_logging()
+
+        while not self.budget_exceeded:
+            params = algorithm.ask()
+            params = jax.device_put(params.vector)
+
+        if params.ndim == 1:
+            losses = self.value(params)
+        else:
+            losses = self.vmap_value(params)
+
+        algorithm.tell(params, losses)
+
+    def prepare_run(
+        self,
+        algorithm,
+        *,
+        unbounded: bool | None = None,
+        random_seed: int | None = None,
+        algorithm_name: str | None = None,
+        algorithm_metadata: dict | None = None,
+    ) -> tuple[int, jax.Array]:
+        if unbounded is not None:
+            self.set_space_mode(unbounded)
+
+        if algorithm_name is None:
+            algorithm_name = getattr(
+                algorithm,
+                "algorithm_str",
+                algorithm.__class__.__name__.lower(),
+            )
+
+        self.algorithm_str = algorithm_name
+
+        if random_seed is None:
+            random_seed = secrets.randbits(32)
+
+        self.set_seed(random_seed)
+        np.random.seed(random_seed)
+        key = jax.random.PRNGKey(random_seed)
+
+        self.initialize_optimization_state(
+            algorithm_name=algorithm_name,
+            seed=random_seed,
+            unbounded=self.unbounded,
+            algorithm_metadata=algorithm_metadata,
+        )
+
+        return random_seed, key
 
     def _set_space_mappings(
         self,
@@ -554,6 +625,67 @@ class Objective:
         """Explicit schema for the underlying problem's parameter domain."""
         return self._problem.search_space
 
+    @property
+    def optimization_state(self) -> OptimizationState | None:
+        """Optimizer-side ask-tell state attached to this objective."""
+        return self._optimization_state
+
+    @optimization_state.setter
+    def optimization_state(self, state: OptimizationState | None) -> None:
+        self._optimization_state = state
+
+    @property
+    def state(self) -> OptimizationState | None:
+        """Alias for ``optimization_state``."""
+        return self._optimization_state
+
+    @property
+    def loaded_run_metadata(self) -> dict | None:
+        """Metadata restored from a checkpoint, if available."""
+        return self._loaded_run_metadata.copy() if self._loaded_run_metadata else None
+
+    def initialize_optimization_state(
+        self,
+        *,
+        algorithm_name: str | None = None,
+        seed: int | None = None,
+        unbounded: bool | None = None,
+        algorithm_metadata: dict | None = None,
+    ) -> OptimizationState:
+        """Create and attach an OptimizationState snapshot for this run."""
+        state = OptimizationState.from_objective(
+            self,
+            algorithm_name=algorithm_name or self.algorithm_str or "unknown",
+            seed=self._seed if seed is None else seed,
+            unbounded=self.unbounded if unbounded is None else unbounded,
+            algorithm_metadata=algorithm_metadata,
+        )
+        self._optimization_state = state
+        return state
+
+    def parameter_config(
+        self,
+        params: Float[Array, "..."] | None,
+        *,
+        bounded: bool = False,
+    ) -> ParameterConfig | None:
+        """Wrap raw params in a rich, search-space-aware config object."""
+        if params is None:
+            return None
+        values = params
+        if bounded and self.unbounded:
+            params_arr = jnp.asarray(params)
+            values = (
+                self._map_unbounded_to_bounded(params_arr)
+                if params_arr.ndim == 1
+                else self._map_unbounded_to_bounded_batched(params_arr)
+            )
+        return ParameterConfig.from_values(
+            values,
+            self.search_space,
+            unbounded=self.unbounded and not bounded,
+        )
+
     # --------- Optimization Tracking Functions/Properties ---------
 
     @property
@@ -654,6 +786,11 @@ class Objective:
         return self._best_params
 
     @property
+    def best_config(self) -> ParameterConfig | None:
+        """Best parameter configuration with search-space metadata."""
+        return self.parameter_config(self._best_params, bounded=True)
+
+    @property
     def best_loss(self) -> Float | None:
         """Best (minimum) loss found so far. None if no evaluations yet."""
         return self._best_loss if self._best_loss != jnp.inf else None
@@ -674,6 +811,11 @@ class Objective:
             return self._params_history[-1]
         else:
             return None
+
+    @property
+    def current_config(self) -> ParameterConfig | None:
+        """Most recent parameter configuration with search-space metadata."""
+        return self.parameter_config(self.current_params, bounded=True)
 
     @property
     def loss_history(self) -> list[Float | Float[Array, "batch"]]:
@@ -1467,6 +1609,16 @@ class Objective:
             # any evaluation that did not improve increments stagnation
             self._evals_since_improvement += n_items
 
+        if self._optimization_state is not None:
+            self._optimization_state.current_config = self.parameter_config(
+                params,
+                bounded=True,
+            )
+            self._optimization_state.current_loss = loss
+            if self.best_loss is not None:
+                self._optimization_state.best_loss = float(self.best_loss)
+                self._optimization_state.best_config = self.best_config
+
         # Print progress if configured
         if (
             self._print_every is not None
@@ -1510,6 +1662,34 @@ class Objective:
                 self._start_time += dt
             self._last_checkpoint_eval = self._eval_count
         return
+
+    def get_run_metadata(self) -> dict:
+        """Return run context suitable for checkpoint metadata."""
+        metadata = {
+            "algorithm_name": self.algorithm_str or "unknown",
+            "problem_name": getattr(self._problem, "name", "problem"),
+            "seed": self._seed,
+            "unbounded": self.unbounded,
+            "max_evals": self._max_evals,
+            "max_time": self._max_time,
+            "search_space": self.search_space.to_dict(),
+            "current_config": (
+                self.current_config.to_dict() if self.current_config else None
+            ),
+            "best_config": self.best_config.to_dict() if self.best_config else None,
+        }
+        structure_info = getattr(self._problem, "structure_info", None)
+        if structure_info is not None:
+            metadata["problem_metadata"] = (
+                structure_info() if callable(structure_info) else structure_info
+            )
+        elif self._optimization_state is not None:
+            metadata["problem_metadata"] = self._optimization_state.problem_metadata
+        else:
+            metadata["problem_metadata"] = self.search_space.metadata
+        if self._optimization_state is not None:
+            metadata["optimization_state"] = self._optimization_state.to_dict()
+        return metadata
 
     # --------- public API for optimization ---------
 
@@ -1866,6 +2046,7 @@ class Objective:
             else np.array([]),
             improvement_count=np.array(int(self._improvement_count)),
             evals_since_improvement=np.array(int(self._evals_since_improvement)),
+            run_metadata=json.dumps(self.get_run_metadata()),
         )
         # Atomic replace
         try:
@@ -1929,6 +2110,14 @@ class Objective:
             if "eval_type_history" in data.files
             else []
         )
+        self._loaded_run_metadata = None
+        if "run_metadata" in data.files:
+            raw_metadata = data["run_metadata"]
+            self._loaded_run_metadata = json.loads(
+                raw_metadata.item()
+                if hasattr(raw_metadata, "item")
+                else str(raw_metadata)
+            )
         self._log_call_count = len(self._eval_type_history)
         self._eval_type_counts = {}
         for eval_type in self._eval_type_history:
@@ -2015,6 +2204,8 @@ class Objective:
         self._log_call_count = 0
         self._eval_type_counts = {}
         self._last_checkpoint_eval = None
+        self._optimization_state = None
+        self._loaded_run_metadata = None
         self._display = None  # re-create on next render
 
     def output_to_files(

@@ -8,7 +8,6 @@ serializing the space, and sampling native parameter values.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Sequence, TypeAlias
 
@@ -370,8 +369,57 @@ class SearchSpace:
             "metadata": self.metadata,
         }
 
-    def to_json(self, **json_kwargs: Any) -> str:
-        return json.dumps(self.to_dict(), **json_kwargs)
+    @classmethod
+    def from_dict(
+        cls,
+        space_dict: dict[str, Any],
+    ) -> SearchSpace:
+        """Create a SearchSpace from a dictionary representation."""
+        name = space_dict.get("name", "search_space")
+        dimensions_data = space_dict.get("dimensions", [])
+        metadata = space_dict.get("metadata", {})
+
+        dimensions = []
+        for dim_data in dimensions_data:
+            parameter_data = dim_data.get("parameter", {})
+            parameter_type = parameter_data.get("type")
+            if parameter_type == "float":
+                parameter = FloatParameter(
+                    name=parameter_data["name"],
+                    lower=parameter_data["lower"],
+                    upper=parameter_data["upper"],
+                )
+            elif parameter_type == "integer":
+                parameter = IntegerParameter(
+                    name=parameter_data["name"],
+                    lower=parameter_data["lower"],
+                    upper=parameter_data["upper"],
+                )
+            elif parameter_type == "discrete":
+                parameter = DiscreteParameter(
+                    name=parameter_data["name"],
+                    values=parameter_data["values"],
+                )
+            else:
+                raise ValueError(f"Unsupported parameter type: {parameter_type}")
+
+            targets = tuple(
+                TargetRef(
+                    component=target_data["component"], property=target_data["property"]
+                )
+                for target_data in dim_data.get("targets", [])
+            )
+
+            dimension = SearchDimension(
+                name=dim_data.get("name", parameter.name),
+                parameter=parameter,
+                targets=targets,
+                tags=tuple(dim_data.get("tags", [])),
+                metadata=dim_data.get("metadata", {}),
+            )
+            dimensions.append(dimension)
+
+        return cls(name=name, dimensions=tuple(dimensions), metadata=metadata)
 
 
 def _targets_from_optimization_pair(
