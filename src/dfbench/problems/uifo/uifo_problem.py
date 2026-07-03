@@ -1,21 +1,17 @@
 """UIFO (Uniform Interferometer Field Optimization) problems with power constraints."""
 
-import copy
-
 import jax
-import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 from differometor.setups import uifo, constrain_inter_grid_cell_spaces
 from differometor.simulate import run_setups, simulate, run_build_step
 from differometor.utils import (
-    sigmoid_bounding,
     sensitivity_qamplfreq_noise,
     calculate_sensitivities,
     calculate_powers,
 )
 
-from ..base_problem import DEFAULT_SIGNAL_FLOOR, OpticalSetupProblem
+from ..base_problem import OpticalSetupProblem
 
 
 # ---------------------------------------------------------------------------
@@ -210,7 +206,6 @@ class UIFOProblem(OpticalSetupProblem):
         boundaries: dict[str, str] | None = None,
         power_penalty_fn=None,
         bounds_overrides: dict[str, tuple[float, float]] | None = None,
-        signal_floor: float = DEFAULT_SIGNAL_FLOOR,
     ):
         """Initialize the UIFO optimization problem.
 
@@ -235,8 +230,6 @@ class UIFOProblem(OpticalSetupProblem):
             bounds_overrides: Optional property-level bound overrides.
                 Example: ``{"tuning": (0, 45)}``.
                 Overrides must narrow default bounds.
-            signal_floor: Optional lower bound for detector signal
-                magnitudes before sensitivity normalization.
         """
         # --- Validate topology specification (exactly one path) ---
         has_seed = topology_seed is not None and topology_seed != 42
@@ -271,12 +264,7 @@ class UIFOProblem(OpticalSetupProblem):
         if has_seed:
             print(f"UIFOProblem topology seed: {topology_seed}")
 
-        super().__init__(
-            name=name,
-            n_frequencies=n_frequencies,
-            signal_floor=signal_floor,
-        )
-        signal_floor = self._signal_floor
+        super().__init__(name=name, n_frequencies=n_frequencies)
         if power_penalty_fn is not None:
             self._power_penalty_fn = power_penalty_fn
         self._size = size
@@ -303,11 +291,7 @@ class UIFOProblem(OpticalSetupProblem):
 
         # calculate the sensitivity values taking into account the three noise sources
         self._target_sensitivities = calculate_sensitivities(
-            simulation_results,
-            self._sensitivity_function,
-            self._frequencies,
-            True,
-            signal_floor,
+            simulation_results, self._sensitivity_function, self._frequencies
         )
 
         ### Create UIFO setup ###
@@ -403,7 +387,7 @@ class UIFOProblem(OpticalSetupProblem):
         self._bounds = np.array([lower_bounds, upper_bounds])
 
         # abstract for pure objective_function
-        bounds = self._bounds
+        bounds = self._bounds  # noqa: F841
 
         # build the three modulation setups and store as instance attributes
         self._q_arrays, *self._q_metadata = run_build_step(
@@ -424,47 +408,6 @@ class UIFOProblem(OpticalSetupProblem):
             self._frequencies,
             self._optimization_pairs,
         )
-
-        @jax.jit
-        def sigmoid_objective_function(
-            optimized_parameters: Float[Array, "{self.n_params}"],
-        ) -> Float:
-            optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
-
-            # simulate the three modulation setups
-            q_results = simulate(
-                **{**self._q_arrays, "optimized_parameters": optimized_parameters}
-            )
-            ampl_results = simulate(
-                **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
-            )
-            freq_results = simulate(
-                **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
-            )
-            results = [
-                (*q_results, *self._q_metadata),
-                (*ampl_results, *self._ampl_metadata),
-                (*freq_results, *self._freq_metadata),
-            ]
-
-            # calculate the sensitivities taking into account the three noise sources
-            sensitivities = calculate_sensitivities(
-                results,
-                self._sensitivity_function,
-                self._frequencies,
-                self._homodyne,
-                signal_floor,
-            )
-
-            # calculate the light power at all components within the setup
-            powers = calculate_powers(q_results[0], *self._q_metadata)
-
-            # calculate the loss taking into account power violations
-            sensitivity_loss, penalty, _ = self._calculate_loss(
-                sensitivities, self._target_sensitivities, powers
-            )
-
-            return sensitivity_loss + penalty
 
         @jax.jit
         def objective_function(
@@ -491,8 +434,7 @@ class UIFOProblem(OpticalSetupProblem):
                 results,
                 self._sensitivity_function,
                 self._frequencies,
-                self._homodyne,
-                signal_floor,
+                homodyne=self._homodyne,
             )
 
             # calculate the light power at all components within the setup
@@ -505,11 +447,12 @@ class UIFOProblem(OpticalSetupProblem):
 
             return sensitivity_loss + penalty
 
-        self.sigmoid_objective_function = sigmoid_objective_function
         self.objective_function = objective_function
 
         # Compute and cache topology string
-        self._topology_string = topology_to_string(self._centers, self._boundaries, size)
+        self._topology_string = topology_to_string(
+            self._centers, self._boundaries, size
+        )
 
     @property
     def optimization_pairs(self) -> list[tuple]:
@@ -555,7 +498,6 @@ class UIFOProblem(OpticalSetupProblem):
             "topology_string": self._topology_string,
             "n_params": self.n_params,
             "homodyne": self._homodyne,
-            "signal_floor": self._signal_floor,
             "power_penalty_fn": getattr(
                 self._power_penalty_fn, "__name__", str(self._power_penalty_fn)
             ),
@@ -594,8 +536,7 @@ class UIFOProblem(OpticalSetupProblem):
             results,
             self._sensitivity_function,
             self._frequencies,
-            self._homodyne,
-            self._signal_floor,
+            homodyne=self._homodyne,
         )
 
         return sensitivities

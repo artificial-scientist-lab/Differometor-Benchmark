@@ -6,9 +6,7 @@ Differometor or GPU simulation, making it suitable for fast CI tests.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
-import numpy as np
 import pytest
 
 from dfbench.core.problem import ContinuousProblem
@@ -24,7 +22,6 @@ class QuadraticProblem(ContinuousProblem):
     """2-parameter quadratic problem for unit tests.
 
     objective_function(x) = sum(x^2); minimum at origin.
-    sigmoid_objective_function applies sigmoid_bounding internally.
     """
 
     def __init__(self, n_params: int = 2) -> None:
@@ -37,15 +34,6 @@ class QuadraticProblem(ContinuousProblem):
 
         # Plain bounded objective: expects params in [-5, 5]
         self.objective_function = lambda x: jnp.sum(x**2)
-
-        # Unbounded objective: inverse-sigmoid first, then evaluate
-        from differometor.utils import sigmoid_bounding
-
-        def _sigmoid_obj(x):
-            bounded = sigmoid_bounding(x, self._bounds)
-            return jnp.sum(bounded**2)
-
-        self.sigmoid_objective_function = _sigmoid_obj
 
     @property
     def bounds(self):

@@ -3,8 +3,6 @@
 Tests 2.1–2.4: create_parser behaviour.
 """
 
-import pytest
-
 from dfbench.core.config import create_parser
 
 
@@ -61,7 +59,7 @@ class TestCreateParser:
     def test_bool_true_default_store_false(self):
         """2.3 Boolean True default → store_false."""
         parser = create_parser({"verbose": True})
-        args = parser.parse_args([])
+        args = parser.parse_args([])  # noqa: F841
         # store_false: without flag → default True (True becomes store_false action,
         # which means the flag negates it)
         # store_false sets the attribute to False when the flag is passed

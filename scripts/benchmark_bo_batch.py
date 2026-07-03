@@ -45,7 +45,12 @@ def build_configs(*, quick: bool = False):
         ),
         AlgorithmConfig(
             BotorchqKG(),
-            {"n_initial": n_init, "batch_size": 1, "max_iterations": bo_iters, "num_fantasies": 8},
+            {
+                "n_initial": n_init,
+                "batch_size": 1,
+                "max_iterations": bo_iters,
+                "num_fantasies": 8,
+            },
             name="qKG",
         ),
         AlgorithmConfig(
@@ -70,7 +75,11 @@ def build_configs(*, quick: bool = False):
         ),
         AlgorithmConfig(
             TuRBOLBFGS(),
-            {"turbo_iterations": turbo_iters, "n_initial": n_init, "lbfgs_patience": 200},
+            {
+                "turbo_iterations": turbo_iters,
+                "n_initial": n_init,
+                "lbfgs_patience": 200,
+            },
             name="TuRBO→L-BFGS",
         ),
     ]
@@ -121,7 +130,9 @@ def build_configs(*, quick: bool = False):
 
 def main():
     parser = argparse.ArgumentParser(description="BO batch benchmark")
-    parser.add_argument("--quick", action="store_true", help="Tiny budget for local smoke test")
+    parser.add_argument(
+        "--quick", action="store_true", help="Tiny budget for local smoke test"
+    )
     args = parser.parse_args()
 
     problem = VoyagerProblem()

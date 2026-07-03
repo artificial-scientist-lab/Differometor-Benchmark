@@ -6,9 +6,6 @@ Tests 5.1–5.4, 5.13–5.59 (excluding randomness tests in test_objective_rando
 
 from __future__ import annotations
 
-import math
-import os
-import tempfile
 import time
 
 import jax
@@ -17,7 +14,6 @@ import numpy as np
 import pytest
 
 from dfbench.core.objective import Objective
-from differometor.utils import sigmoid_bounding
 
 
 # ======================================================================
@@ -455,14 +451,14 @@ class TestBoundedUnbounded:
         expected = mock_problem.objective_function(params)
         np.testing.assert_allclose(float(loss), float(expected), atol=1e-6)
 
-    def test_unbounded_uses_sigmoid_objective(self, mock_problem):
-        """5.41 unbounded=True → uses sigmoid_objective_function."""
+    def test_unbounded_maps_then_uses_objective_function(self, mock_problem):
+        """5.41 unbounded=True maps to bounds before objective_function."""
         obj = Objective(mock_problem, unbounded=True)
         obj.set_seed(42)
         obj.start_logging()
         params = obj.random_params_unbounded()
         loss = obj.value(params)
-        expected = mock_problem.sigmoid_objective_function(params)
+        expected = mock_problem.objective_function(obj._map_unbounded_to_bounded(params))
         np.testing.assert_allclose(float(loss), float(expected), atol=1e-6)
 
     def test_best_params_bounded_in_unbounded_mode(self, mock_problem):
@@ -604,7 +600,7 @@ class TestEvalTypeTracking:
         obj.vmap_hessian(batch)
         obj.vmap_value_grad_and_hessian(batch)
         counts = obj.eval_type_counts
-        assert 8 in counts   # hessian-only
+        assert 8 in counts  # hessian-only
         assert 11 in counts  # value+grad+hessian
         assert 12 in counts  # batched hessian
         assert 15 in counts  # batched value+grad+hessian

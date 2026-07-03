@@ -1,6 +1,5 @@
 venv
 .venv
-.github
 
 __pycache__
 *.egg-info
@@ -20,6 +19,14 @@ tmp*
 notes.md
 temp/
 *.slurm
+*.sh
 results/
 notebooks/
 .DS_Store
+
+# IDE related
+.vscode/
+.idea/
+
+# MacOS
+*.DS_Store

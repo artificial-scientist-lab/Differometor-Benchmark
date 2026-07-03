@@ -15,13 +15,13 @@ from dfbench import t2j, j2t
 | `t2j(tensor)` | `torch.Tensor → jax.Array` | Detach → CPU → NumPy → JAX |
 | `j2t(arr)` | `jax.Array → torch.Tensor` | JAX → NumPy (writable copy) → PyTorch |
 
-**Why these exist:**  
+**Why these exist:**
 EvoX and BoTorch operate on PyTorch tensors; Differometor and the `Objective` use JAX arrays. Every algorithm that wraps a PyTorch library needs to convert back and forth. The conversion goes through NumPy because JAX's `dlpack` interop with PyTorch is unreliable for zero-copy transfers on some platforms.
 
-**Why `j2t` makes a writable copy:**  
+**Why `j2t` makes a writable copy:**
 `jax.numpy.array` values are immutable. `torch.from_numpy()` on a read-only array emits a warning. Creating a NumPy copy via `np.array(arr)` avoids this.
 
-**Overhead:**  
+**Overhead:**
 Negligible for the array sizes in this project (tens to hundreds of floats). A population of 100 × 25-parameter vectors copies ~20 KB — sub-microsecond.
 
 ---
@@ -39,9 +39,9 @@ inverse_sigmoid_bounding(
 ) -> Float[Array, "N"]
 ```
 
-Maps parameters from bounded space $[\text{lb}, \text{ub}]$ back to the unbounded space $(-\infty, +\infty)$ that `sigmoid_objective_function` expects.
+Maps parameters from bounded space $[\text{lb}, \text{ub}]$ back to the unbounded space $(-\infty, +\infty)$ used by `Objective` in unbounded mode.
 
-The forward transform (applied inside the problem) is:
+The default forward transform is:
 
 $$x_{\text{bounded}} = \text{lb} + (\text{ub} - \text{lb}) \cdot \sigma(x_{\text{unbounded}})$$
 
@@ -51,7 +51,7 @@ $$x_{\text{unbounded}} = \log\!\left(\frac{\hat{x}}{1 - \hat{x}}\right) \quad\te
 
 Values are clipped to $[10^{-7},\; 1 - 10^{-7}]$ before the logit to avoid $\pm\infty$.
 
-**When you use this:**  
+**When you use this:**
 When you have a bounded parameter vector and want to convert it to unbounded space (e.g., for initializing an algorithm that works in unconstrained space).
 
 ---
@@ -88,7 +88,7 @@ args = parser.parse_args()
 # python run.py --pop-size 200 --learning-rate 0.001 --use-cuda
 ```
 
-**Why this exists:**  
+**Why this exists:**
 Batch scripts on HPC clusters pass hyperparameters as CLI arguments. This utility avoids writing boilerplate argparse code for each script.
 
 ---

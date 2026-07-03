@@ -29,12 +29,11 @@ Defines the minimal interface every problem must implement:
 |--------------------|------|-------------|
 | `name` | `str` | Human-readable identifier. |
 | `objective_function` | `Callable` | Loss in bounded parameter space. |
-| `sigmoid_objective_function` | `Callable` | Loss in unbounded space (sigmoid bounding applied internally). |
 | `bounds` | `Array[2, n_params]` | `[lower_bounds, upper_bounds]` for each parameter. |
 | `optimization_pairs` | `list[tuple[str, str]]` | `(component_name, property_name)` tuples mapping each parameter index to a Differometor component. |
 | `n_params` | `int` | Number of parameters = `len(optimization_pairs)`. |
 
-**Rationale — two objective functions:** See the [Architecture Overview](Architecture-Overview#1-problem-layer) for why both bounded and unbounded variants exist.
+**Rationale — bounded problem contract:** Problems expose the bounded loss only; `Objective` owns any mapping required by algorithms that search in unbounded coordinates.
 
 ### `OpticalSetupProblem` (Optical Base)
 

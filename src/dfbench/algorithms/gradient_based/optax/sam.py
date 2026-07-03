@@ -6,11 +6,9 @@ import optax.contrib
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
-    build_optimizer,
     _is_nonfinite,
     _MAX_NAN_STREAK,
 )
-from dfbench.core.algorithm import AlgorithmType
 from dfbench.core.objective import Objective
 
 
@@ -41,7 +39,10 @@ class OptaxSAM(OptaxAlgorithm):
         base = optax.adam(learning_rate)
         adv = optax.chain(optax.contrib.normalize(), optax.sgd(rho))
         sam_opt = optax.contrib.sam(
-            base, adv, sync_period=sync_period, reset_state=True,
+            base,
+            adv,
+            sync_period=sync_period,
+            reset_state=True,
         )
         if grad_clip_norm is not None:
             return optax.chain(optax.clip_by_global_norm(grad_clip_norm), sam_opt)
@@ -79,9 +80,7 @@ class OptaxSAM(OptaxAlgorithm):
         obj.start_logging()
 
         nan_streak = 0
-        rng_key = jax.random.PRNGKey(
-            random_seed if random_seed is not None else 0
-        )
+        rng_key = jax.random.PRNGKey(random_seed if random_seed is not None else 0)
 
         while not obj.budget_exceeded:
             # Adversarial step (perturbation)
@@ -94,18 +93,17 @@ class OptaxSAM(OptaxAlgorithm):
                 if nan_streak > _MAX_NAN_STREAK:
                     best = obj.best_params
                     if best is not None:
-                        params = best + jax.random.normal(
-                            sub_key, best.shape
-                        ) * learning_rate
+                        params = (
+                            best
+                            + jax.random.normal(sub_key, best.shape) * learning_rate
+                        )
                     else:
                         params = obj.random_params_unbounded()
                     opt_state = optimizer.init(params)
                     nan_streak = 0
                 else:
                     scale = learning_rate * (2 ** min(nan_streak, 8))
-                    params = params + jax.random.normal(
-                        sub_key, params.shape
-                    ) * scale
+                    params = params + jax.random.normal(sub_key, params.shape) * scale
                 continue
 
             nan_streak = 0
@@ -125,18 +123,17 @@ class OptaxSAM(OptaxAlgorithm):
                 if nan_streak > _MAX_NAN_STREAK:
                     best = obj.best_params
                     if best is not None:
-                        params = best + jax.random.normal(
-                            sub_key, best.shape
-                        ) * learning_rate
+                        params = (
+                            best
+                            + jax.random.normal(sub_key, best.shape) * learning_rate
+                        )
                     else:
                         params = obj.random_params_unbounded()
                     opt_state = optimizer.init(params)
                     nan_streak = 0
                 else:
                     scale = learning_rate * (2 ** min(nan_streak, 8))
-                    params = params + jax.random.normal(
-                        sub_key, params.shape
-                    ) * scale
+                    params = params + jax.random.normal(sub_key, params.shape) * scale
                 continue
 
             nan_streak = 0

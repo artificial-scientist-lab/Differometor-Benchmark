@@ -1,19 +1,17 @@
 """Voyager problem with realistic 3-noise model and power constraints."""
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 from differometor.setups import voyager
 from differometor.simulate import run_setups, simulate, run_build_step
 from differometor.utils import (
-    sigmoid_bounding,
     sensitivity_qamplfreq_noise,
     calculate_sensitivities,
     calculate_powers,
 )
 
-from ..base_problem import DEFAULT_SIGNAL_FLOOR, OpticalSetupProblem
+from ..base_problem import OpticalSetupProblem
 
 
 class ConstrainedVoyagerProblem(OpticalSetupProblem):
@@ -29,7 +27,6 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
         n_frequencies: int = 100,
         power_penalty_fn=None,
         bounds_overrides: dict[str, tuple[float, float]] | None = None,
-        signal_floor: float = DEFAULT_SIGNAL_FLOOR,
     ):
         """Initialize the Constrained Voyager optimization problem.
 
@@ -44,15 +41,8 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             bounds_overrides: Optional property-level bound overrides.
                 Example: {"tuning": (0, 45)}.
                 Overrides must narrow default bounds.
-            signal_floor: Optional lower bound for detector signal
-                magnitudes before sensitivity normalization.
         """
-        super().__init__(
-            name="voyager_constrained",
-            n_frequencies=n_frequencies,
-            signal_floor=signal_floor,
-        )
-        signal_floor = self._signal_floor
+        super().__init__(name="voyager_constrained", n_frequencies=n_frequencies)
         if power_penalty_fn is not None:
             self._power_penalty_fn = power_penalty_fn
 
@@ -73,11 +63,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
 
         # calculate the sensitivity values taking into account the three noise sources
         self._target_sensitivities = calculate_sensitivities(
-            simulation_results,
-            self._sensitivity_function,
-            self._frequencies,
-            True,
-            signal_floor,
+            simulation_results, self._sensitivity_function, self._frequencies
         )
 
         # specify the ranges for the properties to be optimized
@@ -121,7 +107,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
         ).T
 
         # abstract for pure objective_function
-        bounds = self._bounds
+        bounds = self._bounds  # noqa: F841
 
         # build the three modulation setups and store as instance attributes
         # Use the setups already created above
@@ -145,47 +131,6 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
         )
 
         @jax.jit
-        def sigmoid_objective_function(
-            optimized_parameters: Float[Array, "{self.n_params}"],
-        ) -> Float:
-            optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
-
-            # simulate the three modulation setups
-            q_results = simulate(
-                **{**self._q_arrays, "optimized_parameters": optimized_parameters}
-            )
-            ampl_results = simulate(
-                **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
-            )
-            freq_results = simulate(
-                **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
-            )
-            results = [
-                (*q_results, *self._q_metadata),
-                (*ampl_results, *self._ampl_metadata),
-                (*freq_results, *self._freq_metadata),
-            ]
-
-            # calculate the sensitivities taking into account the three noise sources
-            sensitivities = calculate_sensitivities(
-                results,
-                self._sensitivity_function,
-                self._frequencies,
-                True,
-                signal_floor,
-            )
-
-            # calculate the light power at all components within the setup
-            powers = calculate_powers(q_results[0], *self._q_metadata)
-
-            # calculate the loss taking into account power violations
-            sensitivity_loss, penalty, _ = self._calculate_loss(
-                sensitivities, self._target_sensitivities, powers
-            )
-
-            return sensitivity_loss + penalty
-
-        @jax.jit
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],
         ) -> Float:
@@ -207,11 +152,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
 
             # calculate the sensitivities taking into account the three noise sources
             sensitivities = calculate_sensitivities(
-                results,
-                self._sensitivity_function,
-                self._frequencies,
-                True,
-                signal_floor,
+                results, self._sensitivity_function, self._frequencies, homodyne=True
             )
 
             # calculate the light power at all components within the setup
@@ -224,7 +165,6 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
 
             return sensitivity_loss + penalty
 
-        self.sigmoid_objective_function = sigmoid_objective_function
         self.objective_function = objective_function
 
     @property
@@ -272,11 +212,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
 
         # calculate the sensitivities taking into account the three noise sources
         sensitivities = calculate_sensitivities(
-            results,
-            self._sensitivity_function,
-            self._frequencies,
-            True,
-            self._signal_floor,
+            results, self._sensitivity_function, self._frequencies, homodyne=True
         )  # Voyager uses homodyne detection
 
         return sensitivities

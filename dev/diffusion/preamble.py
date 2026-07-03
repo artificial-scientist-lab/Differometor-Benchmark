@@ -4,6 +4,7 @@ from pathlib import Path
 
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+
 # for plotting
 from tueplots import bundles
 from tueplots.constants.color import rgb
@@ -18,8 +19,8 @@ parent_dir = str(Path().resolve().parents[1])
 # Add to sys.path
 sys.path.insert(0, parent_dir)
 
-cmap_wd = LinearSegmentedColormap.from_list("ow", ['w', rgb.tue_dark], N=1024)
-cmap_wo = LinearSegmentedColormap.from_list("ow", ['w', rgb.tue_orange], N=1024)
-cmap_wb = LinearSegmentedColormap.from_list("ow", ['w', rgb.tue_blue], N=1024)  
-cmap_wg = LinearSegmentedColormap.from_list("ow", ['w', rgb.tue_green], N=1024)
-cmap_wr = LinearSegmentedColormap.from_list("ow", ['w', rgb.tue_red], N=1024)
+cmap_wd = LinearSegmentedColormap.from_list("ow", ["w", rgb.tue_dark], N=1024)
+cmap_wo = LinearSegmentedColormap.from_list("ow", ["w", rgb.tue_orange], N=1024)
+cmap_wb = LinearSegmentedColormap.from_list("ow", ["w", rgb.tue_blue], N=1024)
+cmap_wg = LinearSegmentedColormap.from_list("ow", ["w", rgb.tue_green], N=1024)
+cmap_wr = LinearSegmentedColormap.from_list("ow", ["w", rgb.tue_red], N=1024)

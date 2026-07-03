@@ -61,6 +61,8 @@ reproducibility (same seed, same loss trajectory).
 
 Append one entry to `REGISTRY` in
 [tests/test_algorithms_uniform.py](../tests/test_algorithms_uniform.py).
+Use the `AlgorithmType` matching the algorithm's `src/dfbench/algorithms/`
+subfolder.
 All tests then run against your algorithm automatically:
 
 ```python

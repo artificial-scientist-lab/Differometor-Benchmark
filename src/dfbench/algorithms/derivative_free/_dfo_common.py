@@ -147,4 +147,6 @@ def multistart_loop(
                 break
             # DFO solvers may raise on degenerate geometry, singular models,
             # etc.  Log and continue with next restart.
-            print(f"[DFO restart {i+1}/{n_restarts}] solver raised {type(exc).__name__}: {exc}")
+            print(
+                f"[DFO restart {i + 1}/{n_restarts}] solver raised {type(exc).__name__}: {exc}"
+            )

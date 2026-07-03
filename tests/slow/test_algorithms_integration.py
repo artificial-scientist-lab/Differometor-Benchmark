@@ -26,7 +26,7 @@ pytestmark = pytest.mark.slow
 # but xfailed with an explicit reason.
 KNOWN_VOYAGER_FAILURES = {
     "ReSTIR": "ReSTIR vmap warmup is incompatible with VoyagerProblem's "
-              "differometor simulate() integer indexing under JAX vmap",
+    "differometor simulate() integer indexing under JAX vmap",
 }
 
 
@@ -44,6 +44,7 @@ def _params():
 @pytest.fixture(scope="module")
 def voyager_problem():
     from dfbench.problems import VoyagerProblem
+
     return VoyagerProblem()
 
 

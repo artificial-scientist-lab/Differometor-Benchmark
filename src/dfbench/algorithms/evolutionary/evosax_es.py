@@ -47,8 +47,7 @@ try:
     from evosax.algorithms import MA_ES, LM_MA_ES
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "evosax is required for Evosax* algorithms. "
-        "Install it with:  uv add evosax"
+        "evosax is required for Evosax* algorithms. Install it with:  uv add evosax"
     ) from exc
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
@@ -117,8 +116,10 @@ def _run_evosax_loop(
 
         # Evaluate in chunks of batch_size
         n_pop = x_clipped.shape[0]
-        chunks = [obj.vmap_value(x_clipped[i : i + batch_size])
-                  for i in range(0, n_pop, batch_size)]
+        chunks = [
+            obj.vmap_value(x_clipped[i : i + batch_size])
+            for i in range(0, n_pop, batch_size)
+        ]
         fitness = jnp.concatenate(chunks)
 
         # NaN/Inf escape hatch: replace any non-finite fitness with a large
@@ -217,7 +218,9 @@ class EvosaxMAES(OptimizationAlgorithm):
             mean0 = jnp.clip(jnp.asarray(init_params), lb_jnp, ub_jnp)
         else:
             rng, mean_rng = jax.random.split(rng)
-            mean0 = jax.random.uniform(mean_rng, shape=(n,), minval=lb_jnp, maxval=ub_jnp)
+            mean0 = jax.random.uniform(
+                mean_rng, shape=(n,), minval=lb_jnp, maxval=ub_jnp
+            )
 
         rng, init_rng = jax.random.split(rng)
         state = strategy.init(init_rng, mean0, es_params)
@@ -229,8 +232,15 @@ class EvosaxMAES(OptimizationAlgorithm):
 
         rng, loop_rng = jax.random.split(rng)
         _run_evosax_loop(
-            strategy, es_params, state, obj, lb_jnp, ub_jnp, loop_rng,
-            max_iterations, batch_size,
+            strategy,
+            es_params,
+            state,
+            obj,
+            lb_jnp,
+            ub_jnp,
+            loop_rng,
+            max_iterations,
+            batch_size,
         )
 
 
@@ -320,7 +330,9 @@ class EvosaxLMMAES(OptimizationAlgorithm):
             mean0 = jnp.clip(jnp.asarray(init_params), lb_jnp, ub_jnp)
         else:
             rng, mean_rng = jax.random.split(rng)
-            mean0 = jax.random.uniform(mean_rng, shape=(n,), minval=lb_jnp, maxval=ub_jnp)
+            mean0 = jax.random.uniform(
+                mean_rng, shape=(n,), minval=lb_jnp, maxval=ub_jnp
+            )
 
         rng, init_rng = jax.random.split(rng)
         state = strategy.init(init_rng, mean0, es_params)
@@ -331,6 +343,13 @@ class EvosaxLMMAES(OptimizationAlgorithm):
 
         rng, loop_rng = jax.random.split(rng)
         _run_evosax_loop(
-            strategy, es_params, state, obj, lb_jnp, ub_jnp, loop_rng,
-            max_iterations, batch_size,
+            strategy,
+            es_params,
+            state,
+            obj,
+            lb_jnp,
+            ub_jnp,
+            loop_rng,
+            max_iterations,
+            batch_size,
         )

@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 from collections import deque
 from jaxtyping import Array, Float
 
@@ -277,9 +276,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
             ValueError: If ``mu >= lam``.
         """
         if mu >= lam:
-            raise ValueError(
-                f"(μ,λ)-ES requires mu < lam, got mu={mu}, lam={lam}."
-            )
+            raise ValueError(f"(μ,λ)-ES requires mu < lam, got mu={mu}, lam={lam}.")
 
         obj = objective
         problem = obj.problem
@@ -304,10 +301,10 @@ class JAXMuLambdaES(OptimizationAlgorithm):
         sigma = float(sigma0 if sigma0 is not None else 0.3)
 
         # Step-size adaptation parameters
-        target_succ = mu / lam       # expected success fraction
-        c_s = 1.0 / max(n, 1)      # smoothing coefficient
-        d_sigma = 1.0               # damping
-        p_succ = target_succ        # initialise cumulative success rate
+        target_succ = mu / lam  # expected success fraction
+        c_s = 1.0 / max(n, 1)  # smoothing coefficient
+        d_sigma = 1.0  # damping
+        p_succ = target_succ  # initialise cumulative success rate
         prev_mean_loss = float("inf")  # track improvement for adaptation
 
         # JIT warmup with the same effective batch size used in-loop.
@@ -329,8 +326,10 @@ class JAXMuLambdaES(OptimizationAlgorithm):
             offspring = jnp.clip(mean[None, :] + sigma * scale[None, :] * noise, lb, ub)
 
             # Evaluate via vmap in chunks of batch_size
-            chunks = [obj.vmap_value(offspring[i : i + batch_size])
-                      for i in range(0, lam, batch_size)]
+            chunks = [
+                obj.vmap_value(offspring[i : i + batch_size])
+                for i in range(0, lam, batch_size)
+            ]
             losses = jnp.concatenate(chunks)  # (lam,)
 
             if obj.budget_exceeded:
@@ -343,7 +342,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
 
             # Truncation selection: keep best μ (comma semantics)
             sorted_idx = jnp.argsort(losses)[:mu]
-            selected = offspring[sorted_idx]         # (mu, n)
+            selected = offspring[sorted_idx]  # (mu, n)
 
             # Uniform recombination (intermediate recombination)
             mean = jnp.clip(jnp.mean(selected, axis=0), lb, ub)

@@ -3,7 +3,6 @@ from enum import Enum
 import secrets
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 
@@ -18,14 +17,17 @@ class AlgorithmType(Enum):
     Values:
         GRADIENT_BASED: Algorithms using gradient information (e.g., Adam, SA-GD).
         EVOLUTIONARY: Population-based algorithms (e.g., PSO, Random Search).
+        DERIVATIVE_FREE: Direct-search and local derivative-free algorithms.
+        GLOBAL_SEARCH: Stochastic global-search algorithms.
         SURROGATE_BASED: Algorithms using surrogate models (e.g., Bayesian Optimization).
-        DIFFUSION_BASED: Generative diffusion-based optimization (experimental).
+        GENERATIVE: Generative-model-based optimization algorithms.
     """
 
     GRADIENT_BASED = "gradient_based"
     EVOLUTIONARY = "evolutionary"
     SURROGATE_BASED = "surrogate_based"
-    DIFFUSION_BASED = "diffusion_based"
+    GLOBAL_SEARCH = "global_search"
+    DERIVATIVE_FREE = "derivative_free"
     GENERATIVE = "generative"
 
 
@@ -44,8 +46,8 @@ class OptimizationAlgorithm(ABC):
 
     Note:
         All algorithms must implement:
-        - `__init__(problem, ...)`: Initialize with a problem instance
-        - `optimize(...)`: Run optimization and return an Objective instance
+        - `__init__(...)`: Initialize algorithm-specific meta-parameters
+        - `optimize(...)`: Run optimization and mutate the provided Objective
 
         The returned Objective contains all run data:
         - `best_params`, `best_params_bounded`: Best parameters found
@@ -99,7 +101,7 @@ class OptimizationAlgorithm(ABC):
         """
         # 1. Setup references
         obj = objective
-        problem = obj.problem
+        problem = obj.problem  # noqa: F841, just for clarity and convention in the algorithm code
 
         # 2. Setup objective and resolve/apply random seed
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -117,11 +119,11 @@ class OptimizationAlgorithm(ABC):
                 obj.random_params_unbounded()
             )  # If unbounded = True was given to prepare()
             # Batched optimization
-            batched_params = obj.random_params_bounded(
+            batched_params = obj.random_params_bounded(  # noqa: F841, just for convention in the algorithm code
                 n_samples=10
             )  # Use self.batch_size from __init__() here
         else:
-            params = init_params
+            params = init_params  # noqa: F841, just for convention in the algorithm code
 
         # 4. JIT warmup (optional but recommended, else much time is lost during
         # the first evaluation). Warm up only the paths your algorithm will use.
@@ -156,8 +158,8 @@ class OptimizationAlgorithm(ABC):
         self,
         obj: Objective,
         unbounded: bool,
-        algorithm_str: str | None = None,
         random_seed: int | None = None,
+        algorithm_str: str | None = None,
         **kwargs,
     ) -> tuple[int, jax.Array]:
         """Set up the Objective and resolve/apply the random seed.
@@ -169,9 +171,9 @@ class OptimizationAlgorithm(ABC):
         Args:
             obj (Objective): The Objective instance to set up.
             unbounded (bool): Whether the algorithm needs unbounded parameter space.
-            algorithm_str (str | None): Optional algorithm identifier. If None, uses self.algorithm_str.
             random_seed (int | None): Seed for reproducibility. If None, one is generated
                 via system entropy and stored in self._random_seed.
+            algorithm_str (str | None): Optional algorithm identifier. If None, uses self.algorithm_str.
             **kwargs: Additional Objective attributes to set.
 
         Returns:

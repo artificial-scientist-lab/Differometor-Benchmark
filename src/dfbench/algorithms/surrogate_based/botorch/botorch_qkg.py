@@ -13,7 +13,6 @@ Operates in **bounded** parameter space.
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import numpy as np
 import torch
 from jaxtyping import Array, Float

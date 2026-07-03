@@ -5,6 +5,8 @@ Tests 6.1–6.6.
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -13,16 +15,28 @@ from dfbench.core.objective import Objective
 
 class TestAlgorithmType:
     def test_enum_members(self):
-        """6.1 AlgorithmType has at least 4 members."""
+        """6.1 AlgorithmType exposes the folder-aligned members."""
         expected = {
             "GRADIENT_BASED",
             "EVOLUTIONARY",
+            "DERIVATIVE_FREE",
+            "GLOBAL_SEARCH",
             "SURROGATE_BASED",
-            "DIFFUSION_BASED",
             "GENERATIVE",
         }
         actual = {m.name for m in AlgorithmType}
         assert expected.issubset(actual)
+
+    def test_prepare_signature_order(self):
+        """6.1b prepare() keeps the documented argument order."""
+        parameters = list(inspect.signature(OptimizationAlgorithm.prepare).parameters)
+        assert parameters[:5] == [
+            "self",
+            "obj",
+            "unbounded",
+            "random_seed",
+            "algorithm_str",
+        ]
 
     def test_enum_values_are_strings(self):
         """6.2 All enum values are snake_case strings."""
@@ -60,9 +74,7 @@ class TestOptimizationAlgorithmABC:
             def __init__(self):
                 pass
 
-            def optimize(
-                self, objective, init_params=None, random_seed=None, **kw
-            ):
+            def optimize(self, objective, init_params=None, random_seed=None, **kw):
                 pass
 
         algo = DummyAlgo()
@@ -83,9 +95,7 @@ class TestOptimizationAlgorithmABC:
             def __init__(self):
                 pass
 
-            def optimize(
-                self, objective, init_params=None, random_seed=None, **kw
-            ):
+            def optimize(self, objective, init_params=None, random_seed=None, **kw):
                 pass
 
         algo = DummyAlgo()

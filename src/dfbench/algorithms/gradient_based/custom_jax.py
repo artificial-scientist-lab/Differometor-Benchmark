@@ -18,7 +18,6 @@ This is explicit and intentional for gradient / quasi-gradient methods.
 
 from __future__ import annotations
 
-import math
 
 import jax
 import jax.numpy as jnp
@@ -177,7 +176,9 @@ class ASAMJAX(OptimizationAlgorithm):
 
         params = obj.random_params_unbounded() if init_params is None else init_params
 
-        optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adam(learning_rate))
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(1.0), optax.adam(learning_rate)
+        )
         opt_state = optimizer.init(params)
 
         # Warm up the Objective loss+gradient path used in-loop.
@@ -244,7 +245,6 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         **lbfgs_kwargs,
     ) -> None:
         obj = objective
-        problem = obj.problem
         _, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -255,7 +255,7 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         )
         adam_state = adam_opt.init(params)
 
-        value_fn = problem.sigmoid_objective_function
+        value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
         lbfgs_opt = optax.lbfgs(**lbfgs_kwargs)
         lbfgs_state = lbfgs_opt.init(params)
@@ -286,8 +286,7 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         # as a floor so Stage 1 always gets a minimum amount of exploration.
         adam_steps = 0
         while not obj.budget_exceeded and (
-            obj.budget_progress_fraction < adam_fraction
-            or adam_steps < min_adam_steps
+            obj.budget_progress_fraction < adam_fraction or adam_steps < min_adam_steps
         ):
             loss, grad = obj.value_and_grad(params)
             if patience is not None and obj.evals_since_improvement > patience:
@@ -309,7 +308,10 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
                     break
                 obj.log_evaluation(prior_params, loss, grad)
 
-            if lbfgs_patience is not None and obj.evals_since_improvement > lbfgs_patience:
+            if (
+                lbfgs_patience is not None
+                and obj.evals_since_improvement > lbfgs_patience
+            ):
                 break
 
 
@@ -570,7 +572,9 @@ class OAdamJAX(OptimizationAlgorithm):
         params = obj.random_params_unbounded() if init_params is None else init_params
         prev_grad = None
 
-        optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adam(learning_rate, **adam_kwargs))
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(1.0), optax.adam(learning_rate, **adam_kwargs)
+        )
         opt_state = optimizer.init(params)
 
         obj.warmup_value_and_grad()
@@ -652,7 +656,9 @@ class PerturbedGDJAX(OptimizationAlgorithm):
 
             if perturb_every > 0 and step > 0 and step % perturb_every == 0:
                 rng_key, pkey = _split_once(rng_key)
-                params = params + perturb_std * jax.random.normal(pkey, shape=params.shape)
+                params = params + perturb_std * jax.random.normal(
+                    pkey, shape=params.shape
+                )
 
             step += 1
             params, rng_key, _ = _maybe_restart_params(
@@ -699,7 +705,9 @@ class NoisyAdamJAX(OptimizationAlgorithm):
 
         params = obj.random_params_unbounded() if init_params is None else init_params
 
-        optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adam(learning_rate, **adam_kwargs))
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(1.0), optax.adam(learning_rate, **adam_kwargs)
+        )
         opt_state = optimizer.init(params)
 
         obj.warmup_value_and_grad()
@@ -716,7 +724,9 @@ class NoisyAdamJAX(OptimizationAlgorithm):
 
             if noise_std > 0:
                 rng_key, nkey = _split_once(rng_key)
-                params = params + noise_std * jax.random.normal(nkey, shape=params.shape)
+                params = params + noise_std * jax.random.normal(
+                    nkey, shape=params.shape
+                )
 
             step += 1
             params, rng_key, did_restart = _maybe_restart_params(
@@ -825,7 +835,6 @@ class GaussianSmoothingGDJAX(OptimizationAlgorithm):
         step = 0
         dirs = max(1, int(n_directions))
         while not obj.budget_exceeded:
-            base_loss = obj.value(params)
             if patience is not None and obj.evals_since_improvement > patience:
                 break
 

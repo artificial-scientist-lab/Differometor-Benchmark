@@ -3,8 +3,6 @@
 Tests 12.1–12.5: verify that all public API symbols are importable.
 """
 
-import pytest
-
 
 # 12.1
 class TestCoreImports:
@@ -18,40 +16,40 @@ class TestCoreImports:
     # 12.3
     def test_import_algorithms(self):
         from dfbench.algorithms import (
-            AdamGD,
-            BFGS,
-            COBYLA,
-            COBYQA,
-            SAGD,
-            Dogleg,
-            NAAdamGD,
-            LBFGSGD,
-            LBFGSB,
-            NewtonCG,
-            NonlinearCG,
-            SLSQP,
-            SR1,
-            TNC,
-            TrustConstr,
-            TrustKrylov,
-            TrustNCG,
-            EvoxES,
-            EvoxPSO,
-            RandomSearch,
-            BotorchBO,
-            BotorchTuRBO,
-            ReSTIR,
-            VAESampling,
-        )  # noqa: F401
+            AdamGD,  # noqa: F401
+            BFGS,  # noqa: F401
+            COBYLA,  # noqa: F401
+            COBYQA,  # noqa: F401
+            SAGD,  # noqa: F401
+            Dogleg,  # noqa: F401
+            NAAdamGD,  # noqa: F401
+            LBFGSGD,  # noqa: F401
+            LBFGSB,  # noqa: F401
+            NewtonCG,  # noqa: F401
+            NonlinearCG,  # noqa: F401
+            SLSQP,  # noqa: F401
+            SR1,  # noqa: F401
+            TNC,  # noqa: F401
+            TrustConstr,  # noqa: F401
+            TrustKrylov,  # noqa: F401
+            TrustNCG,  # noqa: F401
+            EvoxES,  # noqa: F401
+            EvoxPSO,  # noqa: F401
+            RandomSearch,  # noqa: F401
+            BotorchBO,  # noqa: F401
+            BotorchTuRBO,  # noqa: F401
+            ReSTIR,  # noqa: F401
+            VAESampling,  # noqa: F401
+        )
 
     # 12.4
     def test_import_problems(self):
         from dfbench.problems import (
-            VoyagerProblem,
-            VoyagerTuningProblem,
-            ConstrainedVoyagerProblem,
-            UIFOProblem,
-        )  # noqa: F401
+            VoyagerProblem,  # noqa: F401
+            VoyagerTuningProblem,  # noqa: F401
+            ConstrainedVoyagerProblem,  # noqa: F401
+            UIFOProblem,  # noqa: F401
+        )
 
     def test_import_random_uifo_alias(self):
         """RandomUIFOProblem backwards-compat alias is importable."""

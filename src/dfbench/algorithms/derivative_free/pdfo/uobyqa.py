@@ -21,14 +21,12 @@ Reference:
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
 from dfbench.algorithms.derivative_free._dfo_common import (
     dfo_objective_wrapper,
-    random_bounded_start,
     multistart_loop,
     solver_bounds_np,
     clip_to_bounds,
@@ -50,7 +48,7 @@ class PDFOUOBYQA(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "pdfo_uobyqa"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,
@@ -80,7 +78,11 @@ class PDFOUOBYQA(OptimizationAlgorithm):
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         lower, upper = solver_bounds_np(obj)
-        radius_init = self.radius_init if self.radius_init is not None else float(0.1 * np.mean(upper - lower))
+        radius_init = (
+            self.radius_init
+            if self.radius_init is not None
+            else float(0.1 * np.mean(upper - lower))
+        )
 
         # Build wrapper that clips to bounds before evaluating
         raw_fun = dfo_objective_wrapper(obj)
@@ -116,7 +118,9 @@ class PDFOUOBYQA(OptimizationAlgorithm):
             )
 
         multistart_loop(
-            obj, key, _solve,
+            obj,
+            key,
+            _solve,
             n_restarts=self.n_restarts,
             init_params=init_params,
         )

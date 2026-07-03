@@ -17,9 +17,7 @@ class TestContinuousProblemABC:
             ContinuousProblem()
 
     def test_minimal_subclass_requires_methods(self):
-        """3.2 Concrete subclass must implement bounds, optimization_pairs,
-        objective_function, and sigmoid_objective_function.
-        """
+        """3.2 Concrete subclass must implement bounds and optimization_pairs."""
 
         class Incomplete(ContinuousProblem):
             pass

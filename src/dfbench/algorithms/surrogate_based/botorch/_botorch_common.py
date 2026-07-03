@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import warnings
 
-import jax.numpy as jnp
 import numpy as np
 import torch
 from botorch.exceptions.errors import ModelFittingError
 from botorch.exceptions.warnings import OptimizationWarning
 from botorch.fit import fit_gpytorch_mll
 from botorch.models import SingleTaskGP
-from botorch.utils.transforms import normalize, unnormalize
+from botorch.utils.transforms import unnormalize
 from gpytorch.constraints import Interval
 from gpytorch.kernels import MaternKernel, ScaleKernel
 from gpytorch.likelihoods import GaussianLikelihood
@@ -93,7 +92,7 @@ def evaluate_objective(
         for idx in torch.where(invalid)[0]:
             for retry in range(max_retries):
                 xp = X[idx].clone()
-                scale = perturbation_scale * (2 ** retry)
+                scale = perturbation_scale * (2**retry)
                 xp += torch.randn_like(xp) * scale
                 xp = torch.clamp(xp, 0.0, 1.0)
                 xp_jax = t2j(unnormalize(xp.unsqueeze(0), bounds).squeeze(0))

@@ -5,15 +5,12 @@ import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 
+from differometor.components import signal_detector
 from differometor.setups import voyager
 from differometor.simulate import run, run_build_step, simulate
-from differometor.utils import calculate_sensitivities, sigmoid_bounding, update_setup
+from differometor.utils import update_setup
 
-from ..base_problem import (
-    DEFAULT_SIGNAL_FLOOR,
-    OpticalSetupProblem,
-    sensitivity_single_noise,
-)
+from ..base_problem import OpticalSetupProblem
 
 
 class VoyagerTuningProblem(OpticalSetupProblem):
@@ -29,7 +26,6 @@ class VoyagerTuningProblem(OpticalSetupProblem):
         self,
         n_frequencies: int = 100,
         bounds_overrides: dict[str, tuple[float, float]] | None = None,
-        signal_floor: float = DEFAULT_SIGNAL_FLOOR,
     ):
         """Initialize the tuning-only Voyager optimization problem.
 
@@ -39,15 +35,8 @@ class VoyagerTuningProblem(OpticalSetupProblem):
             bounds_overrides: Optional property-level bound overrides.
                 Example: {"tuning": (0, 45)}.
                 Overrides must narrow default bounds.
-            signal_floor: Optional lower bound for detector signal
-                magnitudes before sensitivity normalization.
         """
-        super().__init__(
-            name="voyager_tuning",
-            n_frequencies=n_frequencies,
-            signal_floor=signal_floor,
-        )
-        signal_floor = self._signal_floor
+        super().__init__(name="voyager_tuning", n_frequencies=n_frequencies)
 
         # use a predefined Voyager setup with one noise detector and two signal detectors
         self._setup, component_property_pairs = voyager()
@@ -57,14 +46,15 @@ class VoyagerTuningProblem(OpticalSetupProblem):
             self._setup, [("f", "frequency")], self._frequencies
         )
 
+        # calculate the signal power at the detector ports
+        powers = signal_detector(carrier, signal)
+        powers = powers[detector_ports]
+
+        # calculate the signal power from the two signal detectors for balanced homodyne detection
+        powers = powers[0] - powers[1]
+
         # calculate the sensitivity
-        self._target_sensitivities = calculate_sensitivities(
-            [(carrier, signal, noise, detector_ports)],
-            sensitivity_single_noise,
-            self._frequencies,
-            True,
-            signal_floor,
-        )
+        self._target_sensitivities = noise / jnp.abs(powers)
 
         ### Start from random parameters and optimize the sensitivity ###
         # ---------------------------------------------------------------#
@@ -107,7 +97,7 @@ class VoyagerTuningProblem(OpticalSetupProblem):
         ).T
 
         # abstract for pure objective_function
-        bounds = self._bounds
+        bounds = self._bounds  # noqa: F841
         target_sensitivities = self._target_sensitivities
 
         @jax.jit
@@ -120,42 +110,15 @@ class VoyagerTuningProblem(OpticalSetupProblem):
                     "optimized_parameters": optimized_parameters,
                 }
             )
-            sensitivities = calculate_sensitivities(
-                [(carrier, signal, noise, self._detector_ports)],
-                sensitivity_single_noise,
-                self._frequencies,
-                True,
-                signal_floor,
-            )
+            powers = signal_detector(carrier, signal)
+            powers = powers[self._detector_ports]
+            powers = powers[0] - powers[1]
+            sensitivities = noise / jnp.abs(powers)
 
             # relative objective as in voyager_tuning.py
             return jnp.mean(jnp.log10(sensitivities / target_sensitivities))
 
         self.objective_function = objective_function
-
-        @jax.jit
-        def sigmoid_objective_function(
-            optimized_parameters: Float[Array, "{self.n_params}"],
-        ) -> Float:
-            optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
-            carrier, signal, noise = simulate(
-                **{
-                    **self._simulation_arrays,
-                    "optimized_parameters": optimized_parameters,
-                }
-            )
-            sensitivities = calculate_sensitivities(
-                [(carrier, signal, noise, self._detector_ports)],
-                sensitivity_single_noise,
-                self._frequencies,
-                True,
-                signal_floor,
-            )
-
-            # relative objective as in voyager_tuning.py
-            return jnp.mean(jnp.log10(sensitivities / target_sensitivities))
-
-        self.sigmoid_objective_function = sigmoid_objective_function
 
     @property
     def optimization_pairs(self) -> list[tuple]:
@@ -191,12 +154,9 @@ class VoyagerTuningProblem(OpticalSetupProblem):
         carrier, signal, noise, detector_ports, *_ = run(
             self._setup, [("f", "frequency")], self._frequencies
         )
-        sensitivities = calculate_sensitivities(
-            [(carrier, signal, noise, detector_ports)],
-            sensitivity_single_noise,
-            self._frequencies,
-            True,
-            self._signal_floor,
-        )
+        powers = signal_detector(carrier, signal)
+        powers = powers[detector_ports]
+        powers = powers[0] - powers[1]
+        sensitivities = noise / jnp.abs(powers)
 
         return sensitivities

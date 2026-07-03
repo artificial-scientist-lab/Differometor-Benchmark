@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
 from scipy.optimize import dual_annealing, minimize
 
@@ -29,11 +28,11 @@ class DualAnnealing(OptimizationAlgorithm):
 
     Attributes:
         algorithm_str: ``"dual_annealing"``
-        algorithm_type: :attr:`AlgorithmType.EVOLUTIONARY`
+        algorithm_type: :attr:`AlgorithmType.GLOBAL_SEARCH`
     """
 
     algorithm_str: str = "dual_annealing"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.GLOBAL_SEARCH
 
     def __init__(self) -> None:
         pass
@@ -68,9 +67,7 @@ class DualAnnealing(OptimizationAlgorithm):
         """
         obj = objective
 
-        random_seed, _key = self.prepare(
-            obj, unbounded=False, random_seed=random_seed
-        )
+        random_seed, _key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         if init_params is None:
             params = obj.random_params_bounded()

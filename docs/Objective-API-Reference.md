@@ -2,7 +2,7 @@
 
 `Objective` is the central class of the benchmark. It wraps a `ContinuousProblem` and acts as the only interface between an optimization algorithm and the underlying physics simulation. Every function evaluation, gradient computation, and random sample goes through `Objective`, which transparently records everything needed for reproducible benchmarking.
 
-If manual handling of everything is desired, `Objective` still offers the `ContinuousProblem` itself as an instance which has all the pure JAX-functions 
+For rare cases that need a raw JAX-compatible callable inside a custom JIT loop, use `Objective.value_function(...)` and then record completed evaluations with `Objective.log_evaluation(...)`.
 
 **Import:**
 
@@ -43,7 +43,7 @@ Objective(
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `problem` | `ContinuousProblem` | *required* | The optimization problem to wrap. |
-| `unbounded` | `bool` | `False` | If `True`, the objective evaluates through the sigmoid-bounded variant (`sigmoid_objective_function`) so algorithms can search in $(-\infty, +\infty)^\text{n\_params}$ space. If `False`, evaluates the plain `objective_function` in bounded space. |
+| `unbounded` | `bool` | `False` | If `True`, the Objective maps unbounded parameters into problem bounds before evaluating `objective_function`, so algorithms can search in $(-\infty, +\infty)^\text{n\_params}$ space. If `False`, evaluates `objective_function` directly in bounded space. |
 | `max_evals` | `int \| None` | `None` | Maximum number of function evaluations. `None` = unlimited. Batched evaluations are counted as how many parameters were given. |
 | `max_time` | `float \| None` | `None` | Maximum wall-clock seconds beginning at the time `obj.start_logging()` was called. `None` = unlimited. |
 | `save_time_steps` | `bool` | `True` | Record elapsed-time timestamp for each evaluation. |
@@ -67,7 +67,7 @@ Objective(
 | `unbounded` | Objective function used | Example algorithms |
 |-------------|-------------------------|--------------------|
 | `False` | `problem.objective_function` | Random Search, PSO, CMA-ES, Bayesian Optimization |
-| `True` | `problem.sigmoid_objective_function` | Some gradient-based methods (Adam, L-BFGS, SA-GD, NA-Adam in their current implementations) |
+| `True` | `Objective` mapping + `problem.objective_function` | Some gradient-based methods (Adam, L-BFGS, SA-GD, NA-Adam in their current implementations) |
 
 ### Choosing a bounded/unbounded mapping (important)
 
@@ -177,13 +177,27 @@ Batched methods use `jax.vmap` and evaluate the entire batch as **one** history 
 loss = obj(params)   # equivalent to obj.value(params)
 ```
 
+### Unlogged raw value function
+
+```python
+value_fn = obj.value_function()                 # follows obj.unbounded
+value_fn = obj.value_function(unbounded=True)   # force unbounded mapping
+value_fn = obj.value_function(unbounded=False)  # bounded problem objective
+```
+
+`value_function(unbounded=None)` returns a JAX-compatible scalar callable without logging, timing, or budget accounting. It exists for optimizers that must call the value function inside their own JIT-compiled loop, such as Optax L-BFGS line search.
+
+When `unbounded=True`, the returned callable maps unbounded parameters into the problem bounds using the Objective's active mapping, then calls `problem.objective_function`. When `unbounded=False`, it calls `problem.objective_function` directly. Passing `None` uses the Objective's current `obj.unbounded` mode.
+
+Because this callable is intentionally unlogged, pair it with `obj.log_evaluation(...)` after each completed optimizer step if the evaluation should count toward benchmark histories. For ordinary algorithm loops, prefer `obj.value(...)`, `obj.value_and_grad(...)`, or the batched evaluation methods.
+
 ### Manual logging
 
 ```python
 obj.log_evaluation(params=…, loss=…, grad=…, hessian=…)
 ```
 
-For algorithms with custom JIT-compiled evaluation loops that can't call `obj.value()` directly. Accepts the same `params`, `loss`, `grad`, `hessian` arguments and performs identical history recording.
+For algorithms with custom JIT-compiled evaluation loops that use `obj.value_function(...)` instead of calling `obj.value()` directly. Accepts the same `params`, `loss`, `grad`, `hessian` arguments and performs identical history recording.
 
 ---
 

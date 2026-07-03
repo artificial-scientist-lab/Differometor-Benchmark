@@ -45,17 +45,16 @@ A problem defines *what* is being optimised. Every problem subclasses `Continuou
 | Attribute | Purpose |
 |-----------|---------|
 | `objective_function` | Loss in **bounded** parameter space — used by evolutionary / surrogate algorithms |
-| `sigmoid_objective_function` | Loss in **unbounded** space via sigmoid transform — used by gradient methods |
 | `bounds` | `(2, n_params)` lower / upper limits |
 | `optimization_pairs` | `[(component, property), …]` mapping each parameter index to a Differometor component |
 
-**Rationale — two objective functions:** Some optimization methods benefit from unconstrained $(-\infty, +\infty)$ space where gradients flow smoothly without hitting box-constraint boundaries. Population-based methods naturally respect bound constraints by sampling and clamping. Providing both variants lets algorithms choose their preferred space without adapter code.
+**Rationale — one bounded problem function:** Some optimization methods benefit from unconstrained $(-\infty, +\infty)$ space where gradients flow smoothly without hitting box-constraint boundaries. `Objective` provides that mapping layer so problem implementations only need to define the bounded loss.
 
 ### 2. Objective Layer (`core/objective.py`)
 
 `Objective` is the **sole interface** between any algorithm and its problem. It transparently:
 
-- Dispatches to the correct objective function (bounded or sigmoid)
+- Maps unbounded coordinates into problem bounds when needed, then evaluates the bounded problem objective
 - Prepares `jax.grad`, `jax.hessian`, `jax.value_and_grad`, and `jax.vmap` variants
 - Records every evaluation with aligned loss / gradient / Hessian / params / timestamp histories
 - Enforces wall-clock time and evaluation-count budgets
@@ -70,7 +69,7 @@ An algorithm defines *how* to search. Every algorithm subclasses `OptimizationAl
 | Attribute / Method | Purpose |
 |--------------------|---------|
 | `algorithm_str` | Unique identifier (e.g. `"adam_gd"`, `"evox_cmaes"`) |
-| `algorithm_type` | One of `GRADIENT_BASED`, `EVOLUTIONARY`, `SURROGATE_BASED`, `GENERATIVE` |
+| `algorithm_type` | One of `GRADIENT_BASED`, `EVOLUTIONARY`, `DERIVATIVE_FREE`, `GLOBAL_SEARCH`, `SURROGATE_BASED`, `GENERATIVE` |
 | `optimize(objective, …)` | Main entry point — receives a pre-configured `Objective`, runs the loop, returns it |
 
 Algorithms **never** create their own `Objective`; they receive one from the caller (or from the `Benchmark` harness). This inversion of control ensures the harness can set budget limits, select seeds, and configure history storage uniformly.
@@ -91,10 +90,10 @@ Algorithms **never** create their own `Objective`; they receive one from the cal
  Objective._func / _value_and_grad_func / _hessian_func / _vmap_func
                     │
                     ▼
-         ┌─────────────────────┐
-         │  problem.objective  │   (or sigmoid variant)
-         │  _function(params)  │
-         └─────────┬───────────┘
+     ┌──────────────────────────────┐
+     │ optional Objective mapping   │
+     │ problem.objective_function   │
+     └──────────────┬───────────────┘
                    │
                    ▼
            Differometor.simulate()
@@ -120,7 +119,7 @@ Algorithms **never** create their own `Objective`; they receive one from the cal
 
 Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this exact pipeline. The internal `_log()` coordinator handles time-step recording, delegates to `_log_evals()` for history tracking, and triggers `_log_to_file()` for periodic checkpoints. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
 
-For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.log_evaluation(params, loss, grad, hessian=None)` provides the same pipeline as a public API — it delegates to `_log()` internally. Do not call the private methods directly.
+For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.value_function(...)` provides the same Objective-owned bounded/unbounded mapping without Python-side logging, and `obj.log_evaluation(params, loss, grad, hessian=None)` records the completed evaluation through the same logging pipeline. Do not call the private methods directly.
 
 ---
 
@@ -165,5 +164,5 @@ The `Benchmark` class:
 | **Time-sampled metrics** | Evaluating metrics at fixed time points (not iteration counts) normalises for per-eval cost differences between algorithms. |
 | **Atomic checkpoints** | Long HPC jobs are killed without warning. Writing to `.tmp.npz` and then calling `os.replace` avoids half-written files. |
 | **`_init_env.py` setting `MPLCONFIGDIR`** | On shared HPC filesystems, matplotlib's default config directory may be read-only. Setting a temp directory before any import prevents cryptic crashes. |
-| **`AlgorithmType` enum** | The benchmark uses the type as a default hint: gradient-based algorithms typically get `unbounded=True`, while evolutionary/surrogate methods get `unbounded=False`. Algorithms can override this in their implementation if needed. |
+| **`AlgorithmType` enum** | The enum mirrors the `algorithms/` package families. The benchmark uses it as a default hint: gradient-based algorithms typically get `unbounded=True`, while evolutionary, derivative-free, global-search, surrogate, and generative methods get `unbounded=False` unless their implementation overrides the mode. |
 | **Reduced history properties** | Batched algorithms produce `(batch, …)` shaped histories. The `*_reduced` properties collapse each batch to a single representative (argmin of loss) so downstream analysis code never needs to handle ragged shapes. |

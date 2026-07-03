@@ -14,9 +14,7 @@ per candidate for noise averaging) as a first-class hyperparameter.
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import numpy as np
-from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective

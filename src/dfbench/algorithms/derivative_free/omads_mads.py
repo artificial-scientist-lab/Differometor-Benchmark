@@ -138,7 +138,7 @@ def _run_omads(
         for k in range(_MAX_NAN_STREAK):
             if obj.budget_exceeded:
                 break
-            scale = _NAN_PERTURB_BASE * (2 ** k)
+            scale = _NAN_PERTURB_BASE * (2**k)
             perturbed = np.clip(cur + rng.normal(size=cur.shape) * scale, lower, upper)
             loss = float(obj.value(jnp.asarray(perturbed, dtype=jnp.float32)))
             if np.isfinite(loss):
@@ -245,7 +245,7 @@ class OmadsMADS(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "omads_mads"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,
@@ -328,7 +328,7 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "omads_orthomads"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,

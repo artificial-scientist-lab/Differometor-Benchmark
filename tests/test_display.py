@@ -5,9 +5,6 @@ Tests 10.1–10.7.
 
 from __future__ import annotations
 
-import math
-
-import pytest
 
 from dfbench.core.display import (
     LiveDisplay,

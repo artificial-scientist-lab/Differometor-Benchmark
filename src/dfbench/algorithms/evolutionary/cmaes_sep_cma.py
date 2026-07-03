@@ -132,9 +132,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
         batch_size = self._batch_size
 
         # Bounds in unit space for cmaes' internal repair.
-        bounds_array = np.stack(
-            [np.zeros(n), np.ones(n)], axis=1
-        )  # (n, 2)
+        bounds_array = np.stack([np.zeros(n), np.ones(n)], axis=1)  # (n, 2)
 
         optimizer = SepCMA(
             mean=x0_unit,
@@ -182,7 +180,9 @@ class CMAESSepCMA(OptimizationAlgorithm):
 
             # Optional stagnation stopping
             if max_no_improvement is not None:
-                current_best = float(obj.best_loss) if obj.best_loss is not None else float("inf")
+                current_best = (
+                    float(obj.best_loss) if obj.best_loss is not None else float("inf")
+                )
                 if current_best < prev_best:
                     prev_best = current_best
                     gens_without_improvement = 0

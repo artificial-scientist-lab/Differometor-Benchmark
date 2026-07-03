@@ -343,9 +343,7 @@ class Objective:
         handles scaling to actual bounds.  The inverse mapping receives
         values already normalised to [0, 1] by the Objective.
         """
-        if (unit_mapping is None) != (
-            inverse_unit_mapping is None
-        ):
+        if (unit_mapping is None) != (inverse_unit_mapping is None):
             raise ValueError(
                 "Custom unbounded mapping requires both "
                 "unit_mapping and inverse_unit_mapping."
@@ -354,14 +352,10 @@ class Objective:
         self._unit_mapping = unit_mapping
         self._inverse_unit_mapping = inverse_unit_mapping
         self._unit_mapping_vmap = (
-            jax.vmap(unit_mapping)
-            if unit_mapping is not None
-            else None
+            jax.vmap(unit_mapping) if unit_mapping is not None else None
         )
         self._inverse_unit_mapping_vmap = (
-            jax.vmap(inverse_unit_mapping)
-            if inverse_unit_mapping is not None
-            else None
+            jax.vmap(inverse_unit_mapping) if inverse_unit_mapping is not None else None
         )
 
     def _map_unbounded_to_bounded(
@@ -384,9 +378,7 @@ class Objective:
         """Map a parameter batch from unbounded to bounded space."""
         if self._unit_mapping_vmap is not None:
             lower, upper = self._problem.bounds
-            return lower + (upper - lower) * self._unit_mapping_vmap(
-                params
-            )
+            return lower + (upper - lower) * self._unit_mapping_vmap(params)
         return jax.vmap(lambda x: sigmoid_bounding(x, self._problem.bounds))(params)
 
     def _map_bounded_to_unbounded(
@@ -408,21 +400,26 @@ class Objective:
             return self._inverse_unit_mapping_vmap(normalized)
         return self._inverse_sigmoid_bounding(params, self._problem.bounds)
 
+    def value_function(self, *, unbounded: bool | None = None) -> Callable:
+        """Return an unlogged JAX-compatible scalar value function.
+
+        Args:
+            unbounded: If True, map unbounded params to bounded space before
+                calling the problem objective. If False, call the problem
+                objective directly. None uses the Objective's active mode.
+        """
+        use_unbounded = self.unbounded if unbounded is None else unbounded
+        if use_unbounded:
+            def _unbounded_value(params):
+                bounded = self._map_unbounded_to_bounded(params)
+                return self._problem.objective_function(bounded)
+
+            return _unbounded_value
+        return self._problem.objective_function
+
     def _bind_evaluation_functions(self) -> None:
         """Bind evaluation callables for the currently active search space."""
-        problem = self._problem
-        if self.unbounded:
-            if self._unit_mapping is None:
-                self._func = problem.sigmoid_objective_function
-            else:
-
-                def _mapped_unbounded_objective(params):
-                    bounded = self._map_unbounded_to_bounded(params)
-                    return problem.objective_function(bounded)
-
-                self._func = _mapped_unbounded_objective
-        else:
-            self._func = problem.objective_function
+        self._func = self.value_function()
         self._grad_func = jax.jit(jax.grad(self._func))
         self._value_and_grad_func = jax.jit(jax.value_and_grad(self._func))
 
@@ -438,9 +435,11 @@ class Objective:
 
             def _cols_chunk(basis_chunk):
                 """Compute multiple Hessian columns in parallel."""
+
                 def _single_col(e_i):
                     _, col = jax.jvp(_grad_for_hessian, (params,), (e_i,))
                     return col
+
                 return jax.vmap(_single_col)(basis_chunk)
 
             # Build full identity and split into chunks
@@ -449,9 +448,7 @@ class Objective:
             remainder = n % _hbs
             if remainder != 0:
                 pad_size = _hbs - remainder
-                basis = jnp.concatenate(
-                    [basis, jnp.zeros((pad_size, n))], axis=0
-                )
+                basis = jnp.concatenate([basis, jnp.zeros((pad_size, n))], axis=0)
             chunks = basis.reshape(-1, _hbs, n)
             # lax.map iterates sequentially over chunks
             result = jax.lax.map(_cols_chunk, chunks)
@@ -507,9 +504,7 @@ class Objective:
                 "set_space_mode() must be called before start_logging() so "
                 "evaluation histories stay consistent."
             )
-        if (unit_mapping is None) != (
-            inverse_unit_mapping is None
-        ):
+        if (unit_mapping is None) != (inverse_unit_mapping is None):
             raise ValueError(
                 "set_space_mode() custom mapping requires both "
                 "unit_mapping and inverse_unit_mapping."
@@ -1134,7 +1129,11 @@ class Objective:
             raise ValueError("n_samples must be at least 1.")
 
         midpoint = (self._bounds[0] + self._bounds[1]) / 2.0
-        bounded_params = midpoint[None, :] if n_samples == 1 else jnp.repeat(midpoint[None, :], repeats=n_samples, axis=0)
+        bounded_params = (
+            midpoint[None, :]
+            if n_samples == 1
+            else jnp.repeat(midpoint[None, :], repeats=n_samples, axis=0)
+        )
 
         if self.unbounded:
             return self._map_bounded_to_unbounded(bounded_params)
@@ -1531,7 +1530,7 @@ class Objective:
             self._deterministic_warmup_params()[0],
         )
 
-    def warmup_vmap_value(self, batch_size: int) -> None:
+    def warmup_vmap_value(self, batch_size: int = 2) -> None:
         """Warm up ``vmap_value()`` twice on a deterministic batch.
 
         Args:
@@ -1542,7 +1541,7 @@ class Objective:
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_grad(self, batch_size: int) -> None:
+    def warmup_vmap_grad(self, batch_size: int = 2) -> None:
         """Warm up ``vmap_grad()`` twice on a deterministic batch.
 
         Args:
@@ -1553,7 +1552,7 @@ class Objective:
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_hessian(self, batch_size: int) -> None:
+    def warmup_vmap_hessian(self, batch_size: int = 2) -> None:
         """Warm up ``vmap_hessian()`` twice on a deterministic batch.
 
         Args:
@@ -1564,7 +1563,7 @@ class Objective:
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_value_and_grad(self, batch_size: int) -> None:
+    def warmup_vmap_value_and_grad(self, batch_size: int = 2) -> None:
         """Warm up ``vmap_value_and_grad()`` twice on a deterministic batch.
 
         Args:
@@ -1575,7 +1574,7 @@ class Objective:
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
-    def warmup_vmap_value_grad_and_hessian(self, batch_size: int) -> None:
+    def warmup_vmap_value_grad_and_hessian(self, batch_size: int = 2) -> None:
         """Warm up ``vmap_value_grad_and_hessian()`` twice on a deterministic batch.
 
         Args:
@@ -1828,10 +1827,16 @@ class Objective:
             algorithm_name = self.algorithm_str or "unknown"
 
         # Reuse cached path if no explicit filepath/hyper_param_str override
-        if self._cached_save_path is not None and filepath is None and hyper_param_str is None:
+        if (
+            self._cached_save_path is not None
+            and filepath is None
+            and hyper_param_str is None
+        ):
             save_path = self._cached_save_path
         else:
-            save_path = self._get_run_data_path(algorithm_name, filepath, hyper_param_str)
+            save_path = self._get_run_data_path(
+                algorithm_name, filepath, hyper_param_str
+            )
             if filepath is None and hyper_param_str is None:
                 self._cached_save_path = save_path
 

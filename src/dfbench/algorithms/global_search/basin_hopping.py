@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
 from scipy.optimize import basinhopping
 
@@ -36,13 +35,13 @@ class BasinHopping(OptimizationAlgorithm):
 
     Attributes:
         algorithm_str: ``"basin_hopping"``
-        algorithm_type: :attr:`AlgorithmType.EVOLUTIONARY`
+        algorithm_type: :attr:`AlgorithmType.GLOBAL_SEARCH`
         local_method: SciPy minimizer name used for the local search
             (default ``"L-BFGS-B"``).
     """
 
     algorithm_str: str = "basin_hopping"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.GLOBAL_SEARCH
 
     # Local solvers that accept a jac argument
     _GRADIENT_METHODS = frozenset(
@@ -84,9 +83,7 @@ class BasinHopping(OptimizationAlgorithm):
         obj = objective
         problem = obj.problem
 
-        random_seed, _key = self.prepare(
-            obj, unbounded=False, random_seed=random_seed
-        )
+        random_seed, _key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         if init_params is None:
             params = obj.random_params_bounded()

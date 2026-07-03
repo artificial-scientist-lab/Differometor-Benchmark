@@ -42,7 +42,6 @@ from dfbench.algorithms import (
     SAGD,
     SR1,
 )
-from dfbench.algorithms.derivative_free.omads_mads import OmadsMADS, OmadsOrthoMADS
 from dfbench.core.objective import Objective
 
 
@@ -59,9 +58,7 @@ class TestSAGD:
                 p = algo._compute_transition_probability(
                     delta_e=delta_e, epoch=epoch, T0=1.0, learning_rate=0.01
                 )
-                assert 0.0 <= p <= 1.0, (
-                    f"p={p} for delta_e={delta_e}, epoch={epoch}"
-                )
+                assert 0.0 <= p <= 1.0, f"p={p} for delta_e={delta_e}, epoch={epoch}"
 
     def test_double_annealing(self):
         """The double-annealing branch also returns a valid probability."""
@@ -149,9 +146,9 @@ class TestNevergrad:
 class TestBotorchTuRBO:
     def test_n_restarts_defaults_to_none(self):
         """TuRBO restart count is uncapped by default and budget-limited."""
-        default = inspect.signature(BotorchTuRBO.optimize).parameters[
-            "n_restarts"
-        ].default
+        default = (
+            inspect.signature(BotorchTuRBO.optimize).parameters["n_restarts"].default
+        )
         assert default is None
 
 
@@ -296,9 +293,7 @@ class TestDualAnnealingSpecific:
         """7.43 DualAnnealing: local_refinement polishes the best incumbent."""
         algo = DualAnnealing()
         obj = Objective(mock_problem, max_evals=80, max_time=60)
-        algo.optimize(
-            obj, random_seed=42, local_refinement=True
-        )
+        algo.optimize(obj, random_seed=42, local_refinement=True)
         assert obj.eval_count > 0
 
     def test_temperature_params(self, mock_problem):
@@ -312,6 +307,8 @@ class TestDualAnnealingSpecific:
             restart_temp_ratio=1e-4,
         )
         assert obj.eval_count > 0
+
+
 # ── Optax: algorithm-specific knobs ──────────────────────────────────
 
 # Algorithms that should make noticeable progress on the 2D quadratic
@@ -334,7 +331,7 @@ class TestOptaxLossImproves:
         algo = cls()
         obj = Objective(mock_problem, max_evals=50, max_time=120)
         algo.optimize(obj, random_seed=42)
-        history = [float(l) for l in obj.loss_history if l is not None]
+        history = [float(loss) for loss in obj.loss_history if loss is not None]
         assert len(history) >= 2
         assert min(history) < history[0], (
             f"{cls.__name__}: best loss {min(history):.6f} did not improve "
@@ -404,4 +401,3 @@ class TestSR1:
         algo = SR1()
         algo.optimize(obj, random_seed=42)
         assert isinstance(algo._last_hessian_update_strategy, ScipySR1)
-
