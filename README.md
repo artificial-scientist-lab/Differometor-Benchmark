@@ -152,7 +152,7 @@ See [Architecture Overview](docs/Architecture-Overview.md) for full design detai
 ```
 src/dfbench/
 ├── core/
-│   ├── problem.py        # ContinuousProblem ABC + ProblemSpec 
+│   ├── problem.py        # ContinuousProblem ABC + ProblemSpec
 │   ├── algorithm.py       # OptimizationAlgorithm ABC + AlgorithmType enum
 │   ├── objective.py       # Objective wrapper (central piece)
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
