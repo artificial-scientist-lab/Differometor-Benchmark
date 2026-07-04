@@ -273,32 +273,53 @@ The reference sensitivity target is always the Voyager detector. Since the UIFO 
 
 Every problem implements `to_spec() → dict`, which returns a small, JSON-serialisable dict capturing everything needed to rebuild an equivalent instance in a separate process. This is the reconstructive contract that makes checkpoints self-describing.
 
+Starting with dfbench 0.1.1, the raw `to_spec()` dict is wrapped in a typed `ProblemSpec` container (`dfbench.core.problem.ProblemSpec`) that carries an explicit schema `version` and a separated `params` field. Checkpoints embed the container (`ProblemSpec.to_dict()` → `{"type", "version", "params"}`) in `RunMetadata.extra["problem_spec"]`, so consumers get a stable, schema-validated identity instead of an untyped dict. Legacy flat specs (`{"type", <kwargs>}`) written by older versions are still accepted on load via `ProblemSpec.from_dict`.
+
 ### How it works
 
 1. Each problem subclass implements `to_spec()`, returning a dict with a `"type"` key (the registry name) plus its constructor arguments.
 2. The `@register_problem` decorator registers the class in a module-level registry under its `__name__` (or a custom `spec_type`).
-3. `build_problem_from_spec(spec)` looks up the registry and reconstructs the instance.
-4. `Objective._build_metadata()` calls `problem.to_spec()` and stores the result in `RunMetadata.extra["problem_spec"]`, so every checkpoint records its originating problem.
+3. `ContinuousProblem.to_problem_spec()` wraps the `to_spec()` dict into a typed `ProblemSpec` container. Subclasses rarely need to override this; the default implementation is sufficient as long as `to_spec()` is correct.
+4. `build_problem_from_spec(spec)` accepts either a `ProblemSpec` or a raw dict (typed container or legacy flat form; both are normalized via `ProblemSpec.from_dict`) and reconstructs the instance.
+5. `Objective._build_metadata()` calls `problem.to_problem_spec()` and stores the resulting dict in `RunMetadata.extra["problem_spec"]`, so every checkpoint records its originating problem.
 
 ```python
-from dfbench import build_problem_from_spec
+from dfbench.core.problem import ProblemSpec, build_problem_from_spec
 
 # A spec captured from a live problem
-spec = problem.to_spec()
-# {"type": "VoyagerProblem", "n_frequencies": 100, "power_penalty_fn": "squashed_relu_penalty", ...}
+ps = problem.to_problem_spec()
+# ProblemSpec(type="VoyagerProblem", params={"n_frequencies": 100, ...}, version=1)
+
+# JSON-safe dict for embedding in checkpoint metadata
+spec_dict = ps.to_dict()
+# {"type": "VoyagerProblem", "version": 1, "params": {"n_frequencies": 100, ...}}
 
 # Rebuild an equivalent problem later, in any process
-problem2 = build_problem_from_spec(spec)
+problem2 = build_problem_from_spec(ps)
+# or, equivalently, from the dict form:
+problem2 = build_problem_from_spec(spec_dict)
 ```
+
+### The `ProblemSpec` container
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `str` | Registry key matching a `@register_problem`-decorated class |
+| `params` | `dict[str, Any]` | Constructor keyword arguments forwarded to the problem class on reconstruction |
+| `version` | `int` | Container schema version (defaults to `PROBLEM_SPEC_VERSION = 1`); governs the `type`/`version`/`params` layout, not the per-problem constructor args |
+
+`ProblemSpec.from_dict` accepts both the typed container and the legacy flat form, so checkpoints written before the typed container existed still load. `ProblemSpec.__post_init__` validates that `type` is a non-empty string, `params` is a dict, and `version` is an int. A malformed or tampered spec becomes a deterministic `ValueError` at the trust boundary instead of a silent corruption downstream.
 
 ### Per-problem spec contents
 
-| Problem | Spec fields | Reconstruction path |
-|---------|-------------|----------------------|
-| `VoyagerProblem` | `type`, `n_frequencies`, `power_penalty_fn`, `bounds_overrides` | Direct constructor call |
-| `VoyagerTuningProblem` | `type`, `n_frequencies`, `power_penalty_fn`, `bounds_overrides` | Direct constructor call |
-| `ConstrainedVoyagerProblem` | `type`, `n_frequencies`, `power_penalty_fn`, `bounds_overrides` | Direct constructor call |
-| `UIFOProblem` | `type`, `size`, `n_frequencies`, `topology` (string), `power_penalty_fn`, `bounds_overrides` | Rebuilt from explicit `topology` string (deterministic, RNG-independent) |
+The `params` sub-dict is whatever each problem's `to_spec()` returns minus the `"type"` key:
+
+| Problem | `params` fields | Reconstruction path |
+|---------|-----------------|----------------------|
+| `VoyagerProblem` | `n_frequencies`, `power_penalty_fn`, `bounds_overrides` | Direct constructor call |
+| `VoyagerTuningProblem` | `n_frequencies`, `power_penalty_fn`, `bounds_overrides` | Direct constructor call |
+| `ConstrainedVoyagerProblem` | `n_frequencies`, `power_penalty_fn`, `bounds_overrides` | Direct constructor call |
+| `UIFOProblem` | `size`, `n_frequencies`, `topology` (string), `power_penalty_fn`, `bounds_overrides` | Rebuilt from explicit `topology` string (deterministic, RNG-independent) |
 
 ### Penalty function encoding
 
@@ -306,14 +327,20 @@ Callables like `power_penalty_fn` are encoded **by name** via a registry of pres
 
 ### Reconstructing from a checkpoint
 
+Reconstruction is a two-step process that crosses the storage/problem layer boundary:
+
 ```python
 from dfbench.core.storage import CheckpointManager
+from dfbench.core.problem import ProblemSpec, build_problem_from_spec
 
 state = manager.load(path)
-problem = CheckpointManager.reconstruct_problem(state)  # or None if no spec was recorded
+spec_dict = CheckpointManager.extract_problem_spec(state)  # -> dict | None
+if spec_dict is not None:
+    ps = ProblemSpec.from_dict(spec_dict)        # typed container (accepts legacy flat too)
+    problem = build_problem_from_spec(ps)        # or pass spec_dict directly
 ```
 
-`CheckpointManager.reconstruct_problem` returns `None` if the run did not record a problem spec (e.g. the problem did not implement `to_spec`). The relevant problem module must be imported so its class is registered.
+`CheckpointManager.extract_problem_spec` returns `None` if the run did not record a problem spec (e.g. the problem did not implement `to_spec`). The relevant problem module must be imported so its class is registered.
 
 ### Implementing `to_spec` for a new problem
 
@@ -322,6 +349,8 @@ If you add a new `ContinuousProblem` subclass:
 1. Decorate it with `@register_problem` (imported from `dfbench.core.problem` or `dfbench.problems.base_problem`).
 2. Implement `to_spec()` returning a dict with `"type"` (the class name) plus every constructor argument needed for `build_problem_from_spec` to produce an equivalent instance.
 3. Encode any callables by name against a registry (see the penalty-function pattern in `base_problem.py`).
+
+You do not need to override `to_problem_spec()`; the default implementation wraps `to_spec()` into the typed container automatically.
 
 See [Storage & Checkpointing](Storage-and-Checkpointing) for how the spec is embedded in checkpoints.
 

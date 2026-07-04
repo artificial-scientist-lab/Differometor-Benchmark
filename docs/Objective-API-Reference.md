@@ -432,7 +432,7 @@ All file I/O is handled internally by the modular `dfbench.core.storage` layer (
 
 Saves the full optimization state to a checkpoint file via the internal `CheckpointManager.save()`. The serializer (default `NpzCheckpointSerializer`) encodes a `RunState` snapshot; the backend (default `LocalFilesystemBackend`) writes it **atomically** (temp file in the same directory + `os.replace`), so an interrupted job never leaves a half-written file. If `algorithm_name` is not provided it defaults to `self.algorithm_str` (or `"unknown"`).
 
-The checkpoint embeds `RunMetadata` (problem/algo/budget identity, `SaveConfig`, and the problem's `to_spec()` reconstructive dict), so the file is fully self-describing.
+The checkpoint embeds `RunMetadata` (problem/algo/budget identity, `SaveConfig`, and the problem's typed `ProblemSpec` container; see [Problems](Problems)), so the file is fully self-describing.
 
 Default path (built by `RunPathResolver`): `data/objective_run_data/{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`
 
@@ -446,9 +446,12 @@ The originating `Problem` can be rebuilt from the embedded `problem_spec`:
 
 ```python
 from dfbench.core.storage import CheckpointManager
+from dfbench.core.problem import ProblemSpec, build_problem_from_spec
 
 state = obj._checkpoint_manager.load(path)
-problem = CheckpointManager.reconstruct_problem(state)
+spec = CheckpointManager.extract_problem_spec(state)  # -> dict | None
+if spec is not None:
+    problem = build_problem_from_spec(ProblemSpec.from_dict(spec))
 ```
 
 ### `output_to_files(hyper_param_str="", hyper_param_str_in_filename=True) → Path`

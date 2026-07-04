@@ -16,8 +16,16 @@ from dfbench.core.storage import (
     RunDataExporter,
     RunState,
     RunMetadata,
+    validate_run_state,
+    RunStateValidationException,
+    ValidationReport,
 )
+
+# Problem reconstruction lives in core.problem, not core.storage.
+from dfbench.core.problem import ProblemSpec, build_problem_from_spec
 ```
+
+This page targets competition organizers: the people running scoring, maintaining checkpoint integrity, and reconstructing problems from saved artifacts. Submitters do not need it. `Objective` handles saving internally, and the only submitter-facing knob is `save_to_file_every`. The validation contract documented near the end of this page is what keeps malformed or tampered run artifacts off the leaderboard.
 
 ---
 
@@ -79,7 +87,7 @@ CheckpointManager          ← the only facade Objective talks to
 
 ## `RunMetadata`: run identity and problem reconstruction
 
-`RunMetadata` is a small, human-readable dataclass that sits alongside the numeric histories. It is stored as a JSON string *inside* the checkpoint file, so one file is enough to fully describe the run that produced it.
+`RunMetadata` is a small, human-readable dataclass that sits alongside the numeric histories. It is stored as a JSON string inside the checkpoint file, so one file is enough to fully describe the run that produced it.
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -96,12 +104,29 @@ Every checkpoint carries a `format_version` scalar (`RunState`/`RunMetadata` wri
 
 ### Embedded problem spec
 
-If the wrapped problem implements the reconstructive `to_spec()` contract (see [Problems](Problems)), `Objective._build_metadata` records it in `metadata.extra["problem_spec"]`. This makes a checkpoint self-describing: the problem identity is recoverable from the file alone, not just from the caller's memory.
+If the wrapped problem implements the reconstructive `to_spec()` contract (see [Problems](Problems)), `Objective._build_metadata` records a typed `ProblemSpec` container in `metadata.extra["problem_spec"]`. The checkpoint is then self-describing: the problem identity is recoverable from the file alone, not just from the caller's memory.
+
+The embedded value is the JSON-safe dict produced by `ProblemSpec.to_dict()`:
+
+```json
+{"type": "VoyagerProblem", "version": 1, "params": {"n_frequencies": 100, ...}}
+```
+
+Reconstruction is a two-step process that crosses the storage/problem layer boundary on purpose:
 
 ```python
-state = manager.load(path)
-problem = CheckpointManager.reconstruct_problem(state)  # or None
+# 1. Storage extracts the raw spec dict from a loaded state.
+spec = CheckpointManager.extract_problem_spec(state)  # -> dict | None
+
+# 2. The problem layer rebuilds the problem from the spec.
+from dfbench.core.problem import ProblemSpec, build_problem_from_spec
+
+if spec is not None:
+    ps = ProblemSpec.from_dict(spec)   # typed container (accepts legacy flat form too)
+    problem = build_problem_from_spec(ps)  # or pass `spec` directly
 ```
+
+`CheckpointManager.extract_problem_spec` only extracts the dict; it does not import the problem layer. This keeps `dfbench.core.storage` depending downward on the data contract (`RunState`/`RunMetadata`) rather than sideways on `dfbench.core.problem`. `ProblemSpec.from_dict` accepts both the typed container and the legacy flat form (`{"type", <kwargs>}`) written by checkpoints from older dfbench versions, so legacy artifacts still load.
 
 ---
 
@@ -133,7 +158,7 @@ A `StorageBackend` is a small protocol (`save_bytes` / `load_bytes` / `exists` /
 
 ### `LocalFilesystemBackend` (default)
 
-Writes are **atomic**. Data is first written to a temporary file in the *same directory* as the target (so `os.replace` stays on one filesystem) and then renamed into place with `os.replace`. If `os.replace` fails, the temp file is cleaned up and the exception propagates. The previous good file is never destroyed.
+Writes are **atomic**. Data is first written to a temporary file in the same directory as the target (so `os.replace` stays on one filesystem) and then renamed into place with `os.replace`. If `os.replace` fails, the temp file is cleaned up and the exception propagates. The previous good file is never destroyed.
 
 ```python
 from dfbench.core.storage import LocalFilesystemBackend
@@ -182,7 +207,7 @@ path = resolver.checkpoint_path(
 
 ## `RunDataExporter`: human-readable JSON + PNG
 
-`RunDataExporter` treats the human-readable artifacts as a *derived view* over the shared `RunState` instead of a second write path inside `Objective`. Plotting is split into pure functions (`plot_loss_curve`, `plot_sensitivity`) that return matplotlib figures; writing those figures and the JSON to disk is a separate step.
+`RunDataExporter` treats the human-readable artifacts as a derived view over the shared `RunState` instead of a second write path inside `Objective`. Plotting is split into pure functions (`plot_loss_curve`, `plot_sensitivity`) that return matplotlib figures; writing those figures and the JSON to disk is a separate step.
 
 For optical problems that expose `calculate_sensitivity` / `_frequencies` / `_target_sensitivities`, a sensitivity plot is produced in addition to the loss curve.
 
@@ -231,9 +256,30 @@ state = manager.load(path)
 dt = manager.tick(eval_count=obj.eval_count,
                   state_factory=lambda: obj._build_run_state())
 
-# Reconstruct the problem from a loaded checkpoint
-problem = CheckpointManager.reconstruct_problem(state)
+# Extract the embedded problem spec (rebuilding the problem is a separate
+# step done via dfbench.core.problem.build_problem_from_spec; see below).
+spec = CheckpointManager.extract_problem_spec(state)
 ```
+
+### Validation gates
+
+`CheckpointManager` enforces the `RunState` invariant contract (see [Invariant contract](#runstate-invariant-contract)) at the two disk trust boundaries:
+
+- `save` runs `validate_run_state(state, strict=True)` before serializing. A malformed state never reaches disk.
+- `load` runs `validate_run_state(state, strict=True)` after deserializing. A corrupted or tampered artifact never reaches the scorer.
+
+Both raise `RunStateValidationException`, which carries the full `ValidationReport` error list on its `errors` attribute so a rejection report can list every violation in one pass.
+
+Two constructor knobs let organizers relax the gate for trusted workflows:
+
+```python
+CheckpointManager(..., validate_on_save=False, validate_on_load=False)
+```
+
+| Knob | Default | When to disable |
+|------|---------|------------------|
+| `validate_on_save` | `True` | Trusted batch replay where a known-legacy state may drift. |
+| `validate_on_load` | `True` | Loading checkpoints that predate the invariant contract (e.g. a legacy NPZ with no `metadata` / `format_version`). |
 
 ### Cached path behaviour
 
@@ -257,12 +303,56 @@ The storage components remain modular and individually testable (see the section
 
 ---
 
+## `RunState` invariant contract
+
+A `RunState` is the scoring contract: every metric the competition computes derives from one. A buggy or adversarial submitter algorithm can produce a state whose fields disagree (e.g. `best_loss` doesn't match `loss_history`, or a history length diverges from `eval_count`). Without a gate, that mismatch surfaces as a crash deep inside a serializer or the scoring layer, with no clean rejection path.
+
+`validate_run_state(state, *, strict=True) -> ValidationReport` is the gate. It is a pure function: no I/O, and it does not raise on a malformed state. It collects every violation, so a rejection report lists all problems in one pass rather than one at a time.
+
+```python
+from dfbench.core.storage import validate_run_state, RunStateValidationException
+
+report = validate_run_state(state)
+if not report.ok:
+    for e in report.errors:
+        print(f"[{e.invariant}] {e.field}: {e.detail}")
+    # or, for call sites that want raise-on-invalid:
+    report.raise_if_invalid()  # raises RunStateValidationException(report.errors)
+```
+
+`RunStateValidationException` carries the full `ValidationReport.errors` list on its `.errors` attribute, so competition infra can produce a machine-readable rejection (`{field, invariant, detail}` per error) rather than parsing a message string.
+
+### Tiers
+
+| Tier | Checks | When |
+|------|--------|------|
+| **Structural (A)** | Types, shapes, ranges: `eval_count` is a non-negative int; the six histories are `np.ndarray` (first axis = time; N-D allowed since NumPy collapses uniform object arrays); `best_params` is 1-D float64 or empty; `eval_type_counts` is a dict with int keys / non-negative int values; `metadata` is a `RunMetadata`; scalar counters are non-negative ints. A3: every non-empty history's first-axis length equals `eval_count`. Empty is allowed; it means that history was disabled by `SaveConfig` or dropped by `RunData.to_run_state`. | Always |
+| **Semantic (B)** | Cross-field consistency, skipped when `strict=False`: `best_loss` is finite iff a non-NaN loss was recorded (grad-only / hessian-only calls increment `eval_count` and append NaN to `loss_history` without updating `best_loss`, so `best_loss == inf` with `eval_count > 0` is legal); `best_loss == nanmin(loss_history)` within `1e-9`; `sum(eval_type_counts.values()) == log_call_count`; `improvement_count <= log_call_count`; `evals_since_improvement <= eval_count`. | `strict=True` only |
+
+The on-disk `format_version` is not re-checked here. It is already enforced at deserialization (`RunMetadata.from_dict` and each serializer's `deserialize`), and a constructed `RunMetadata` always reports `FORMAT_VERSION` via `to_dict`, so a future-version metadata cannot exist by construction.
+
+### What is not validated
+
+These are deliberately out of scope for the current contract; see plan #2 for the rationale:
+
+- NaN inside histories (legal placeholder for missing grad/hessian/params when a `SaveConfig` flag is off).
+- Batched-array internal shapes (expensive, fragile).
+- `metadata.extra["problem_spec"]` contents. Validated at construction by `ProblemSpec.__post_init__` (type/version/params shape) and at reconstruction by `build_problem_from_spec` (registry lookup). The `RunState` validator itself does not re-check the spec.
+- `SaveConfig` internal coherence (e.g. `grad=True` vs `batched_grad=False`). Belongs to `SaveConfig`.
+
+### Where validation runs
+
+The two disk trust boundaries (`CheckpointManager.save` and `CheckpointManager.load`) run `strict=True` by default (see [Validation gates](#validation-gates)). Internal mid-run snapshots taken via `tick` go through `save` and are therefore gated too. The scoring layer (`RunData.from_run_state`) consumes only states that have already passed one of these gates, so it can assume validity.
+
+---
+
 ## Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
 | **Single shared `RunState`** | Every serializer reads from and writes to the same dataclass, so formats don't drift. |
 | **Schema versioning (`FORMAT_VERSION`)** | Loaders refuse newer-than-supported files and fall back gracefully for older ones. |
+| **Invariant contract (`validate_run_state`)** | A malformed or tampered run becomes a deterministic, reportable rejection at the disk boundary instead of a crash inside the scorer. All violations are collected in one pass. |
 | **Metadata separated from numeric data** | A small JSON record inside the NPZ identifies the run without parsing large arrays. |
 | **Decoupled I/O from `Objective`** | `Objective` only builds/applies `RunState`; storage backends and formats are pluggable and testable in isolation. |
 | **True atomic writes** | Temp-in-same-dir + `os.replace` only. The previous good file always survives a failed write. |
