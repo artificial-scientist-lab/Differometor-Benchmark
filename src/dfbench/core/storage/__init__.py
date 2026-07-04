@@ -28,7 +28,15 @@ Typical usage from inside an Objective::
     state = manager.load(path)
 """
 
-from dfbench.core.storage.state import RunState, RunMetadata
+from dfbench.core.storage.state import (
+    FORMAT_VERSION,
+    RunMetadata,
+    RunState,
+    RunStateValidationError,
+    RunStateValidationException,
+    ValidationReport,
+    validate_run_state,
+)
 from dfbench.core.storage.saveconfig import SaveConfig
 from dfbench.core.storage.backends import (
     StorageBackend,
@@ -44,12 +52,6 @@ from dfbench.core.storage.serializers import (
 from dfbench.core.storage.resolver import RunPathResolver
 from dfbench.core.storage.exporter import RunDataExporter
 from dfbench.core.storage.manager import CheckpointManager
-from dfbench.core.problem import (
-    ContinuousProblem,
-    build_problem_from_spec,
-    register_problem,
-    validate_spec_round_trip,
-)
 
 __all__ = [
     "RunState",
@@ -65,9 +67,10 @@ __all__ = [
     "RunPathResolver",
     "RunDataExporter",
     "CheckpointManager",
-    # Problem reconstruction contract
-    "ContinuousProblem",
-    "build_problem_from_spec",
-    "register_problem",
-    "validate_spec_round_trip",
+    # Invariant contract
+    "FORMAT_VERSION",
+    "RunStateValidationError",
+    "RunStateValidationException",
+    "ValidationReport",
+    "validate_run_state",
 ]

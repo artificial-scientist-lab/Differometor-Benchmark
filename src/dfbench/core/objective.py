@@ -1888,15 +1888,28 @@ class Objective:
         checkpoint fully describes which problem instance produced the run.
         """
         extra: dict[str, Any] = {"save_config": self._save_config.to_dict()}
-        spec_fn = getattr(self._problem, "to_spec", None)
+        spec_fn = getattr(self._problem, "to_problem_spec", None)
         if callable(spec_fn):
             try:
-                extra["problem_spec"] = spec_fn()
+                extra["problem_spec"] = spec_fn().to_dict()
             except Exception:
-                # A problem that fails to describe itself should not break
-                # checkpointing; the run is still saveable, just not
-                # self-reconstructing.
-                pass
+                # Fall back to the legacy to_spec() dict if the typed
+                # container is unavailable. A problem that fails to
+                # describe itself should not break checkpointing; the run
+                # is still saveable, just not self-reconstructing.
+                legacy = getattr(self._problem, "to_spec", None)
+                if callable(legacy):
+                    try:
+                        extra["problem_spec"] = legacy()
+                    except Exception:
+                        pass
+        else:
+            legacy = getattr(self._problem, "to_spec", None)
+            if callable(legacy):
+                try:
+                    extra["problem_spec"] = legacy()
+                except Exception:
+                    pass
         return RunMetadata(
             problem_name=(
                 self._problem.name if hasattr(self._problem, "name") else "problem"

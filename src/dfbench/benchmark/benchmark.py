@@ -715,11 +715,24 @@ class Benchmark:
         return save_dir
 
     def _problem_spec(self) -> dict | None:
-        """Return the problem's reconstructive spec, or None if unavailable."""
-        spec_fn = getattr(self._problem, "to_spec", None)
+        """Return the problem's reconstructive spec as a typed-container dict.
+
+        Produces a :class:`~dfbench.core.problem.ProblemSpec`-shaped dict
+        (``{"type", "version", "params"}``) when the problem implements
+        ``to_problem_spec``; falls back to the legacy ``to_spec()`` dict
+        for older problem classes. Returns ``None`` if neither is
+        available or the problem fails to describe itself.
+        """
+        spec_fn = getattr(self._problem, "to_problem_spec", None)
         if callable(spec_fn):
             try:
-                return spec_fn()
+                return spec_fn().to_dict()
+            except Exception:
+                pass
+        legacy = getattr(self._problem, "to_spec", None)
+        if callable(legacy):
+            try:
+                return legacy()
             except Exception:
                 return None
         return None
@@ -971,6 +984,11 @@ class Benchmark:
 
         Reads the ``problem_spec`` recorded in ``metadata.json`` and
         reconstructs the problem via :func:`build_problem_from_spec`.
+        Accepts both the typed container form
+        (``{"type", "version", "params"}``) and the legacy flat form
+        (``{"type", <kwargs>}``); both are normalized via
+        :meth:`ProblemSpec.from_dict`.
+
         Returns ``None`` if no spec was recorded (e.g. the problem did
         not implement ``to_spec`` or the data was saved by an older
         version).

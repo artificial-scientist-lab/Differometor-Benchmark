@@ -8,12 +8,14 @@ limits, timestamp) so that :class:`Objective` and
 redirect all artifacts to a scratch disk or an S3-prefix-backed backend
 without editing library code.
 
-The default layout mirrors the historical dfbench convention but is now
-expressed in one place::
+    The default layout mirrors the historical dfbench convention but is now
+    expressed in one place::
 
-    {root}/{budget_dir}/{hyper_param_str}/{problem}_{algo}_{timestamp}.npz
+    {root}/{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.npz
 
-where ``budget_dir`` is e.g. ``time100s_evals1000`` or ``unlimited``.
+    where ``budget_dir`` is e.g. ``time100s_evals1000`` or ``unlimited``.
+    When ``hyper_param_str`` is empty/None the segment collapses to just
+    ``{algo}`` (no trailing underscore).
 """
 
 from __future__ import annotations
@@ -65,7 +67,9 @@ class RunPathResolver:
 
         d = Path(self.root) / budget_dir
         if hyper_param_str:
-            d = d / _safe(hyper_param_str)
+            d = d / f"{_safe(algorithm_name)}_{_safe(hyper_param_str)}"
+        elif algorithm_name:
+            d = d / _safe(algorithm_name)
         return d
 
     def checkpoint_path(

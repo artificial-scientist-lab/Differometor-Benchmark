@@ -30,7 +30,11 @@ from dfbench.core.storage.serializers import (
     CheckpointSerializer,
     NpzCheckpointSerializer,
 )
-from dfbench.core.storage.state import RunMetadata, RunState
+from dfbench.core.storage.state import (
+    RunMetadata,
+    RunState,
+    validate_run_state,
+)
 
 
 class CheckpointManager:
@@ -46,6 +50,15 @@ class CheckpointManager:
         save_every: Periodic checkpoint cadence in evaluations. ``None``
             disables auto-saving. The manager owns this so the Objective
             does not need to pass it on every call.
+        validate_on_save: When ``True`` (default), run
+            :func:`validate_run_state` (strict) before serializing a state
+            and refuse to write a malformed artifact. Set to ``False`` for
+            trusted batch replay where a known-legacy state may drift.
+        validate_on_load: When ``True`` (default), run
+            :func:`validate_run_state` (strict) after deserializing and
+            refuse to surface a corrupted or tampered artifact to the
+            scorer. Set to ``False`` to load legacy files that predate the
+            invariant contract.
     """
 
     def __init__(
@@ -54,6 +67,8 @@ class CheckpointManager:
         serializer: CheckpointSerializer | None = None,
         resolver: RunPathResolver | None = None,
         save_every: int | None = None,
+        validate_on_save: bool = True,
+        validate_on_load: bool = True,
     ) -> None:
         self.resolver = resolver or RunPathResolver()
         self.backend: StorageBackend = backend or LocalFilesystemBackend(
@@ -68,6 +83,8 @@ class CheckpointManager:
             self.resolver.extension = serializer_ext
 
         self.save_every: int | None = save_every
+        self.validate_on_save: bool = validate_on_save
+        self.validate_on_load: bool = validate_on_load
         self._cached_path: Path | None = None
         self.last_checkpoint_eval: int | None = None
 
@@ -142,7 +159,13 @@ class CheckpointManager:
         If neither ``explicit_path`` nor ``hyper_param_str`` is given, the
         path computed from ``state.metadata`` is cached so later saves
         overwrite the same file.
+
+        Raises:
+            RunStateValidationException: If ``validate_on_save`` is enabled
+                and ``state`` fails the strict invariant check.
         """
+        if self.validate_on_save:
+            validate_run_state(state, strict=True).raise_if_invalid()
         timestamp = state.metadata.timestamp
         path = self._effective_path(
             state.metadata, timestamp, explicit_path, hyper_param_str
@@ -158,10 +181,17 @@ class CheckpointManager:
         The path is cached so subsequent saves without overrides
         overwrite the same file (matches the historical resume-then-save
         behaviour).
+
+        Raises:
+            RunStateValidationException: If ``validate_on_load`` is enabled
+                and the deserialized state fails the strict invariant
+                check (corrupted or tampered artifact).
         """
         p = Path(path)
         data = self.backend.load_bytes(p)
         state = self.serializer.deserialize(data)
+        if self.validate_on_load:
+            validate_run_state(state, strict=True).raise_if_invalid()
         self._cached_path = p
         self.last_checkpoint_eval = state.eval_count
         return state
@@ -203,20 +233,19 @@ class CheckpointManager:
 
     @staticmethod
     def extract_problem_spec(state: RunState) -> dict | None:
-        """Return the embedded ``problem_spec`` from a loaded state, if any."""
-        return state.metadata.extra.get("problem_spec")
+        """Return the embedded ``problem_spec`` dict from a loaded state, if any.
 
-    @staticmethod
-    def reconstruct_problem(state: RunState):
-        """Rebuild the :class:`ContinuousProblem` recorded in ``state``.
+        The returned dict is the raw form stored in
+        ``metadata.extra["problem_spec"]`` — either the typed container
+        (``{"type", "version", "params"}``) or the legacy flat form
+        (``{"type", <kwargs>}``). Callers that want the typed
+        :class:`~dfbench.core.problem.ProblemSpec` container should
+        normalize it via ``ProblemSpec.from_dict(spec)``; callers that
+        want a rebuilt problem should call
+        :func:`dfbench.core.problem.build_problem_from_spec(spec)`.
 
-        Returns ``None`` if the run did not record a problem spec (e.g. the
-        problem did not implement ``to_spec``). Requires the relevant
-        problem module to be imported so its class is registered.
+        Problem *reconstruction* lives in :mod:`dfbench.core.problem`,
+        not here. Storage extracts the spec; the problem layer owns
+        rebuilding it.
         """
-        spec = CheckpointManager.extract_problem_spec(state)
-        if spec is None:
-            return None
-        from dfbench.core.problem import build_problem_from_spec
-
-        return build_problem_from_spec(spec)
+        return state.metadata.extra.get("problem_spec")
