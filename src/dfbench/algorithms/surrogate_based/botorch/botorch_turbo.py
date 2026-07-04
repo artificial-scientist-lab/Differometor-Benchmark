@@ -328,7 +328,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
                 )
                 model.eval()
 
-                X_next, _ = self._generate_batch(
+                X_next = self._generate_batch(
                     state=state,
                     model=model,
                     X=train_X,
