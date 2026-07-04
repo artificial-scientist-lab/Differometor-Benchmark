@@ -141,7 +141,7 @@ OptimizationAlgorithm.optimize()
   Differometor Simulator   (JAX-based interferometer physics)
 ```
 
-**Design Idea:** Algorithms never create their own `Objective`, they receive a pre-configured one. This lets the benchmark harness (or user script) control budgets, seeds, and history settings uniformly. The algorithm only has to implement its optimization logic.
+**Design Idea:** Algorithms never create their own `Objective`, they receive a pre-configured one. This lets the benchmark harness or user script control budgets, seeds, and history settings uniformly. The algorithm only has to implement its optimization logic.
 
 See [Architecture Overview](docs/Architecture-Overview.md) for full design details.
 
@@ -152,7 +152,7 @@ See [Architecture Overview](docs/Architecture-Overview.md) for full design detai
 ```
 src/dfbench/
 ├── core/
-│   ├── problem.py        # ContinuousProblem ABC
+│   ├── problem.py        # ContinuousProblem ABC + ProblemSpec
 │   ├── algorithm.py       # OptimizationAlgorithm ABC + AlgorithmType enum
 │   ├── objective.py       # Objective wrapper (central piece)
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid

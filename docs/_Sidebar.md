@@ -11,6 +11,7 @@
 **Core API**
 - [Objective API Reference](Objective-API-Reference)
 - [Problems](Problems)
+- [Storage & Checkpointing](Storage-and-Checkpointing)
 - [Algorithms](Algorithms)
 
 **Benchmarking**

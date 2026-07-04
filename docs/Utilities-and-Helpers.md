@@ -114,7 +114,7 @@ if "MPLCONFIGDIR" not in os.environ:
 
 ## Public API Surface
 
-The top-level `dfbench` package re-exports the primary classes:
+The top-level `dfbench` package re-exports the submitter-facing symbols, the ones an optimization author needs to write and test an algorithm:
 
 ```python
 from dfbench import (
@@ -123,8 +123,34 @@ from dfbench import (
     OptimizationAlgorithm,       # algorithm ABC
     AlgorithmType,               # enum
     t2j, j2t,                    # tensor conversion
-    inverse_sigmoid_bounding,    # bounded ↔ unbounded
     create_parser,               # CLI helper
+)
+```
+
+Organizer-only symbols (storage, checkpointing, problem reconstruction) are not re-exported at the top level. Import them from their home modules:
+
+```python
+# Problem reconstruction (typed ProblemSpec container + registry)
+from dfbench.core.problem import (
+    ProblemSpec,                 # typed container: type, version, params
+    build_problem_from_spec,     # rebuild a problem from a ProblemSpec or dict
+    register_problem,            # decorator: register a problem class for reconstruction
+    validate_spec_round_trip,    # rebuild + assert bounds/n_params match
+)
+
+# Modular storage (see Storage & Checkpointing)
+from dfbench.core.storage import (
+    CheckpointManager,           # facade orchestrating save/load
+    CheckpointSerializer,        # serializer protocol
+    NpzCheckpointSerializer,     # compressed-NPZ serializer (default)
+    JsonCheckpointSerializer,    # pickle-free JSON serializer
+    LocalFilesystemBackend,      # atomic local-FS storage backend (default)
+    StorageBackend,              # storage backend protocol
+    RunPathResolver,             # structured path construction
+    RunDataExporter,             # human-readable JSON + PNG view
+    RunState,                    # shared run data contract
+    RunMetadata,                 # run identity + problem spec record
+    validate_run_state,          # RunState invariant contract (scoring gate)
 )
 ```
 
@@ -135,3 +161,5 @@ from dfbench.algorithms import AdamGD, EvoxPSO, BotorchBO, ...
 from dfbench.problems import VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem, UIFOProblem
 from dfbench.benchmark import Benchmark, AlgorithmConfig, BenchmarkResult
 ```
+
+See [Storage & Checkpointing](Storage-and-Checkpointing) for the full storage architecture and the individual component APIs, and [Problems](Problems) for the `ProblemSpec` container and the reconstructive contract.

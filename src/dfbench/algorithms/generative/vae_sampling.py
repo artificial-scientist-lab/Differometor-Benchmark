@@ -242,9 +242,9 @@ class VAESampling(OptimizationAlgorithm):
                 break
 
             chunk_size = self.batch_size_sampling
-            if obj._max_evals is not None:
+            if obj.max_evals is not None:
                 evals_for_sampling = int(
-                    np.floor(obj._max_evals * sampling_budget_fraction)
+                    np.floor(obj.max_evals * sampling_budget_fraction)
                 )
                 evals_left_for_sampling = evals_for_sampling - obj.eval_count
                 chunk_size = min(chunk_size, evals_left_for_sampling)

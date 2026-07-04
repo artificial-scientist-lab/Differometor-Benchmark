@@ -22,19 +22,17 @@ Objective(
     max_time: float | None = None,
     save_time_steps: bool = True,
     save_params_history: bool = True,
-    save_grad_history: bool = False,
-    save_hessian_history: bool = False,
-    save_batched_losses_history: bool = False,
-    save_batched_grads_history: bool = False,
-    save_batched_hessians_history: bool = False,
-    save_batched_history: bool = False,
-    save_eval_type_history: bool = False,
+    save: list[str] | None = None,
     verbose: int = 0,
     print_every: int = 100,
     algorithm_str: str | None = None,
     save_to_file_every: int | None = None,
+    display_mode: str = "live",
     unit_mapping: Callable | None = None,
     inverse_unit_mapping: Callable | None = None,
+    hessian_batch_size: int = 1,
+    checkpoint_format: str = "npz",
+    checkpoint_dir: str | Path | None = None,
 )
 ```
 
@@ -48,19 +46,18 @@ Objective(
 | `max_time` | `float \| None` | `None` | Maximum wall-clock seconds beginning at the time `obj.start_logging()` was called. `None` = unlimited. |
 | `save_time_steps` | `bool` | `True` | Record elapsed-time timestamp for each evaluation. |
 | `save_params_history` | `bool` | `True` | Record the parameter vector at each evaluation. |
-| `save_grad_history` | `bool` | `False` | Record gradient vectors. Off by default to save memory. |
-| `save_hessian_history` | `bool` | `False` | Record Hessian matrices. Off by default because this can become memory-heavy quickly. |
-| `save_batched_losses_history` | `bool` | `False` | When using `vmap_*` methods, store the full `(batch,)` loss vector instead of just the minimum loss of the batch. |
-| `save_batched_grads_history` | `bool` | `False` | Store full batched gradient arrays. Careful: As the gradients are of dim `(n_params,)`, the batched version is of dim `(batch, n_params)` with the batched history being `(n_evals, batch, n_params)`! |
-| `save_batched_hessians_history` | `bool` | `False` | Store full batched Hessian arrays with shape `(batch, n_params, n_params)`. Use sparingly for large batches or high-dimensional problems. |
-| `save_batched_history` | `bool` | `False` | Also stores batched params and enables the full batched loss / grad / Hessian histories when those derivative histories are enabled. |
-| `save_eval_type_history` | `bool` | `False` | Record a bitmask for each evaluation indicating whether it was a value, grad, hessian, combined call, and/or batched call. |
+| `save` | `list[str] \| None` | `None` | List of advanced save tokens for recording additional / batched histories. Valid tokens: `"grad"`, `"hessian"`, `"eval_type"`, `"batched_loss"`, `"batched_grad"`, `"batched_hessian"`, `"batched_param"`, `"batched"` (convenience alias expanding to all four batched tokens). The active configuration is recorded as a `SaveConfig` and embedded in every checkpoint so a resumed run can detect mismatches. |
 | `verbose` | `int` | `0` | Verbosity level. `0` = silent; `1` = periodic progress prints; `2` is WIP. |
 | `print_every` | `int` | `100` | When `verbose ≥ 1`, print a progress summary every N evaluations. |
 | `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
-| `save_to_file_every` | `int \| None` | `None` | Automatically checkpoint to an NPZ-file every N evaluations. `None` disables auto-saving. The time spent saving is excluded from the elapsed-time clock. |
+| `save_to_file_every` | `int \| None` | `None` | Automatically checkpoint every N evaluations. `None` disables auto-saving. The time spent saving is excluded from the elapsed-time clock. |
 | `unit_mapping` | `Callable \| None` | `None` | Optional function mapping unbounded params to the **[0, 1] range**. Can be scalar (e.g. `jax.nn.sigmoid`) or element-wise vector. The Objective handles scaling to actual bounds: `bounded = lb + (ub - lb) * f(x)`. If omitted, the default sigmoid is used. |
 | `inverse_unit_mapping` | `Callable \| None` | `None` | Inverse of the forward mapping, mapping [0, 1] → unbounded space. The Objective normalises bounded params to [0, 1] before calling this: `unbounded = f_inv((bounded - lb) / (ub - lb))`. Must be provided whenever `unit_mapping` is provided. |
+| `hessian_batch_size` | `int` | `1` | Number of Hessian columns to compute simultaneously via `vmap`. `1` (default) is the most memory-efficient (sequential `lax.map`); set to `n_params` for full `jax.hessian` parallelism. |
+| `checkpoint_format` | `str` | `"npz"` | On-disk format for checkpoints. `"npz"` writes compressed NumPy archives; `"json"` writes a pickle-free, human-readable JSON file — useful when loading checkpoints from untrusted sources or when you want to inspect them by hand. No extra imports needed. |
+| `checkpoint_dir` | `str \| Path \| None` | `None` | Root directory for checkpoint and output artifacts. Defaults to `./data/objective_run_data`. Pass a path to redirect all artifacts (e.g. to a scratch disk or a `tmp_path` in tests) without importing any storage class. |
+
+To customise the storage stack beyond these two knobs (e.g. a custom serializer or a non-filesystem backend), subclass `Objective` and override `_build_storage`.
 
 ### Choosing `unbounded`
 
@@ -126,6 +123,44 @@ obj = Objective(
 
 You do **not** need to handle bounds scaling — the Objective does that automatically.
 
+### Choosing what to save
+
+The Objective always records losses. Two standard boolean flags control the most commonly toggled histories:
+
+| Flag | Default | Effect |
+|------|---------|--------|
+| `save_time_steps` | `True` | Record elapsed-time timestamps per evaluation |
+| `save_params_history` | `True` | Record parameter vectors (reduced for batches) |
+
+For advanced combinations (gradients, Hessians, eval types, full batched arrays), pass a list of string tokens to `save`:
+
+| Token | Effect |
+|-------|--------|
+| `"grad"` | Record gradient history (reduced to one entry per eval for batches) |
+| `"hessian"` | Record Hessian history (reduced to one entry per eval for batches) |
+| `"eval_type"` | Record per-eval type bitmask history |
+| `"batched_loss"` | Store full `(batch,)` loss vectors instead of batch min |
+| `"batched_grad"` | Store full `(batch, n_params)` gradient arrays |
+| `"batched_hessian"` | Store full `(batch, n_params, n_params)` Hessian arrays |
+| `"batched_param"` | Store full `(batch, n_params)` parameter arrays |
+| `"batched"` | Convenience alias — expands to all four `batched_*` tokens |
+
+```python
+# Record gradients and full batched losses
+obj = Objective(problem, save=["grad", "batched_loss"])
+
+# Record everything (gradients, Hessians, eval types, all batched arrays)
+obj = Objective(problem, save=["grad", "hessian", "eval_type", "batched"])
+```
+
+The active configuration is stored as a `SaveConfig` and embedded in every checkpoint's `RunMetadata`. On `load_run_data`, the Objective warns if the checkpoint's save config differs from the current Objective's, preventing silent inconsistency.
+
+### Storage (internal)
+
+All file I/O (checkpointing, human-readable export) is handled internally by the modular `dfbench.core.storage` layer. The Objective assembles a `CheckpointManager` (with serializer, storage backend, and path resolver) and a `RunDataExporter` behind the scenes using sensible defaults — these components are **not** user-facing constructor parameters. The `save_to_file_every` argument is the only storage-related knob exposed to the user; it sets the periodic checkpoint cadence on the internal manager.
+
+The storage components are still modular and individually testable (see [Storage & Checkpointing](Storage-and-Checkpointing)). Advanced users who need to swap a serializer, backend, or resolver can subclass `Objective` and override the internal assembly, or use the storage classes directly outside the Objective.
+
 ---
 
 ## Evaluation Methods
@@ -169,7 +204,7 @@ obj.batched_value_and_grad(…)   # same as vmap_value_and_grad
 obj.batched_value_grad_and_hessian(…)  # same as vmap_value_grad_and_hessian
 ```
 
-Batched methods use `jax.vmap` and evaluate the entire batch as **one** history entry. The eval counter is incremented by the batch size. When `save_batched_losses_history` is off (default), only the batch minimum loss is stored.
+Batched methods use `jax.vmap` and evaluate the entire batch as **one** history entry. The eval counter is incremented by the batch size. When `"batched_loss"` is not in the `save` list (default), only the batch minimum loss is stored.
 
 ### Callable shorthand
 
@@ -321,6 +356,8 @@ bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
 | Property | Type | Description |
 |----------|------|-------------|
 | `eval_count` | `int` | Total evaluations so far. |
+| `max_evals` | `int \| None` | The evaluation budget, or `None` if unlimited. |
+| `max_time` | `float \| None` | The wall-clock time budget in seconds, or `None` if unlimited. |
 | `evals_left` | `int \| None` | Remaining evaluation budget. `None` if unlimited. |
 | `evals_exceeded` | `bool` | Whether the evaluation cap has been reached. |
 | `evals_progress_fraction` | `float` | Fraction of eval budget consumed (0–1). |
@@ -331,6 +368,7 @@ bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
 | `budget_left_fraction` | `float` | Fraction of the tightest budget remaining. `min(1 - time_progress, 1 - evals_progress)`, considering only budgets that are set. 1.0 when no budget is configured. |
 | `budget_progress_fraction` | `float` | Fraction of the tightest budget consumed (`1 - budget_left_fraction`). 0.0 when no budget is configured. |
 | `budget_exceeded` | `bool` | `True` when **any** budget (time **or** evals) is exhausted. This is the main loop-termination check. |
+| `save_every` | `int \| None` | Periodic checkpoint cadence in evaluations, or `None` if disabled. |
 
 ### Best Results
 
@@ -388,25 +426,43 @@ These properties return **copies** to prevent external mutation.
 
 ## I/O Methods
 
+All file I/O is handled internally by the modular `dfbench.core.storage` layer (see [Storage & Checkpointing](Storage-and-Checkpointing)). The Objective builds and applies the canonical `RunState` data contract; the serializer, backend, and resolver are assembled internally with sensible defaults.
+
 ### `save_run_data(algorithm_name=None, filepath=None, hyper_param_str=None) → Path`
 
-Saves the full optimization state to a compressed NPZ file. Writes atomically (to `.tmp.npz` first, then `os.replace`) to prevent corruption from interrupted HPC jobs. If `algorithm_name` is not provided it defaults to `self.algorithm_str` (or `"unknown"` when that is also unset).
+Saves the full optimization state to a checkpoint file via the internal `CheckpointManager.save()`. The serializer (default `NpzCheckpointSerializer`) encodes a `RunState` snapshot; the backend (default `LocalFilesystemBackend`) writes it **atomically** (temp file in the same directory + `os.replace`), so an interrupted job never leaves a half-written file. If `algorithm_name` is not provided it defaults to `self.algorithm_str` (or `"unknown"`).
 
-Default path: `data/objective_run_data/{budget_dir}/{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`
+The checkpoint embeds `RunMetadata` (problem/algo/budget identity, `SaveConfig`, and the problem's typed `ProblemSpec` container; see [Problems](Problems)), so the file is fully self-describing.
+
+Default path (built by `RunPathResolver`): `data/objective_run_data/{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`
+
+The first save without explicit overrides caches the path; subsequent periodic saves overwrite the same file.
 
 ### `load_run_data(filepath)`
 
-Restores all tracking state from a previously saved NPZ file. Adjusts `start_time` so that `time_elapsed` continues seamlessly from where the checkpoint left off.
+Restores all tracking state from a checkpoint via `CheckpointManager.load()` → `Objective._apply_run_state()`. Adjusts `start_time` so that `time_elapsed` continues seamlessly from where the checkpoint left off. The loaded path is cached so a later `save_run_data()` overwrites the same file. If the checkpoint's `SaveConfig` differs from the current Objective's, a warning is printed (when `verbose >= 1`).
 
-### `output_to_files(hyper_param_str="", …) → Path`
+The originating `Problem` can be rebuilt from the embedded `problem_spec`:
 
-Writes human-readable outputs:
-- JSON with best parameters
+```python
+from dfbench.core.storage import CheckpointManager
+from dfbench.core.problem import ProblemSpec, build_problem_from_spec
+
+state = obj._checkpoint_manager.load(path)
+spec = CheckpointManager.extract_problem_spec(state)  # -> dict | None
+if spec is not None:
+    problem = build_problem_from_spec(ProblemSpec.from_dict(spec))
+```
+
+### `output_to_files(hyper_param_str="", hyper_param_str_in_filename=True) → Path`
+
+Writes human-readable outputs via `RunDataExporter.export()`, which derives everything from a `RunState` snapshot (not a second write path):
+- JSON with best parameters (bounded space)
 - JSON with loss history
 - PNG plot of the loss curve
 - (For optical problems) PNG plot of the sensitivity curve vs. target
 
-Output directory: `data/problem_output/{problem_name}/{algorithm_str}/{hyper_param_str}/`
+Output directory (built by the exporter): `data/problem_output/{problem_name}/{algorithm_str}/{hyper_param_str}/`
 
 ### `get_summary() → dict`
 
@@ -435,7 +491,7 @@ Every evaluation method follows the same pipeline internally:
 1. **Execute** the JAX function (`_func`, `_value_and_grad_func`, `_vmap_func`, etc.)
 2. **`_log(params, loss, grad, hessian)`** — the coordinator: checks `time_exceeded`, appends to `_time_steps`, then delegates to `_log_evals()` and `_log_to_file()`.
 3. **`_log_evals(params, loss, grad, hessian, time_exceeded)`** — record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget. Receives `time_exceeded` as an explicit parameter from `_log()` to ensure a consistent time snapshot.
-4. **`_log_to_file()`** — if `save_to_file_every` is set, trigger a periodic checkpoint.
+4. **`_log_to_file()`** — calls `CheckpointManager.tick(eval_count, state_factory)`, which checks the cadence (`save_every`, set from `save_to_file_every`), lazily builds a `RunState` only when a checkpoint is due, saves it through the internal `StorageBackend`, and returns the wall-clock duration of the save. The Objective advances `_start_time` by that duration so the checkpoint write does not consume wall-clock budget.
 
 > **Important:** These are private methods — do not call `_log()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad, hessian=None)` method instead, which delegates to `_log()`. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm.md#custom-jit-compiled-loops-with-log_evaluation) for details.
 

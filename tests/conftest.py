@@ -9,7 +9,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-from dfbench.core.problem import ContinuousProblem
+from dfbench.core.problem import ContinuousProblem, register_problem
 from dfbench.core.objective import Objective
 
 
@@ -18,6 +18,7 @@ from dfbench.core.objective import Objective
 # ---------------------------------------------------------------------------
 
 
+@register_problem
 class QuadraticProblem(ContinuousProblem):
     """2-parameter quadratic problem for unit tests.
 
@@ -42,6 +43,9 @@ class QuadraticProblem(ContinuousProblem):
     @property
     def optimization_pairs(self):
         return [(f"comp_{i}", "param") for i in range(self._n_params)]
+
+    def to_spec(self) -> dict:
+        return {"type": "QuadraticProblem", "n_params": int(self._n_params)}
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +72,7 @@ def seeded_obj(mock_problem):
         mock_problem,
         max_evals=200,
         max_time=60.0,
-        save_grad_history=True,
+        save=["grad"],
         save_params_history=True,
         save_time_steps=True,
     )
@@ -84,7 +88,7 @@ def seeded_obj_unbounded(mock_problem):
         unbounded=True,
         max_evals=200,
         max_time=60.0,
-        save_grad_history=True,
+        save=["grad"],
         save_params_history=True,
         save_time_steps=True,
     )

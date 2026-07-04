@@ -1,18 +1,28 @@
 import time
-import os
-import json
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 import numpy as np
 import jax
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
 from jaxtyping import Float, Array
 
 from differometor.utils import sigmoid_bounding
 from dfbench.core.problem import ContinuousProblem
 from dfbench.core.display import LiveDisplay, LogDisplay
+from dfbench.core.storage import (
+    CheckpointManager,
+    CheckpointSerializer,
+    JsonCheckpointSerializer,
+    NpzCheckpointSerializer,
+    RunDataExporter,
+    RunMetadata,
+    RunPathResolver,
+    RunState,
+    SaveConfig,
+    StorageBackend,
+    LocalFilesystemBackend,
+)
 
 
 class Objective:
@@ -38,8 +48,11 @@ class Objective:
        flag is raised and further evaluations are no longer logged.
 
     3. **History tracking** – maintains aligned histories of losses, params,
-       gradients, evaluation types, and elapsed time.  Configurable flags
-       control what is stored (see constructor args).
+       gradients, evaluation types, and elapsed time.  The ``save`` list of
+       string tokens (plus the two standard flags ``save_time_steps`` and
+       ``save_params_history``) controls what is stored; the active
+       configuration is recorded as a :class:`SaveConfig` and embedded in
+       every checkpoint so a resumed run can detect mismatches.
 
         4. **Bounded / unbounded mode** – when ``unbounded=True`` the objective
              is evaluated through a configurable mapping from unbounded to bounded
@@ -190,8 +203,10 @@ class Objective:
     - ``jax.grad``, ``jax.hessian``, ``jax.value_and_grad``, and ``jax.vmap``
       variants are prepared up front, so warmup is recommended before
       timing-sensitive runs.
-    - Checkpoints are saved atomically (write to ``.tmp.npz``, then
-      ``os.replace``) to prevent corruption from interrupted jobs.
+    - Checkpoints are saved atomically (write to a temp file in the same
+      directory, then :func:`os.replace`) by the configured
+      :class:`~dfbench.core.storage.StorageBackend` to prevent corruption
+      from interrupted jobs.
     """
 
     def __init__(
@@ -202,13 +217,7 @@ class Objective:
         max_time: float | None = None,
         save_time_steps: bool = True,
         save_params_history: bool = True,
-        save_grad_history: bool = False,
-        save_hessian_history: bool = False,
-        save_batched_losses_history: bool = False,
-        save_batched_grads_history: bool = False,
-        save_batched_hessians_history: bool = False,
-        save_batched_history: bool = False,
-        save_eval_type_history: bool = False,
+        save: list[str] | None = None,
         verbose: int = 0,
         print_every: int = 100,
         algorithm_str: str | None = None,
@@ -217,6 +226,8 @@ class Objective:
         unit_mapping: Callable | None = None,
         inverse_unit_mapping: Callable | None = None,
         hessian_batch_size: int = 1,
+        checkpoint_format: str = "npz",
+        checkpoint_dir: str | Path | None = None,
     ):
         """Initialize the Objective wrapper for optimization problems.
 
@@ -228,18 +239,18 @@ class Objective:
             max_time: Maximum wall-clock time in seconds. None for unlimited.
             save_time_steps: Whether to track timestamps for each evaluation.
             save_params_history: Whether to save parameter history.
-            save_grad_history: Whether to save gradient history.
-            save_hessian_history: Whether to save Hessian history.
-            save_batched_losses_history: Whether to save full batched losses.
-            save_batched_grads_history: Whether to save full batched gradients.
-            save_batched_hessians_history: Whether to save full batched Hessians.
-            save_batched_history: Whether to save full batched params, losses,
-                and any enabled derivative histories.
-            save_eval_type_history: Whether to save evaluation types in a separate history.
+            save: List of advanced save tokens for recording additional /
+                batched histories. Valid tokens: ``"grad"``, ``"hessian"``,
+                ``"eval_type"``, ``"batched_loss"``, ``"batched_grad"``,
+                ``"batched_hessian"``, ``"batched_param"``, ``"batched"``
+                (convenience alias expanding to all four batched tokens).
+                Defaults to ``None`` (no advanced histories).
             verbose: Verbosity level (0=silent, 1=warnings, 2=info). Defaults to 0.
             print_every: Print progress every N evaluations (if verbose >= 1). Defaults to 100.
             algorithm_str: String identifier for the optimization algorithm.
-            save_to_file_every: Save checkpoint every N evaluations. None to disable.
+            save_to_file_every: Save checkpoint every N evaluations. None to
+                disable. The time spent saving is excluded from the
+                elapsed-time clock.
             display_mode: How to display progress when ``verbose >= 1``.
                 ``"live"`` (default) shows a continuously-refreshing in-place
                 dashboard with progress bars.  ``"log"`` prints traditional
@@ -264,6 +275,19 @@ class Objective:
                 (sequential ``lax.map``); set to ``n_params`` to recover
                 full ``jax.hessian`` parallelism.  Values between 1 and
                 ``n_params`` compute columns in chunks.
+            checkpoint_format: On-disk format for checkpoints. ``"npz"``
+                (default) writes compressed NumPy archives; ``"json"`` writes a
+                pickle-free, human-readable JSON file — useful when loading
+                checkpoints from untrusted sources or when you want to inspect
+                them by hand. No extra imports needed.
+            checkpoint_dir: Root directory for checkpoint and output artifacts.
+                Defaults to ``./data/objective_run_data``. Pass a path to
+                redirect all artifacts (e.g. to a scratch disk or a
+                ``tmp_path`` in tests) without importing any storage class.
+
+        To customise the storage stack beyond these two knobs (e.g. a custom
+        serializer or a non-filesystem backend), subclass :class:`Objective`
+        and override :meth:`_build_storage`.
         """
 
         self.unbounded = unbounded
@@ -273,22 +297,11 @@ class Objective:
         self._max_evals = max_evals
         self._print_every = print_every
         self._verbose = verbose
-        self._save_time_steps = save_time_steps
-        self._save_params_history = save_params_history
-        self._save_grad_history = save_grad_history
-        self._save_hessian_history = save_hessian_history
-        self._save_batched_params_history = save_batched_history
-        self._save_batched_losses_history = (
-            save_batched_losses_history or save_batched_history
+        self._save_config = SaveConfig.from_flags(
+            save_time_steps=save_time_steps,
+            save_params_history=save_params_history,
+            save=save,
         )
-        self._save_batched_grads_history = (
-            save_batched_grads_history or save_batched_history
-        )
-        self._save_batched_hessians_history = (
-            save_batched_hessians_history or save_batched_history
-        )
-        self._save_eval_type_history = save_eval_type_history
-        self._save_to_file_every = save_to_file_every
         self._display_mode = display_mode
         self._hessian_batch_size = hessian_batch_size
 
@@ -301,9 +314,19 @@ class Objective:
         self._bind_evaluation_functions()
 
         self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self._cached_save_path: Path | None = None
         self._start_time = None
         self._time_offset = 0.0
+
+        # --- Modular storage ----------------------------------------------
+        # Assembled by _build_storage from the user-facing checkpoint_format
+        # and checkpoint_dir knobs. Subclasses override _build_storage to swap
+        # a custom serializer / backend / resolver / exporter.
+        self._resolver: RunPathResolver
+        self._serializer: CheckpointSerializer
+        self._backend: StorageBackend
+        self._exporter: RunDataExporter
+        self._checkpoint_manager: CheckpointManager
+        self._build_storage(checkpoint_format, checkpoint_dir, save_to_file_every)
 
         self._eval_count = 0
         self._evals_left = self._max_evals
@@ -327,7 +350,6 @@ class Objective:
         # Lightweight call-type tracking (always active, O(1) per call)
         self._log_call_count: int = 0
         self._eval_type_counts: dict[int, int] = {}
-        self._last_checkpoint_eval: int | None = None
 
         # Display renderer (lazy-initialised on first use)
         self._display: LiveDisplay | LogDisplay | None = None
@@ -356,6 +378,54 @@ class Objective:
         )
         self._inverse_unit_mapping_vmap = (
             jax.vmap(inverse_unit_mapping) if inverse_unit_mapping is not None else None
+        )
+
+    # ------------------------------------------------------------------
+    # Storage assembly
+    # ------------------------------------------------------------------
+
+    _SERIALIZERS: dict[str, CheckpointSerializer] = {
+        "npz": NpzCheckpointSerializer(),
+        "json": JsonCheckpointSerializer(),
+    }
+
+    def _build_storage(
+        self,
+        checkpoint_format: str,
+        checkpoint_dir: str | Path | None,
+        save_every: int | None,
+    ) -> None:
+        """Assemble the storage stack from user-facing knobs.
+
+        Maps ``checkpoint_format`` to a serializer, roots the resolver and
+        backend at ``checkpoint_dir`` (defaulting to the historical
+        ``./data/objective_run_data``), and wires the
+        :class:`CheckpointManager`. Subclasses override this to swap a custom
+        serializer / backend / resolver / exporter.
+        """
+        fmt = checkpoint_format.lower()
+        if fmt not in self._SERIALIZERS:
+            raise ValueError(
+                f"Unknown checkpoint_format '{checkpoint_format}'. "
+                f"Valid formats: {sorted(self._SERIALIZERS)}."
+            )
+        self._checkpoint_format = fmt
+        self._checkpoint_dir = checkpoint_dir
+        self._serializer = self._SERIALIZERS[fmt]
+        self._resolver = RunPathResolver(
+            root=(
+                str(checkpoint_dir)
+                if checkpoint_dir is not None
+                else "./data/objective_run_data"
+            )
+        )
+        self._backend = LocalFilesystemBackend(root=self._resolver.root)
+        self._exporter = RunDataExporter()
+        self._checkpoint_manager = CheckpointManager(
+            backend=self._backend,
+            serializer=self._serializer,
+            resolver=self._resolver,
+            save_every=save_every,
         )
 
     def _map_unbounded_to_bounded(
@@ -410,6 +480,7 @@ class Objective:
         """
         use_unbounded = self.unbounded if unbounded is None else unbounded
         if use_unbounded:
+
             def _unbounded_value(params):
                 bounded = self._map_unbounded_to_bounded(params)
                 return self._problem.objective_function(bounded)
@@ -554,6 +625,16 @@ class Objective:
     def eval_count(self) -> int:
         """Total number of objective evaluations performed."""
         return self._eval_count
+
+    @property
+    def max_evals(self) -> int | None:
+        """The evaluation budget, or ``None`` if unlimited."""
+        return self._max_evals
+
+    @property
+    def max_time(self) -> float | None:
+        """The wall-clock time budget in seconds, or ``None`` if unlimited."""
+        return self._max_time
 
     @property
     def evals_left(self) -> int | None:
@@ -778,7 +859,27 @@ class Objective:
     @property
     def last_checkpoint_eval(self) -> int | None:
         """Eval count at which the most recent checkpoint was written, or None."""
-        return self._last_checkpoint_eval
+        return self._checkpoint_manager.last_checkpoint_eval
+
+    @property
+    def save_config(self) -> SaveConfig:
+        """The :class:`SaveConfig` describing which histories are recorded."""
+        return self._save_config
+
+    @property
+    def save_every(self) -> int | None:
+        """Periodic checkpoint cadence in evaluations, or ``None`` if disabled."""
+        return self._checkpoint_manager.save_every
+
+    @property
+    def checkpoint_format(self) -> str:
+        """On-disk checkpoint format (``"npz"`` or ``"json"``)."""
+        return self._checkpoint_format
+
+    @property
+    def checkpoint_dir(self) -> str | Path | None:
+        """Root directory for checkpoint artifacts, or ``None`` for the default."""
+        return self._checkpoint_dir
 
     # --------- Reduced (non-batched) history properties ---------
 
@@ -1157,12 +1258,17 @@ class Objective:
         custom_path: str | None = None,
         hyper_param_str: str | None = None,
     ) -> Path:
-        """Generate run data file path following naming conventions.
+        """Generate run data file path via the configured path resolver.
+
+        Delegates to :class:`~dfbench.core.storage.RunPathResolver` so the
+        path layout is not hardcoded here.
 
         Args:
             algorithm_name: Name of the optimization algorithm.
-            custom_path: Custom path to override default. If None, uses standard structure.
-            hyper_param_str: Optional hyperparameter string for subdirectory organization.
+            custom_path: Custom path to override default. If None, uses the
+                resolver's structured layout.
+            hyper_param_str: Optional hyperparameter string for subdirectory
+                organization.
 
         Returns:
             Path object for the run data file.
@@ -1170,29 +1276,18 @@ class Objective:
         if custom_path is not None:
             return Path(custom_path)
 
-        # Build directory name with budget info
-        dir_parts = []
-        if self._max_time is not None:
-            dir_parts.append(f"time{int(self._max_time)}s")
-        if self._max_evals is not None:
-            dir_parts.append(f"evals{self._max_evals}")
-        dir_name = "_".join(dir_parts) if dir_parts else "unlimited"
-
-        # Build filename: problemname_algorithmname_timestamp.npz
-        timestamp = self._timestamp
         problem_name = (
             self._problem.name if hasattr(self._problem, "name") else "problem"
         )
-        safe_algo_name = algorithm_name.replace("/", "_").replace(" ", "_")
-        filename = f"{problem_name}_{safe_algo_name}_{timestamp}.npz"
-
-        # Full path: ./data/objective_run_data/{dir_name}/{hyper_param_str}/{filename}
-        run_data_dir = Path("./data/objective_run_data") / dir_name
-        if hyper_param_str:
-            run_data_dir = run_data_dir / hyper_param_str.strip("_")
-        run_data_dir.mkdir(parents=True, exist_ok=True)
-
-        return run_data_dir / filename
+        path = self._resolver.checkpoint_path(
+            problem_name=problem_name,
+            algorithm_name=algorithm_name,
+            timestamp=self._timestamp,
+            hyper_param_str=hyper_param_str,
+            max_time=self._max_time,
+            max_evals=self._max_evals,
+        )
+        return path
 
     def __repr__(self) -> str:
         """String representation for debugging."""
@@ -1285,7 +1380,11 @@ class Objective:
         if self._start_time is None:
             return
         time_exceeded = self.time_exceeded
-        if self._save_time_steps and not time_exceeded and not self._evals_exceeded:
+        if (
+            self._save_config.time_steps
+            and not time_exceeded
+            and not self._evals_exceeded
+        ):
             self._time_steps.append(self.time_elapsed)
         self._log_evals(params, loss, grad, hessian, time_exceeded=time_exceeded)
         self._log_to_file()
@@ -1337,7 +1436,7 @@ class Objective:
                 self._evals_exceeded = True
                 self._evals_left = 0
                 # Remove the time step that was just added by _log_time() to keep alignment
-                if self._save_time_steps and self._time_steps:
+                if self._save_config.time_steps and self._time_steps:
                     self._time_steps.pop()
                 return
 
@@ -1349,7 +1448,7 @@ class Objective:
                 self._evals_left = max(0, self._max_evals - self._eval_count)
                 self._evals_exceeded = True
                 # Remove the time step that was just added by _log_time() to keep alignment
-                if self._save_time_steps and self._time_steps:
+                if self._save_config.time_steps and self._time_steps:
                     self._time_steps.pop()
                 return
 
@@ -1370,7 +1469,7 @@ class Objective:
                 | int(grad is not None) << 1
                 | int(loss is not None)
             )
-        if self._save_eval_type_history:
+        if self._save_config.eval_type:
             self._eval_type_history.append(eval_type)
         # Always track call count and type distribution (O(1), no allocation)
         self._log_call_count += 1
@@ -1382,7 +1481,7 @@ class Objective:
 
         # log losses
         if loss is not None:
-            if self._ndim(loss) == 0 or self._save_batched_losses_history:
+            if self._ndim(loss) == 0 or self._save_config.batched_loss:
                 self._loss_history.append(loss)
             else:  # batched case but not saving batched history -> store min
                 self._loss_history.append(jnp.nanmin(loss))
@@ -1390,14 +1489,14 @@ class Objective:
             # insert NaN(s) to keep alignment
             self._loss_history.append(
                 jnp.array([jnp.nan] * n_items)
-                if (n_items > 1 and self._save_batched_losses_history)
+                if (n_items > 1 and self._save_config.batched_loss)
                 else _nan_entry()
             )
 
         # log grads (only when saving grads)
-        if self._save_grad_history:
+        if self._save_config.grad:
             if grad is not None:
-                if self._ndim(grad) == 1 or self._save_batched_grads_history:
+                if self._ndim(grad) == 1 or self._save_config.batched_grad:
                     self._grad_history.append(grad)
                 else:
                     idx = self._representative_index(
@@ -1408,9 +1507,9 @@ class Objective:
                 self._grad_history.append(None)
 
         # log Hessians (only when saving Hessians)
-        if self._save_hessian_history:
+        if self._save_config.hessian:
             if hessian is not None:
-                if self._ndim(hessian) == 2 or self._save_batched_hessians_history:
+                if self._ndim(hessian) == 2 or self._save_config.batched_hessian:
                     self._hessian_history.append(hessian)
                 else:
                     idx = self._representative_index(
@@ -1421,9 +1520,9 @@ class Objective:
                 self._hessian_history.append(None)
 
         # params history (store raw params; use *_bounded properties for bounded access)
-        if self._save_params_history:
+        if self._save_config.params:
             if params is not None:
-                if self._ndim(params) == 1 or self._save_batched_params_history:
+                if self._ndim(params) == 1 or self._save_config.batched_param:
                     self._params_history.append(params)
                 else:  # batched case but not saving batched history
                     idx = self._representative_index(
@@ -1478,32 +1577,18 @@ class Objective:
         return
 
     def _log_to_file(self) -> None:
-        """Internal: Save current run data to file if configured."""
-        # Execute this as late as possilbe in the logging sequence
+        """Internal: checkpoint via :meth:`CheckpointManager.tick`.
+
+        The manager owns the cadence (``save_every``) and the save-timing;
+        it returns the wall-clock duration of the save so the Objective can
+        exclude it from the elapsed-time clock.
+        """
         if self._start_time is None:
             return
 
-        if self._save_to_file_every is None:
-            return
-
-        if self._eval_count % self._save_to_file_every != 0:
-            return
-
-        # Time the save and exclude that duration from elapsed time
-        # TODO consider checking if multithreaded
-        t0 = time.time() if self._start_time is not None else None
-        try:
-            self.save_run_data()
-        except Exception:
-            # propagate after optionally logging, dont adjust start_time on failure
-            raise
-        else:
-            if t0 is not None:
-                dt = time.time() - t0
-                # advance start_time so elapsed = (now - start_time) excludes dt
-                self._start_time += dt
-            self._last_checkpoint_eval = self._eval_count
-        return
+        dt = self._checkpoint_manager.tick(self._eval_count, self._build_run_state)
+        if dt > 0:
+            self._start_time += dt
 
     # --------- public API for optimization ---------
 
@@ -1794,25 +1879,146 @@ class Objective:
 
     # --------- public API for I/O ---------
 
+    def _build_metadata(self, algorithm_name: str | None = None) -> RunMetadata:
+        """Build a :class:`RunMetadata` snapshot for the current run.
+
+        If the wrapped problem implements the reconstructive
+        :meth:`~dfbench.core.problem.ContinuousProblem.to_spec` contract,
+        its spec is embedded in ``metadata.extra["problem_spec"]`` so the
+        checkpoint fully describes which problem instance produced the run.
+        """
+        extra: dict[str, Any] = {"save_config": self._save_config.to_dict()}
+        spec_fn = getattr(self._problem, "to_problem_spec", None)
+        if callable(spec_fn):
+            try:
+                extra["problem_spec"] = spec_fn().to_dict()
+            except Exception:
+                # Fall back to the legacy to_spec() dict if the typed
+                # container is unavailable. A problem that fails to
+                # describe itself should not break checkpointing; the run
+                # is still saveable, just not self-reconstructing.
+                legacy = getattr(self._problem, "to_spec", None)
+                if callable(legacy):
+                    try:
+                        extra["problem_spec"] = legacy()
+                    except Exception:
+                        pass
+        else:
+            legacy = getattr(self._problem, "to_spec", None)
+            if callable(legacy):
+                try:
+                    extra["problem_spec"] = legacy()
+                except Exception:
+                    pass
+        return RunMetadata(
+            problem_name=(
+                self._problem.name if hasattr(self._problem, "name") else "problem"
+            ),
+            algorithm_name=algorithm_name or self.algorithm_str or "unknown",
+            hyper_param_str="",
+            timestamp=self._timestamp,
+            max_time=self._max_time,
+            max_evals=self._max_evals,
+            unbounded=self.unbounded,
+            extra=extra,
+        )
+
+    def _build_run_state(self, algorithm_name: str | None = None) -> RunState:
+        """Build a :class:`RunState` snapshot of the current optimization state.
+
+        This is the single place that converts the Objective's internal
+        histories/counters into the canonical, serializer-agnostic
+        :class:`RunState` data contract.
+        """
+        best_params = (
+            np.asarray(self._best_params)
+            if self._best_params is not None
+            else np.array([])
+        )
+        return RunState(
+            loss_history=np.asarray(self._loss_history, dtype=object),
+            grad_history=np.asarray(self._grad_history, dtype=object),
+            hessian_history=np.asarray(self._hessian_history, dtype=object),
+            params_history=np.asarray(self._params_history, dtype=object),
+            eval_type_history=np.asarray(self._eval_type_history, dtype=object),
+            time_steps=np.asarray(self._time_steps, dtype=object),
+            eval_count=self._eval_count,
+            best_loss=float(self._best_loss),
+            best_params=best_params,
+            improvement_count=int(self._improvement_count),
+            evals_since_improvement=int(self._evals_since_improvement),
+            log_call_count=int(self._log_call_count),
+            eval_type_counts=dict(self._eval_type_counts),
+            metadata=self._build_metadata(algorithm_name),
+        )
+
+    def _apply_run_state(self, state: RunState) -> None:
+        """Restore internal tracking state from a :class:`RunState`."""
+        self._loss_history = (
+            state.loss_history.tolist() if state.loss_history.size else []
+        )
+        self._grad_history = (
+            state.grad_history.tolist() if state.grad_history.size else []
+        )
+        self._hessian_history = (
+            state.hessian_history.tolist() if state.hessian_history.size else []
+        )
+        self._params_history = (
+            state.params_history.tolist() if state.params_history.size else []
+        )
+        self._eval_type_history = (
+            state.eval_type_history.tolist() if state.eval_type_history.size else []
+        )
+        self._time_steps = state.time_steps.tolist() if state.time_steps.size else []
+
+        self._eval_count = int(state.eval_count)
+        self._best_loss = jnp.array(state.best_loss)
+        self._best_params = (
+            jnp.array(state.best_params) if state.best_params.size > 0 else None
+        )
+        self._improvement_count = int(state.improvement_count)
+        self._evals_since_improvement = int(state.evals_since_improvement)
+        self._log_call_count = int(state.log_call_count)
+        self._eval_type_counts = dict(state.eval_type_counts)
+
+        # Store elapsed time as offset; leave _start_time as None so that
+        # warmup_*() and start_logging() work correctly after loading.
+        self._time_offset = float(self._time_steps[-1]) if self._time_steps else 0.0
+        self._start_time = None
+
+        # Update budget tracking
+        if self._max_evals is not None:
+            self._evals_left = max(0, self._max_evals - self._eval_count)
+            self._evals_exceeded = self._evals_left <= 0
+
+        # Adopt the loaded metadata's timestamp so subsequent saves/exports
+        # use the original run's identity.
+        if state.metadata.timestamp:
+            self._timestamp = state.metadata.timestamp
+        if state.metadata.algorithm_name:
+            self.algorithm_str = state.metadata.algorithm_name
+
     def save_run_data(
         self,
         algorithm_name: str | None = None,
         filepath: str | None = None,
         hyper_param_str: str | None = None,
     ) -> Path:
-        """Save current optimization state to compressed NPZ file.
+        """Save current optimization state to a checkpoint file.
 
-        Uses numpy's compressed format. File naming follows the convention:
-        problemname_algorithmname_timestamp.npz in a directory
-        named with budget constraints (e.g., data/objective_run_data/time100s_evals1000/).
-        If hyper_param_str is provided, adds an additional subdirectory level for organization.
+        Delegates to the configured :class:`CheckpointManager`, which
+        serializes via :attr:`_serializer` and writes via
+        :attr:`_backend` (atomic on the local filesystem). The path is
+        resolved by :attr:`_resolver` unless ``filepath`` is given.
 
         Args:
-            algorithm_name: Name of the algorithm for file naming.  Defaults to
-                ``self.algorithm_str`` if set, otherwise ``"unknown"``.
-            filepath: Custom file path. If None, uses standard naming convention.
-            hyper_param_str: Optional hyperparameter string for subdirectory organization
-                (e.g., "lr0.1_patience500").
+            algorithm_name: Name of the algorithm for file naming.
+                Defaults to ``self.algorithm_str`` if set, otherwise
+                ``"unknown"``.
+            filepath: Custom file path. If None, uses the resolver's
+                structured naming convention.
+            hyper_param_str: Optional hyperparameter string for
+                subdirectory organization (e.g., "lr0.1_patience500").
 
         Returns:
             Path to the saved run data file.
@@ -1826,71 +2032,39 @@ class Objective:
         if algorithm_name is None:
             algorithm_name = self.algorithm_str or "unknown"
 
-        # Reuse cached path if no explicit filepath/hyper_param_str override
-        if (
-            self._cached_save_path is not None
-            and filepath is None
-            and hyper_param_str is None
-        ):
-            save_path = self._cached_save_path
-        else:
-            save_path = self._get_run_data_path(
-                algorithm_name, filepath, hyper_param_str
-            )
-            if filepath is None and hyper_param_str is None:
-                self._cached_save_path = save_path
+        # Refresh metadata with the caller's algorithm/hyperparam choices so
+        # the serializer records them and the resolver paths correctly.
+        state = self._build_run_state(algorithm_name)
+        state.metadata.algorithm_name = algorithm_name
+        if hyper_param_str is not None:
+            state.metadata.hyper_param_str = hyper_param_str
 
-        # Convert histories to numpy arrays for efficient storage
-        # Write to a temporary file in the same directory and atomically replace
-        # to avoid partial files if the process is interrupted.
-        # Use .tmp before .npz so numpy doesn't double-add the extension.
-        temp_path = save_path.with_suffix(".tmp.npz")
-        np.savez_compressed(
-            temp_path,
-            loss_history=np.array(self._loss_history, dtype=object),
-            grad_history=np.array(self._grad_history, dtype=object),
-            hessian_history=np.array(self._hessian_history, dtype=object),
-            params_history=np.array(self._params_history, dtype=object),
-            eval_type_history=np.array(self._eval_type_history, dtype=object),
-            time_steps=np.array(self._time_steps),
-            eval_count=self._eval_count,
-            best_loss=np.array(self._best_loss),
-            best_params=np.array(self._best_params)
-            if self._best_params is not None
-            else np.array([]),
-            improvement_count=np.array(int(self._improvement_count)),
-            evals_since_improvement=np.array(int(self._evals_since_improvement)),
+        save_path = self._checkpoint_manager.save(
+            state,
+            explicit_path=filepath,
+            hyper_param_str=hyper_param_str,
         )
-        # Atomic replace
-        try:
-            os.replace(str(temp_path), str(save_path))
-        except Exception:
-            # If atomic replace fails, attempt a non-atomic move as fallback
-            if save_path.exists():
-                os.remove(save_path)
-            os.rename(str(temp_path), str(save_path))
-        # TODO maybe clean up a failed tmp file?
         if self._verbose >= 1:
             print(f"Run data saved to {save_path}")
-
         return save_path
 
     def load_run_data(self, filepath: str | Path) -> None:
         """Load optimization state from a run data file.
 
-        Restores all tracking state including loss history, parameters, and
-        timing.  The previously elapsed time is stored as an offset so that
+        Restores all tracking state including loss history, parameters,
+        and timing via the configured :class:`CheckpointManager`. The
+        previously elapsed time is stored as an offset so that
         ``warmup_*()`` and ``start_logging()`` still work normally after
         loading.  Call ``start_logging()`` to resume the wall-clock timer.
 
         Args:
-            filepath: Path to the run data NPZ file to load.
+            filepath: Path to the run data checkpoint file to load.
 
         Raises:
             FileNotFoundError: If run data file doesn't exist.
 
         Example:
-            >>> obj.load_run_data("data/objective_run_data/time100s_evals1000/voyager_adam_gd_2026-01-26_15-30-45.npz")
+            >>> obj.load_run_data("data/objective_run_data/.../voyager_adam_gd_2026-01-26_15-30-45.npz")
             >>> obj.warmup_value_and_grad()   # OK — logging not yet active
             >>> obj.start_logging()           # resume wall-clock timer
             >>> print(f"Resuming from {obj.eval_count} evaluations")
@@ -1899,52 +2073,20 @@ class Objective:
         if not filepath.exists():
             raise FileNotFoundError(f"Run data file not found: {filepath}")
 
-        data = np.load(filepath, allow_pickle=True)
+        state = self._checkpoint_manager.load(filepath)
+        self._apply_run_state(state)
 
-        # Restore state
-        self._loss_history = data["loss_history"].tolist()
-        self._grad_history = data["grad_history"].tolist()
-        self._hessian_history = (
-            data["hessian_history"].tolist() if "hessian_history" in data.files else []
-        )
-        self._params_history = data["params_history"].tolist()
-        self._time_steps = data["time_steps"].tolist()
-        self._eval_count = int(data["eval_count"])
-        self._best_loss = jnp.array(data["best_loss"])
-
-        best_params_array = data["best_params"]
-        self._best_params = (
-            jnp.array(best_params_array) if best_params_array.size > 0 else None
-        )
-        self._improvement_count = int(data["improvement_count"])
-        self._evals_since_improvement = int(data["evals_since_improvement"])
-        self._eval_type_history = (
-            data["eval_type_history"].tolist()
-            if "eval_type_history" in data.files
-            else []
-        )
-        self._log_call_count = len(self._eval_type_history)
-        self._eval_type_counts = {}
-        for eval_type in self._eval_type_history:
-            self._eval_type_counts[eval_type] = (
-                self._eval_type_counts.get(eval_type, 0) + 1
-            )
-
-        # Store elapsed time as offset; leave _start_time as None so that
-        # warmup_*() and start_logging() work correctly after loading.
-        if len(self._time_steps) > 0:
-            self._time_offset = self._time_steps[-1]
-        else:
-            self._time_offset = 0.0
-        self._start_time = None
-
-        # Cache loaded path so subsequent saves overwrite the same file
-        self._cached_save_path = filepath
-
-        # Update budget tracking
-        if self._max_evals is not None:
-            self._evals_left = max(0, self._max_evals - self._eval_count)
-            self._evals_exceeded = self._evals_left <= 0
+        # Warn if the checkpoint's save config differs from this Objective's
+        loaded_cfg = state.metadata.extra.get("save_config")
+        if loaded_cfg is not None:
+            ckpt_cfg = SaveConfig.from_dict(loaded_cfg)
+            diffs = self._save_config.mismatch(ckpt_cfg)
+            if diffs and self._verbose >= 1:
+                print(
+                    "Warning: checkpoint save_config differs from current "
+                    f"Objective in: {', '.join(diffs)}. Histories may be "
+                    "inconsistent."
+                )
 
         if self._verbose >= 1:
             print(f"Checkpoint loaded from {filepath}")
@@ -2008,108 +2150,49 @@ class Objective:
         self._eval_type_history = []
         self._log_call_count = 0
         self._eval_type_counts = {}
-        self._last_checkpoint_eval = None
         self._display = None  # re-create on next render
+        # Rebuild the storage stack so the next run starts with fresh path
+        # caching / last-checkpoint state, preserving the format, directory,
+        # and save_every cadence configured at construction.
+        self._build_storage(
+            self._checkpoint_format,
+            self._checkpoint_dir,
+            self._checkpoint_manager.save_every,
+        )
+        # New run -> new timestamp so saves do not silently overwrite the
+        # previous run's checkpoint at the cached path.
+        self._timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     def output_to_files(
         self,
         hyper_param_str: str = "",
         hyper_param_str_in_filename: bool = True,
     ) -> Path:
-        """Output optimization results to files (plots and JSON).
+        """Output optimization results to human-readable files (plots + JSON).
 
-        Creates JSON files with parameters and losses, and PNG plots of
-        the optimization progress. For optical problems with sensitivity
-        calculation, also plots the sensitivity curve.
+        Delegates to the configured :class:`RunDataExporter`, which derives
+        all artifacts from a :class:`RunState` snapshot of the current run
+        plus the underlying problem (for sensitivity plots on optical
+        problems). This keeps plotting and JSON writing out of the
+        Objective and the checkpoint path.
 
-        Files are saved to: ./data/problem_output/{problem_name}/{algorithm_str}/{hyper_param_str}/
+        Files are saved under ``./data/problem_output/{problem_name}/
+        {algorithm_str}/{hyper_param_str}/`` by default (configurable via
+        the exporter's ``root``).
 
         Args:
-            hyper_param_str: Hyperparameter string for directory naming (e.g., "lr0.1_patience500").
-            hyper_param_str_in_filename: Whether to include hyperparams in filename.
+            hyper_param_str: Hyperparameter string for directory naming
+                (e.g., "lr0.1_patience500").
+            hyper_param_str_in_filename: Whether to include hyperparams in
+                filename.
 
         Returns:
             Path to the output directory.
         """
-        best_params = self.best_params_bounded
-        losses = jnp.array(self.loss_history)
-
-        # Get names
-        problem_name = (
-            self._problem.name if hasattr(self._problem, "name") else "problem"
+        state = self._build_run_state()
+        return self._exporter.export(
+            state,
+            problem=self._problem,
+            hyper_param_str=hyper_param_str,
+            hyper_param_str_in_filename=hyper_param_str_in_filename,
         )
-        algorithm_str = self.algorithm_str or "unknown"
-
-        # Print best params and loss
-        print(f"Parameters of the best solution: {best_params}")
-        print(f"Best loss: {self.best_loss}")
-
-        # Prepare strings and timestamp
-        algorithm_str_fmt = f"_{algorithm_str.strip('_')}" if algorithm_str else ""
-        hyper_param_str_fmt = (
-            f"_{hyper_param_str.strip('_')}" if hyper_param_str else ""
-        )
-        timestamp = self._timestamp
-
-        # Create output directory
-        output_path = Path(
-            f"./data/problem_output/{problem_name}/{algorithm_str.strip('_')}"
-        ) / hyper_param_str.strip("_")
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        print(f"Output directory: {output_path}")
-
-        # Determine file name prefix and suffix
-        file_prefix = f"{problem_name}{algorithm_str_fmt}_{timestamp}"
-        file_suffix = hyper_param_str_fmt if hyper_param_str_in_filename else ""
-
-        # Output best parameters to JSON
-        with open(
-            output_path / f"{file_prefix}_parameters{file_suffix}.json", "w"
-        ) as f:
-            json.dump(best_params.tolist(), f, indent=4)
-
-        # Output historical losses to JSON
-        with open(output_path / f"{file_prefix}_losses{file_suffix}.json", "w") as f:
-            json.dump(losses.tolist(), f, indent=4)
-
-        # Plot losses
-        plt.figure()
-        plt.plot(losses)
-        plt.xlabel("Iteration")
-        plt.ylabel("Loss")
-        plt.axhline(0, color="red", linestyle="--")
-        plt.grid()
-        plt.tight_layout()
-        plt.savefig(output_path / f"{file_prefix}_losses{file_suffix}.png")
-        plt.close()
-
-        # If problem has sensitivity calculation (optical problems), plot it
-        if hasattr(self._problem, "calculate_sensitivity") and hasattr(
-            self._problem, "_frequencies"
-        ):
-            sensitivities = self._problem.calculate_sensitivity(best_params)
-
-            plt.figure()
-            plt.plot(
-                self._problem._frequencies, sensitivities, label="Optimized Sensitivity"
-            )
-
-            if hasattr(self._problem, "_target_sensitivities"):
-                plt.plot(
-                    self._problem._frequencies,
-                    self._problem._target_sensitivities,
-                    label="Target Sensitivity",
-                )
-
-            plt.xscale("log")
-            plt.yscale("log")
-            plt.xlabel("Frequency (Hz)")
-            plt.ylabel("Sensitivity [/sqrt(Hz)]")
-            plt.legend()
-            plt.grid()
-            plt.tight_layout()
-            plt.savefig(output_path / f"{file_prefix}_sensitivity{file_suffix}.png")
-            plt.close()
-
-        return output_path
