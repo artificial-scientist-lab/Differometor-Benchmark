@@ -99,7 +99,14 @@ class VoyagerTuningProblem(OpticalSetupProblem):
         ).T
 
         # abstract for pure objective_function
-        target_sensitivities = self._target_sensitivities
+        self._build_objective_function()
+
+    def _build_objective_function(self) -> None:
+        """(Re)build the JIT-compiled objective function.
+
+        Re-tracing picks up the current ``_power_penalty_fn`` so that
+        ``set_penalty_fn`` takes effect on subsequent evaluations.
+        """
 
         @jax.jit
         def objective_function(
@@ -117,7 +124,7 @@ class VoyagerTuningProblem(OpticalSetupProblem):
             sensitivities = noise / jnp.abs(powers)
 
             # relative objective as in voyager_tuning.py
-            return jnp.mean(jnp.log10(sensitivities / target_sensitivities))
+            return jnp.mean(jnp.log10(sensitivities / self._target_sensitivities))
 
         self.objective_function = objective_function
 

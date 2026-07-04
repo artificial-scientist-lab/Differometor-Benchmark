@@ -10,6 +10,8 @@ mismatches on resume.
 Valid ``save`` tokens
 --------------------
 
+Standard histories:
+
 | Token              | Effect                                                              |
 |--------------------|---------------------------------------------------------------------|
 | ``"grad"``         | Record gradient history (reduced to one entry per eval for batches)|
@@ -21,6 +23,31 @@ Valid ``save`` tokens
 | ``"batched_param"``| Store full ``(batch, n_params)`` parameter arrays                  |
 | ``"batched"``      | Convenience alias: expands to ``batched_param``, ``batched_loss``, |
 |                    | ``batched_grad``, ``batched_hessian``                              |
+
+Aux diagnostics (only recorded by the ``value_aux`` / ``value_and_grad_aux``
+/ ``vmap_*_aux`` methods, on problems that opt into the power-penalty
+contract):
+
+| Token                       | Effect                                                                |
+|-----------------------------|-----------------------------------------------------------------------|
+| ``"sensitivity_loss"``      | Record the unpenalised sensitivity loss per aux eval (reduced).       |
+| ``"penalty"``               | Record the summed penalty per aux eval (reduced).                     |
+| ``"is_feasible"``           | Record the physical feasibility flag per aux eval (reduced).          |
+| ``"power_values"``          | Record per-group powers (hard, soft, detector) per aux eval (reduced).|
+| ``"violations"``            | Record per-constraint penalty values per aux eval (reduced).          |
+| ``"aux"``                   | Convenience alias: expands to the five non-batched aux tokens above.  |
+| ``"batched_sensitivity_loss"`` | Store full batched sensitivity loss arrays.                       |
+| ``"batched_penalty"``       | Store full batched penalty arrays.                                    |
+| ``"batched_is_feasible"``   | Store full batched feasibility bool arrays.                           |
+| ``"batched_power_values"``  | Store full batched per-group power arrays.                            |
+| ``"batched_violations"``    | Store full batched per-constraint violation arrays.                   |
+| ``"batched_aux"``           | Convenience alias: expands to the five batched aux tokens above.      |
+
+When a ``batched_*`` aux token is off and the corresponding non-batched
+token is on, batched aux entries are reduced to the representative point
+(the index of the best loss within the batch), so the recorded
+``is_feasible`` and ``violations`` reflect that best point. This matches
+the reduction rule used for gradients and Hessians.
 
 The two standard flags (``save_time_steps``, ``save_params_history``)
 remain as explicit booleans because they are the most commonly toggled and
@@ -42,6 +69,20 @@ VALID_TOKENS: frozenset[str] = frozenset(
         "batched_hessian",
         "batched_param",
         "batched",  # convenience alias, expanded at construction
+        # Aux diagnostics (non-batched / reduced):
+        "sensitivity_loss",
+        "penalty",
+        "is_feasible",
+        "power_values",
+        "violations",
+        "aux",  # convenience alias, expanded at construction
+        # Aux diagnostics (batched / full):
+        "batched_sensitivity_loss",
+        "batched_penalty",
+        "batched_is_feasible",
+        "batched_power_values",
+        "batched_violations",
+        "batched_aux",  # convenience alias, expanded at construction
     }
 )
 
@@ -52,6 +93,42 @@ _BATCHED_EXPANSION: list[str] = [
     "batched_grad",
     "batched_hessian",
 ]
+
+# Expansion of the "aux" convenience alias (non-batched aux diagnostics).
+_AUX_EXPANSION: list[str] = [
+    "sensitivity_loss",
+    "penalty",
+    "is_feasible",
+    "power_values",
+    "violations",
+]
+
+# Expansion of the "batched_aux" convenience alias.
+_BATCHED_AUX_EXPANSION: list[str] = [
+    "batched_sensitivity_loss",
+    "batched_penalty",
+    "batched_is_feasible",
+    "batched_power_values",
+    "batched_violations",
+]
+
+# Maps each non-batched aux token to its SaveConfig field name.
+_AUX_FIELD_MAP: dict[str, str] = {
+    "sensitivity_loss": "sensitivity_loss",
+    "penalty": "penalty",
+    "is_feasible": "is_feasible",
+    "power_values": "power_values",
+    "violations": "violations",
+}
+
+# Maps each batched aux token to its SaveConfig field name.
+_BATCHED_AUX_FIELD_MAP: dict[str, str] = {
+    "batched_sensitivity_loss": "batched_sensitivity_loss",
+    "batched_penalty": "batched_penalty",
+    "batched_is_feasible": "batched_is_feasible",
+    "batched_power_values": "batched_power_values",
+    "batched_violations": "batched_violations",
+}
 
 
 @dataclass
@@ -68,6 +145,16 @@ class SaveConfig:
         batched_grad: Store full batched gradient arrays.
         batched_hessian: Store full batched Hessian arrays.
         batched_param: Store full batched parameter arrays.
+        sensitivity_loss: Record the unpenalised sensitivity loss per aux eval.
+        penalty: Record the summed penalty per aux eval.
+        is_feasible: Record the physical feasibility flag per aux eval.
+        power_values: Record per-group powers per aux eval.
+        violations: Record per-constraint penalty values per aux eval.
+        batched_sensitivity_loss: Store full batched sensitivity loss arrays.
+        batched_penalty: Store full batched penalty arrays.
+        batched_is_feasible: Store full batched feasibility bool arrays.
+        batched_power_values: Store full batched per-group power arrays.
+        batched_violations: Store full batched per-constraint violation arrays.
     """
 
     time_steps: bool = True
@@ -79,6 +166,18 @@ class SaveConfig:
     batched_grad: bool = False
     batched_hessian: bool = False
     batched_param: bool = False
+    # Aux diagnostics (non-batched / reduced)
+    sensitivity_loss: bool = False
+    penalty: bool = False
+    is_feasible: bool = False
+    power_values: bool = False
+    violations: bool = False
+    # Aux diagnostics (batched / full)
+    batched_sensitivity_loss: bool = False
+    batched_penalty: bool = False
+    batched_is_feasible: bool = False
+    batched_power_values: bool = False
+    batched_violations: bool = False
 
     @classmethod
     def from_flags(
@@ -108,6 +207,10 @@ class SaveConfig:
                     )
                 if token == "batched":
                     expanded.extend(_BATCHED_EXPANSION)
+                elif token == "aux":
+                    expanded.extend(_AUX_EXPANSION)
+                elif token == "batched_aux":
+                    expanded.extend(_BATCHED_AUX_EXPANSION)
                 else:
                     expanded.append(token)
 
@@ -130,6 +233,10 @@ class SaveConfig:
                     cfg.batched_hessian = True
                 elif t == "batched_param":
                     cfg.batched_param = True
+                elif t in _AUX_FIELD_MAP:
+                    setattr(cfg, _AUX_FIELD_MAP[t], True)
+                elif t in _BATCHED_AUX_FIELD_MAP:
+                    setattr(cfg, _BATCHED_AUX_FIELD_MAP[t], True)
 
         return cfg
 
@@ -145,6 +252,16 @@ class SaveConfig:
             "batched_grad": self.batched_grad,
             "batched_hessian": self.batched_hessian,
             "batched_param": self.batched_param,
+            "sensitivity_loss": self.sensitivity_loss,
+            "penalty": self.penalty,
+            "is_feasible": self.is_feasible,
+            "power_values": self.power_values,
+            "violations": self.violations,
+            "batched_sensitivity_loss": self.batched_sensitivity_loss,
+            "batched_penalty": self.batched_penalty,
+            "batched_is_feasible": self.batched_is_feasible,
+            "batched_power_values": self.batched_power_values,
+            "batched_violations": self.batched_violations,
         }
 
     @classmethod
@@ -166,6 +283,16 @@ class SaveConfig:
                 d.get("batched_hessian", d.get("batched_hessians", False))
             ),
             batched_param=bool(d.get("batched_param", d.get("batched_params", False))),
+            sensitivity_loss=bool(d.get("sensitivity_loss", False)),
+            penalty=bool(d.get("penalty", False)),
+            is_feasible=bool(d.get("is_feasible", False)),
+            power_values=bool(d.get("power_values", False)),
+            violations=bool(d.get("violations", False)),
+            batched_sensitivity_loss=bool(d.get("batched_sensitivity_loss", False)),
+            batched_penalty=bool(d.get("batched_penalty", False)),
+            batched_is_feasible=bool(d.get("batched_is_feasible", False)),
+            batched_power_values=bool(d.get("batched_power_values", False)),
+            batched_violations=bool(d.get("batched_violations", False)),
         )
 
     def mismatch(self, other: "SaveConfig") -> list[str]:
