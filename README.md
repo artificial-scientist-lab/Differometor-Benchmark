@@ -5,7 +5,7 @@
 
 A benchmarking framework for optimization algorithms on gravitational-wave detector design problems, built on top of the [Differometor](https://github.com/artificial-scientist-lab/Differometor) simulator.
 
-> **For detailed documentation, see the [Wiki](docs/Home.md).**
+> **For detailed documentation, see the [Wiki](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki).**
 
 ## TL;DR (I want to try my own algorithm)
 
@@ -84,11 +84,11 @@ This adds negligible overhead compared to the objective function itself.
 
 Both constrained problems accept a `power_penalty_fn(value, threshold)` callable to control how power-constraint violations are penalized.  Built-in presets: `squashed_relu_penalty` (default), `relu_penalty`, `zero_penalty`. Feel free to try own ones. The penalty function can also be swapped after construction via `obj.set_penalty_fn(fn)` (before `obj.start_logging()`), which re-traces the objective so the change takes effect. The unconstrained Voyager problems reject this call because they have no power-constraint path.
 
-Constrained problems also expose aux diagnostics. `obj.value_aux(params)` and `obj.vmap_value_aux(batch)` return `(loss, aux)` where `aux` carries the loss decomposition, a physical `is_feasible` flag, per-constraint violations, and the raw per-group power arrays. Enable `save` tokens like `is_feasible`, `power_values`, or the `aux` alias and the standard `obj.value` / `obj.value_and_grad` loop records the enabled aux fields in the same forward pass, with no code change. See [Problems](docs/Problems.md) for the aux schema and [Objective API Reference](docs/Objective-API-Reference.md) for the full method set.
+Constrained problems also expose aux diagnostics. `obj.value_aux(params)` and `obj.vmap_value_aux(batch)` return `(loss, aux)` where `aux` carries the loss decomposition, a physical `is_feasible` flag, per-constraint violations, and the raw per-group power arrays. Enable `save` tokens like `is_feasible`, `power_values`, or the `aux` alias and the standard `obj.value` / `obj.value_and_grad` loop records the enabled aux fields in the same forward pass, with no code change. See [Problems](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Problems) for the aux schema and [Objective API Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Objective-API-Reference) for the full method set.
 
 All problems also support `bounds_overrides` (e.g. `{"tuning": (0, 45)}`) to narrow default property bounds and `signal_floor` to floor detector signal magnitudes before sensitivity normalization. `signal_floor` defaults to `1e-20`. Use `problem.print_bounds()` to inspect effective bounds.
 
-See [Problems](docs/Problems.md) for details on loss computation, parameter meanings, and constraints.
+See [Problems](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Problems) for details on loss computation, parameter meanings, and constraints.
 
 ---
 
@@ -125,7 +125,7 @@ pip install -e .                         # CPU-only editable install
 pip install -e ".[all,cuda13,analysis]"  # All backends, CUDA 13, and analysis extras
 ```
 
-See [Installation](docs/Installation.md) for GPU setup details and HPC notes.
+See [Installation](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Installation) for GPU setup details and HPC notes.
 
 ---
 
@@ -148,7 +148,7 @@ OptimizationAlgorithm.optimize()
 
 **Design Idea:** Algorithms never create their own `Objective`, they receive a pre-configured one. This lets the benchmark harness or user script control budgets, seeds, and history settings uniformly. The algorithm only has to implement its optimization logic.
 
-See [Architecture Overview](docs/Architecture-Overview.md) for full design details.
+See [Architecture Overview](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Architecture-Overview) for full design details.
 
 ---
 
@@ -250,7 +250,7 @@ benchmark.print_summary(results)
 - `save_csv`: Writes a CSV with all metrics computed at evenly-spaced time points.
 - `save_run_data`: Persists raw loss/params/time histories to NPZ files for later re-evaluation.
 
-See [Benchmarking](docs/Benchmarking.md) for full configuration options and [Metrics Reference](docs/Metrics-Reference.md) for what gets computed.
+See [Benchmarking](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Benchmarking) for full configuration options and [Metrics Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Metrics-Reference) for what gets computed.
 
 ### Native-JAX Custom/Hybrid Batch
 
@@ -273,7 +273,7 @@ see `scripts/voyager_native_jax_custom_batch.py`.
 
 The interface is designed to make this as simple as possible. You write the optimization logic; `Objective` handles everything else (timing, logging, budget enforcement, file I/O).
 
-> **Full step-by-step tutorial:** [Implementing a New Algorithm](docs/Implementing-a-New-Algorithm.md)
+> **Full step-by-step tutorial:** [Implementing a New Algorithm](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Implementing-a-New-Algorithm)
 
 ### The Contract
 
@@ -408,7 +408,7 @@ obj.loss_history            # full loss history
 obj.time_steps              # elapsed time at each evaluation
 ```
 
-See [Objective API Reference](docs/Objective-API-Reference.md) for the complete interface.
+See [Objective API Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Objective-API-Reference) for the complete interface.
 
 ---
 
@@ -451,7 +451,7 @@ See [Objective API Reference](docs/Objective-API-Reference.md) for the complete 
 | `ReSTIR` | Surrogate | GPU-native kNN surrogate, scales to 100k+ candidates |
 | `VAESampling` | Generative | Latent-space compression + BO |
 
-See [Algorithms](docs/Algorithms.md) for hyperparameter details and usage examples.
+See [Algorithms](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Algorithms) for hyperparameter details and usage examples.
 
 ---
 
@@ -481,13 +481,13 @@ For in-depth documentation beyond this README:
 
 | Page | Content |
 |------|---------|
-| [Architecture Overview](docs/Architecture-Overview.md) | Design, module map, data-flow diagrams |
-| [Objective API Reference](docs/Objective-API-Reference.md) | Complete `Objective` class reference |
-| [Problems](docs/Problems.md) | Loss computation, parameter meanings, constraints |
-| [Algorithms](docs/Algorithms.md) | All built-in algorithms with hyperparameters |
-| [Implementing a New Algorithm](docs/Implementing-a-New-Algorithm.md) | Full step-by-step contributor tutorial |
-| [Benchmarking](docs/Benchmarking.md) | Running benchmarks, saving/loading results |
-| [Metrics Reference](docs/Metrics-Reference.md) | Every benchmark metric explained |
-| [Utilities & Helpers](docs/Utilities-and-Helpers.md) | `t2j`/`j2t`, CLI config, inverse sigmoid |
-| [Installation](docs/Installation.md) | Environment setup, GPU support, HPC notes |
-| [FAQ](docs/FAQ.md) | Common pitfalls and troubleshooting |
+| [Architecture Overview](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Architecture-Overview) | Design, module map, data-flow diagrams |
+| [Objective API Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Objective-API-Reference) | Complete `Objective` class reference |
+| [Problems](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Problems) | Loss computation, parameter meanings, constraints |
+| [Algorithms](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Algorithms) | All built-in algorithms with hyperparameters |
+| [Implementing a New Algorithm](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Implementing-a-New-Algorithm) | Full step-by-step contributor tutorial |
+| [Benchmarking](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Benchmarking) | Running benchmarks, saving/loading results |
+| [Metrics Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Metrics-Reference) | Every benchmark metric explained |
+| [Utilities & Helpers](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Utilities-and-Helpers) | `t2j`/`j2t`, CLI config, inverse sigmoid |
+| [Installation](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Installation) | Environment setup, GPU support, HPC notes |
+| [FAQ](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/FAQ) | Common pitfalls and troubleshooting |
