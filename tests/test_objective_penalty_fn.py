@@ -527,12 +527,57 @@ class TestAuxHistories:
         assert len(obj.is_feasible_history) == 1
         assert bool(obj.is_feasible_history[0]) is False
 
-    def test_non_aux_eval_does_not_touch_aux_histories(self, problem):
+    def test_value_auto_logs_aux_with_save_tokens(self, problem):
+        """A plain value() call records aux when save tokens are enabled."""
         obj = Objective(problem, save=["aux"])
+        obj.start_logging()
+        obj.value(jnp.array([0.0, 0.0]))
+        assert len(obj.sensitivity_loss_history) == 1
+        assert len(obj.is_feasible_history) == 1
+        assert len(obj.power_hard_history) == 1
+
+    def test_vmap_value_auto_logs_batched_aux(self, problem):
+        """A plain vmap_value() call records batched aux with save tokens."""
+        obj = Objective(problem, save=["is_feasible"])
+        obj.start_logging()
+        params = jnp.array([[0.0, 0.0], [0.3, -0.2], [1.0, 1.0]])
+        obj.vmap_value(params)
+        assert len(obj.is_feasible_history) == 1
+        assert obj.is_feasible_history[0] is not None
+
+    def test_value_and_grad_auto_logs_aux(self, problem):
+        """A plain value_and_grad() call records aux with save tokens."""
+        obj = Objective(problem, save=["aux"])
+        obj.start_logging()
+        obj.value_and_grad(jnp.array([0.5, -0.5]))
+        assert len(obj.is_feasible_history) == 1
+        assert len(obj.sensitivity_loss_history) == 1
+
+    def test_grad_only_appends_none_placeholder(self, problem):
+        """Grad-only calls align aux histories with None placeholders."""
+        obj = Objective(problem, save=["is_feasible"])
+        obj.start_logging()
+        obj.value(jnp.array([0.0, 0.0]))  # real aux entry
+        obj.grad(jnp.array([0.0, 0.0]))    # no loss -> None placeholder
+        assert len(obj.is_feasible_history) == 2
+        assert obj.is_feasible_history[0] is not None
+        assert obj.is_feasible_history[1] is None
+
+    def test_no_aux_tokens_no_overhead(self, problem):
+        """Without aux tokens, value() does not populate aux histories."""
+        obj = Objective(problem)
         obj.start_logging()
         obj.value(jnp.array([0.0, 0.0]))
         assert obj.sensitivity_loss_history == []
         assert obj.is_feasible_history == []
+
+    def test_auto_aux_off_when_problem_has_no_aux(self, mock_problem):
+        """Aux tokens on a non-aux problem: no aux histories populated."""
+        obj = Objective(mock_problem, save=["is_feasible"])
+        obj.start_logging()
+        obj.value(jnp.array([0.0, 0.0]))
+        assert obj.is_feasible_history == []
+        assert obj.best_is_feasible is None
 
 
 # ======================================================================

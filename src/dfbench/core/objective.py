@@ -530,22 +530,90 @@ class Objective:
             return _unbounded_value_aux
         return aux_fn
 
+    def _aux_tokens_active(self) -> bool:
+        """Return whether any aux save token is enabled."""
+        cfg = self._save_config
+        return bool(
+            cfg.sensitivity_loss
+            or cfg.batched_sensitivity_loss
+            or cfg.penalty
+            or cfg.batched_penalty
+            or cfg.is_feasible
+            or cfg.batched_is_feasible
+            or cfg.power_values
+            or cfg.batched_power_values
+            or cfg.violations
+            or cfg.batched_violations
+        )
+
     def _bind_evaluation_functions(self) -> None:
         """Bind evaluation callables for the currently active search space.
 
-        Also binds aux variants (``*_aux``) when the wrapped problem exposes
-        ``objective_function_aux``; otherwise the aux callables are left as
-        ``None`` and the public ``value_aux`` / ``vmap_value_aux`` methods
-        raise a clear ``RuntimeError`` rather than failing inside JAX.
+        When aux save tokens are enabled and the problem exposes
+        ``objective_function_aux``, the loss-bearing callables (value,
+        value_and_grad, vmap_value, vmap_value_and_grad) are bound to the
+        aux variants so that a plain ``obj.value(params)`` loop also
+        records the enabled aux diagnostics in a single forward pass. The
+        aux pytree is stashed on ``self._last_aux`` for the public methods
+        to feed into ``_log_aux``. Grad-only and Hessian-only callables
+        keep using the scalar primal (they do not compute a loss, so there
+        is no aux to record); ``_log`` appends ``None`` placeholders for
+        those calls so the aux histories stay aligned with ``loss_history``.
+
+        When no aux token is enabled, or the problem has no aux objective,
+        ``_auto_aux`` is ``False`` and the loss-bearing callables use the
+        plain scalar primal, so non-aux problems and non-aux runs pay no
+        overhead.
         """
         self._func = self.value_function()
         self._grad_func = jax.jit(jax.grad(self._func))
-        self._value_and_grad_func = jax.jit(jax.value_and_grad(self._func))
+
+        # Aux auto-logging: active iff an aux token is on and the problem
+        # exposes objective_function_aux. Re-evaluated on every rebind so
+        # toggling save tokens (or swapping the problem via set_penalty_fn,
+        # which retraces) keeps the behaviour in sync.
+        self._func_aux = self.value_function_aux()
+        self._auto_aux = self._aux_tokens_active() and self._func_aux is not None
+        # Stash for the most recent loss-bearing eval; read by the public
+        # methods to feed _log_aux without changing their return signatures.
+        self._last_aux: dict | None = None
+        # Set True by callers that already feed a real aux pytree to
+        # _log_aux, so _log skips the None-placeholder alignment path.
+        self._aux_recorded: bool = False
+
+        if self._auto_aux:
+            # Loss-bearing callables run the aux variants and stash aux.
+            def _value_with_aux(params):
+                loss, aux = self._func_aux(params)
+                self._last_aux = aux
+                return loss
+
+            def _value_and_grad_with_aux(params):
+                (value, aux), grad = jax.value_and_grad(
+                    self._func_aux, has_aux=True
+                )(params)
+                self._last_aux = aux
+                return value, grad
+
+            self._value_func_logging = jax.jit(_value_with_aux)
+            self._value_and_grad_func = jax.jit(_value_and_grad_with_aux)
+            self._vmap_func = jax.vmap(_value_with_aux)
+            self._vmap_value_and_grad_func = jax.vmap(_value_and_grad_with_aux)
+        else:
+            # Non-aux path: keep self._func as the single source so tests
+            # that monkeypatch obj._func after construction still work, and
+            # grad/hessian/value_and_grad stay in sync with it.
+            self._value_func_logging = None
+            self._value_and_grad_func = jax.jit(jax.value_and_grad(self._func))
+            self._vmap_func = jax.vmap(self._func)
+            self._vmap_value_and_grad_func = jax.vmap(self._value_and_grad_func)
 
         # Memory-efficient Hessian: compute columns in chunks via
         # forward-over-reverse (jvp of grad).  hessian_batch_size controls
         # how many columns are computed in parallel (1 = fully sequential,
-        # n_params = fully parallel like jax.hessian).
+        # n_params = fully parallel like jax.hessian). The Hessian always
+        # differentiates the scalar primal (self._func), so it is unaffected
+        # by aux auto-logging.
         _grad_for_hessian = jax.grad(self._func)
         _hbs = self._hessian_batch_size
 
@@ -583,22 +651,16 @@ class Objective:
             return value, grad, hessian
 
         self._value_grad_and_hessian_func = _value_grad_and_hessian
-        self._vmap_func = jax.vmap(self._func)
         self._vmap_grad_func = jax.vmap(self._grad_func)
         self._vmap_hessian_func = jax.vmap(self._hessian_func)
-        self._vmap_value_and_grad_func = jax.vmap(self._value_and_grad_func)
         self._vmap_value_grad_and_hessian_func = jax.vmap(
             self._value_grad_and_hessian_func
         )
 
-        # Aux variants: only bound when the problem opts in. jax.value_and_grad
-        # threads aux via has_aux=True; jax.grad has no aux counterpart, so
-        # there is no grad_aux / hessian_aux.
-        self._func_aux = self.value_function_aux()
+        # Explicit aux variants (value_aux / value_and_grad_aux / vmap_*_aux):
+        # always bound when the problem opts in, regardless of save tokens,
+        # so callers can request aux on demand even with no token enabled.
         if self._func_aux is not None:
-            # jax.value_and_grad(f, has_aux=True) returns ((value, aux), grad);
-            # unwrap into the (value, grad, aux) shape the public methods return
-            # so callers do not have to know about JAX's return ordering.
             def _value_and_grad_aux_unwrapped(params):
                 (value, aux), grad = jax.value_and_grad(
                     self._func_aux, has_aux=True
@@ -1592,7 +1654,17 @@ class Objective:
         | Float[Array, "batch n_params n_params"]
         | None = None,
     ) -> None:
-        """Internal: Log timestamp, evaluation results, and optionally save to file."""
+        """Internal: Log timestamp, evaluation results, and optionally save to file.
+
+        When aux save tokens are enabled but this eval did not produce an aux
+        pytree (grad-only, hessian-only, or a manual ``log_evaluation``
+        without aux), append ``None`` placeholders to the enabled aux
+        histories so they stay length-aligned with ``loss_history``. The
+        loss-bearing public methods (``value``, ``value_and_grad``,
+        ``vmap_value``, ``vmap_value_and_grad``, ``value_grad_and_hessian``,
+        ``vmap_value_grad_and_hessian``) feed the real aux pytree to
+        ``_log_aux`` themselves; this branch only covers the no-aux calls.
+        """
         if self._start_time is None:
             return
         time_exceeded = self.time_exceeded
@@ -1603,6 +1675,25 @@ class Objective:
         ):
             self._time_steps.append(self.time_elapsed)
         self._log_evals(params, loss, grad, hessian, time_exceeded=time_exceeded)
+        # Aux alignment: when auto-aux is on (aux tokens enabled AND the
+        # problem exposes an aux objective), loss-bearing calls already fed
+        # a real aux pytree to _log_aux and set _aux_recorded. Grad-only,
+        # hessian-only, and manual log_evaluation calls do not produce aux,
+        # so append None placeholders to keep the aux histories aligned with
+        # loss_history. When the problem has no aux objective, _auto_aux is
+        # False and we never touch the aux histories.
+        if self._auto_aux and not self._aux_recorded:
+            n_items = 1
+            if params is not None and self._ndim(params) == 2:
+                n_items = int(params.shape[0])
+            elif loss is not None and self._ndim(loss) > 0:
+                n_items = int(loss.shape[0])
+            elif grad is not None and self._ndim(grad) > 1:
+                n_items = int(grad.shape[0])
+            elif hessian is not None and self._ndim(hessian) > 2:
+                n_items = int(hessian.shape[0])
+            self._log_aux_placeholder(n_items)
+        self._aux_recorded = False
         self._log_to_file()
 
     def _log_evals(
@@ -1795,6 +1886,29 @@ class Objective:
                 pass
 
         return
+
+    def _log_aux_placeholder(self, n_items: int) -> None:
+        """Append ``None`` to every enabled aux history for alignment.
+
+        Called by ``_log`` for evals that did not produce an aux pytree
+        (grad-only, hessian-only, manual ``log_evaluation``). Keeps the aux
+        histories the same length as ``loss_history`` so downstream
+        indexing by ``best_eval_index`` stays valid. ``best_is_feasible``
+        and the aux history properties treat ``None`` entries as missing.
+        """
+        cfg = self._save_config
+        if cfg.sensitivity_loss or cfg.batched_sensitivity_loss:
+            self._sensitivity_loss_history.append(None)
+        if cfg.penalty or cfg.batched_penalty:
+            self._penalty_history.append(None)
+        if cfg.is_feasible or cfg.batched_is_feasible:
+            self._is_feasible_history.append(None)
+        if cfg.violations or cfg.batched_violations:
+            self._violations_history.append(None)
+        if cfg.power_values or cfg.batched_power_values:
+            self._power_hard_history.append(None)
+            self._power_soft_history.append(None)
+            self._power_detector_history.append(None)
 
     def _log_aux(self, aux: dict, loss, n_items: int) -> None:
         """Record aux diagnostics into the per-field aux histories.
@@ -2116,15 +2230,24 @@ class Objective:
     def value(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate objective function at given parameters.
 
+        When aux save tokens are enabled and the problem exposes an aux
+        objective, this runs the aux objective in a single forward pass,
+        stashes the aux pytree internally, and records the enabled aux
+        diagnostics. The returned value is still the scalar loss.
+
         Args:
             params: Parameter vector of shape (n_params,).
 
         Returns:
             Scalar loss value.
         """
-        loss = self._func(params)
-
+        loss = self._value_func_logging(params) if self._auto_aux else self._func(params)
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, loss)
+        if aux is not None:
+            self._log_aux(aux, loss, n_items=1)
         return loss
 
     def grad(self, params: Float[Array, "n_params"]) -> Float[Array, "n_params"]:
@@ -2155,6 +2278,10 @@ class Objective:
     ) -> tuple[Float, Float[Array, "n_params"]]:
         """Compute both value and gradient (more efficient than separate calls).
 
+        When aux save tokens are enabled and the problem exposes an aux
+        objective, the aux pytree is produced in the same forward+backward
+        pass (via ``has_aux=True``) and recorded into the aux histories.
+
         Args:
             params: Parameter vector of shape (n_params,).
 
@@ -2162,8 +2289,12 @@ class Objective:
             Tuple of (loss, gradient).
         """
         value, grad = self._value_and_grad_func(params)
-
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, value, grad)
+        if aux is not None:
+            self._log_aux(aux, value, n_items=1)
         return value, grad
 
     def value_grad_and_hessian(
@@ -2171,14 +2302,22 @@ class Objective:
     ) -> tuple[Float, Float[Array, "n_params"], Float[Array, "n_params n_params"]]:
         """Compute value, gradient, and Hessian at a single parameter vector."""
         value, grad, hessian = self._value_grad_and_hessian_func(params)
-
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, value, grad, hessian)
+        if aux is not None:
+            self._log_aux(aux, value, n_items=1)
         return value, grad, hessian
 
     def vmap_value(
         self, params: Float[Array, "batch n_params"]
     ) -> Float[Array, "batch"]:
         """Evaluate objective function on a batch of parameters.
+
+        When aux save tokens are enabled and the problem exposes an aux
+        objective, the batched aux pytree (every leaf gains a leading batch
+        dim) is produced in the same vmapped forward pass and recorded.
 
         Args:
             params: Parameter batch of shape (batch, n_params).
@@ -2187,8 +2326,12 @@ class Objective:
             Loss array of shape (batch,).
         """
         losses = self._vmap_func(params)
-
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, losses)
+        if aux is not None:
+            self._log_aux(aux, losses, n_items=int(params.shape[0]))
         return losses
 
     def vmap_grad(
@@ -2221,6 +2364,10 @@ class Objective:
     ) -> tuple[Float[Array, "batch"], Float[Array, "batch n_params"]]:
         """Compute both values and gradients for a batch of parameters.
 
+        When aux save tokens are enabled and the problem exposes an aux
+        objective, the batched aux pytree is produced in the same vmapped
+        forward+backward pass and recorded.
+
         Args:
             params: Parameter batch of shape (batch, n_params).
 
@@ -2228,8 +2375,12 @@ class Objective:
             Tuple of (losses, gradients) with shapes (batch,) and (batch, n_params).
         """
         values, grads = self._vmap_value_and_grad_func(params)
-
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, values, grads)
+        if aux is not None:
+            self._log_aux(aux, values, n_items=int(params.shape[0]))
         return values, grads
 
     def vmap_value_grad_and_hessian(
@@ -2241,8 +2392,12 @@ class Objective:
     ]:
         """Compute values, gradients, and Hessians for a batch of parameters."""
         values, grads, hessians = self._vmap_value_grad_and_hessian_func(params)
-
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, values, grads, hessians)
+        if aux is not None:
+            self._log_aux(aux, values, n_items=int(params.shape[0]))
         return values, grads, hessians
 
     def batched_value(
@@ -2319,6 +2474,7 @@ class Objective:
         """
         self._require_aux()
         loss, aux = self._func_aux(params)
+        self._aux_recorded = True
         self._log(params, loss)
         self._log_aux(aux, loss, n_items=1)
         return loss, aux
@@ -2342,6 +2498,7 @@ class Objective:
         if self._value_and_grad_aux_func is None:
             raise RuntimeError("aux grad callable not bound")
         value, grad, aux = self._value_and_grad_aux_func(params)
+        self._aux_recorded = True
         self._log(params, value, grad)
         self._log_aux(aux, value, n_items=1)
         return value, grad, aux
@@ -2367,6 +2524,7 @@ class Objective:
         if self._vmap_func_aux is None:
             raise RuntimeError("aux vmap callable not bound")
         losses, aux = self._vmap_func_aux(params)
+        self._aux_recorded = True
         self._log(params, losses)
         self._log_aux(aux, losses, n_items=int(params.shape[0]))
         return losses, aux
@@ -2387,6 +2545,7 @@ class Objective:
         if self._vmap_value_and_grad_aux_func is None:
             raise RuntimeError("aux vmap value_and_grad callable not bound")
         values, grads, aux = self._vmap_value_and_grad_aux_func(params)
+        self._aux_recorded = True
         self._log(params, values, grads)
         self._log_aux(aux, values, n_items=int(params.shape[0]))
         return values, grads, aux
