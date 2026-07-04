@@ -309,6 +309,25 @@ obj.set_space_mode(
 )
 ```
 
+### `set_penalty_fn(fn)`
+
+Sets the wrapped problem's penalty function and re-binds all internal JAX evaluation paths.
+
+For problems that expose a penalty function (e.g. `ConstrainedVoyagerProblem`, `UIFOProblem`), this forwards to `problem.set_penalty_fn(fn)`, which updates the problem's penalty callable and re-traces its JIT-compiled `objective_function` so the new penalty actually takes effect. The Objective then re-binds its own cached `value` / `grad` / `hessian` / `vmap_*` callables, mirroring the tail of `set_space_mode`.
+
+- Must be called before `start_logging()`
+- Raises `RuntimeError` if the wrapped problem does not expose `set_penalty_fn` (penalty support is opt-in on the problem side; `VoyagerProblem` and `VoyagerTuningProblem` do not implement it)
+- Composes with `set_space_mode` in either order before `start_logging()`
+
+```python
+from dfbench.problems import relu_penalty, zero_penalty
+
+obj.set_penalty_fn(relu_penalty)   # use the raw ReLU penalty
+obj.set_penalty_fn(zero_penalty)   # disable the penalty term entirely
+```
+
+The current penalty function is exposed via the read-only `obj.penalty_fn` property (`None` for problems without penalty support).
+
 ---
 
 ## Random Sampling
@@ -350,6 +369,7 @@ bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
 | `bounds` | `Array[2, n_params]` | Lower and upper parameter bounds (or $\pm\infty$ when unbounded). |
 | `n_params` | `int` | Number of optimizable parameters. |
 | `problem` | `ContinuousProblem` | The wrapped problem instance. |
+| `penalty_fn` | `Callable \| None` | The wrapped problem's penalty function, or `None` if the problem does not expose one. Update it via `set_penalty_fn(fn)`. |
 
 ### Budget Tracking
 

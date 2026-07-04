@@ -194,6 +194,19 @@ problem = ConstrainedVoyagerProblem(n_frequencies=100)
    problem = ConstrainedVoyagerProblem(power_penalty_fn=my_quadratic_penalty)
    ```
 
+   The penalty function can also be swapped **after** the problem has been constructed (e.g. after wrapping it in an `Objective`), via `Objective.set_penalty_fn(fn)`. This re-traces the problem's JIT-compiled `objective_function` and re-binds the Objective's cached evaluation callables, so the new penalty takes effect on subsequent evaluations. It must be called before `Objective.start_logging()`:
+
+   ```python
+   from dfbench import Objective
+   from dfbench.problems import zero_penalty
+
+   problem = ConstrainedVoyagerProblem()
+   obj = Objective(problem)
+   obj.set_penalty_fn(zero_penalty)   # disable the penalty term
+   obj.warmup_value()
+   obj.start_logging()
+   ```
+
 **Rationale — penalty squashing:** A raw penalty can become orders of magnitude larger than the sensitivity loss, making gradient-based optimizers ignore sensitivity entirely. The default `squashed_relu_penalty` bounds the penalty contribution while preserving its gradient direction.\
 It could very well be that other penalty functions work better for certain algorithms (or even Adam). Feel free to play around!
 
