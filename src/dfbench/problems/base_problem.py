@@ -15,6 +15,9 @@ from differometor.components import (
 from dfbench.core.problem import ContinuousProblem, register_problem
 
 
+DEFAULT_SIGNAL_FLOOR = 1e-20
+
+
 # ---------------------------------------------------------------------------
 # Power-penalty presets
 # ---------------------------------------------------------------------------
@@ -91,18 +94,26 @@ class OpticalSetupProblem(ContinuousProblem):
     #: constraints, even though they inherit the method.
     _supports_power_penalty: bool = False
 
-    def __init__(self, name: str, n_frequencies: int = 100):
+    def __init__(
+        self,
+        name: str,
+        n_frequencies: int = 100,
+        signal_floor: float = DEFAULT_SIGNAL_FLOOR,
+    ):
         """Initialize the optimization problem.
 
         Args:
             name (str): Name of the problem, used for output file naming.
             n_frequencies (int): Number of frequency points for sensitivity calculation.
                 Defaults to 100.
+            signal_floor: Optional lower bound for detector signal
+                magnitudes before sensitivity normalization.
         """
         self._name = name.lstrip("_")
         self._frequencies = jnp.logspace(jnp.log10(20), jnp.log10(5000), n_frequencies)
         self._target_sensitivities = None  # to be set by subclasses
         self._power_penalty_fn: Callable = squashed_relu_penalty
+        self._signal_floor = float(max(signal_floor, 0.0))
 
     @property
     def power_penalty_fn(self) -> Callable:
@@ -111,6 +122,11 @@ class OpticalSetupProblem(ContinuousProblem):
         Signature: ``fn(value, threshold) -> penalty_contribution``
         """
         return self._power_penalty_fn
+
+    @property
+    def signal_floor(self) -> float:
+        """Lower floor applied to detector signal magnitudes."""
+        return self._signal_floor
 
     @property
     def power_thresholds(self) -> dict[str, float] | None:
