@@ -105,9 +105,9 @@ all = [
     "torch>=2.9.1",
 ]
 test = [
-    "pytest>=8.0",
+    "pytest==9.0.3",
     "pytest-timeout>=2.2",
-    "pytest-cases>=3",
+    "pytest-cases>=3.10.1",
     "pytest-repeat>=0",
 ]
 
@@ -165,9 +165,9 @@ dev = [
     "ruff",
     "pre-commit",
     "mypy",
-    "pytest>=8.0",
+    "pytest==9.0.3",
     "pytest-timeout>=2.2",
-    "pytest-cases>=3",
+    "pytest-cases>=3.10.1",
     "pytest-repeat>=0",
 ]
 publish = [
