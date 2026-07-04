@@ -207,8 +207,26 @@ problem = ConstrainedVoyagerProblem(n_frequencies=100)
    obj.start_logging()
    ```
 
-**Rationale — penalty squashing:** A raw penalty can become orders of magnitude larger than the sensitivity loss, making gradient-based optimizers ignore sensitivity entirely. The default `squashed_relu_penalty` bounds the penalty contribution while preserving its gradient direction.\
+   Only problems with a power-constraint path accept `set_penalty_fn`. The opt-in marker is the class attribute `_supports_power_penalty`; `ConstrainedVoyagerProblem` and `UIFOProblem` set it to `True`, while `VoyagerProblem` and `VoyagerTuningProblem` leave it `False` and raise `RuntimeError` if the call is attempted, even though they inherit the method from the optical base class.
+
+**Rationale (penalty squashing):** A raw penalty can become orders of magnitude larger than the sensitivity loss, making gradient-based optimizers ignore sensitivity entirely. The default `squashed_relu_penalty` bounds the penalty contribution while preserving its gradient direction.\
 It could very well be that other penalty functions work better for certain algorithms (or even Adam). Feel free to play around!
+
+#### Aux diagnostics
+
+The constrained problems also expose a JIT-compiled `objective_function_aux(params)` alongside `objective_function`. It returns `(loss, aux)` where `aux` is a pytree dict carrying the loss decomposition and physical diagnostics for that eval:
+
+| Key | Shape | Description |
+|-----|-------|-------------|
+| `sensitivity_loss` | scalar | The unpenalised sensitivity loss. |
+| `penalty` | scalar | The summed penalty contribution. |
+| `is_feasible` | scalar bool | `True` iff every per-group power is at or below its threshold. This is a physical check, independent of the active `power_penalty_fn` preset, so it stays meaningful even when the penalty is disabled with `zero_penalty`. |
+| `violations` | `(n_constraints, n_freq)` | Per-constraint penalty values. |
+| `power_values` | dict with `hard`, `soft`, `detector` leaves | Raw per-group power arrays. |
+
+Because `aux` is a JAX pytree, `objective_function_aux` vmapps cleanly: a batched call adds a leading batch dim to every leaf, including the `power_values` sub-arrays.
+
+The `Objective` wraps this with `value_aux`, `value_and_grad_aux`, `vmap_value_aux`, and `vmap_value_and_grad_aux`. These thread aux through logging and the save-token system: each aux field has its own token (`sensitivity_loss`, `penalty`, `is_feasible`, `power_values`, `violations`) plus a `batched_*` variant and `aux` / `batched_aux` convenience aliases. When a `batched_*` token is off and the non-batched token is on, batched aux entries are reduced to the representative point picked by the loss minimum, so the recorded `is_feasible` and `violations` reflect that best point. `Objective.best_is_feasible` reports the feasibility of the best-loss point from that recorded history. Full reference in the [Objective API Reference](Objective-API-Reference.md).
 
 ---
 

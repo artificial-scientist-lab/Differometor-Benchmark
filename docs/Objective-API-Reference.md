@@ -46,7 +46,7 @@ Objective(
 | `max_time` | `float \| None` | `None` | Maximum wall-clock seconds beginning at the time `obj.start_logging()` was called. `None` = unlimited. |
 | `save_time_steps` | `bool` | `True` | Record elapsed-time timestamp for each evaluation. |
 | `save_params_history` | `bool` | `True` | Record the parameter vector at each evaluation. |
-| `save` | `list[str] \| None` | `None` | List of advanced save tokens for recording additional / batched histories. Valid tokens: `"grad"`, `"hessian"`, `"eval_type"`, `"batched_loss"`, `"batched_grad"`, `"batched_hessian"`, `"batched_param"`, `"batched"` (convenience alias expanding to all four batched tokens). The active configuration is recorded as a `SaveConfig` and embedded in every checkpoint so a resumed run can detect mismatches. |
+| `save` | `list[str] \| None` | `None` | List of advanced save tokens for recording additional / batched histories. Standard tokens: `"grad"`, `"hessian"`, `"eval_type"`, `"batched_loss"`, `"batched_grad"`, `"batched_hessian"`, `"batched_param"`, `"batched"` (convenience alias expanding to all four batched tokens). Aux diagnostics tokens (recorded by the `*_aux` evaluation methods on problems that opt into the power-penalty contract): `"sensitivity_loss"`, `"penalty"`, `"is_feasible"`, `"power_values"`, `"violations"`, `"aux"` (convenience alias expanding to all five), plus per-field `batched_*` variants and `"batched_aux"` (see Choosing what to save). The active configuration is recorded as a `SaveConfig` and embedded in every checkpoint so a resumed run can detect mismatches. |
 | `verbose` | `int` | `0` | Verbosity level. `0` = silent; `1` = periodic progress prints; `2` is WIP. |
 | `print_every` | `int` | `100` | When `verbose ≥ 1`, print a progress summary every N evaluations. |
 | `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
@@ -143,7 +143,26 @@ For advanced combinations (gradients, Hessians, eval types, full batched arrays)
 | `"batched_grad"` | Store full `(batch, n_params)` gradient arrays |
 | `"batched_hessian"` | Store full `(batch, n_params, n_params)` Hessian arrays |
 | `"batched_param"` | Store full `(batch, n_params)` parameter arrays |
-| `"batched"` | Convenience alias — expands to all four `batched_*` tokens |
+| `"batched"` | Convenience alias expanding to all four `batched_*` tokens above |
+
+Aux diagnostics tokens are recorded by the `*_aux` evaluation methods on problems that opt into the power-penalty contract (`ConstrainedVoyagerProblem`, `UIFOProblem`). Each token controls one aux field, so enabling `is_feasible` does not force storing the bulky `power_values` arrays.
+
+| Token | Effect |
+|-------|--------|
+| `"sensitivity_loss"` | Record the unpenalised sensitivity loss per aux eval (reduced for batches) |
+| `"penalty"` | Record the summed penalty per aux eval (reduced for batches) |
+| `"is_feasible"` | Record the physical feasibility flag per aux eval (reduced for batches) |
+| `"power_values"` | Record per-group powers (hard, soft, detector) per aux eval (reduced for batches) |
+| `"violations"` | Record per-constraint penalty values per aux eval (reduced for batches) |
+| `"aux"` | Convenience alias expanding to the five non-batched aux tokens above |
+| `"batched_sensitivity_loss"` | Store full batched sensitivity loss arrays |
+| `"batched_penalty"` | Store full batched penalty arrays |
+| `"batched_is_feasible"` | Store full batched feasibility bool arrays |
+| `"batched_power_values"` | Store full batched per-group power arrays |
+| `"batched_violations"` | Store full batched per-constraint violation arrays |
+| `"batched_aux"` | Convenience alias expanding to the five `batched_*` aux tokens above |
+
+When a `batched_*` aux token is off and the corresponding non-batched token is on, batched aux entries are reduced to the representative point (the index of the best loss within the batch), so the recorded `is_feasible` and `violations` reflect that best point. This matches the reduction rule used for gradients and Hessians.
 
 ```python
 # Record gradients and full batched losses
@@ -151,6 +170,10 @@ obj = Objective(problem, save=["grad", "batched_loss"])
 
 # Record everything (gradients, Hessians, eval types, all batched arrays)
 obj = Objective(problem, save=["grad", "hessian", "eval_type", "batched"])
+
+# Record aux diagnostics (feasibility, loss decomposition, powers) on a
+# constrained problem, with full batched feasibility arrays
+obj = Objective(problem, save=["aux", "batched_is_feasible"])
 ```
 
 The active configuration is stored as a `SaveConfig` and embedded in every checkpoint's `RunMetadata`. On `load_run_data`, the Objective warns if the checkpoint's save config differs from the current Objective's, preventing silent inconsistency.
@@ -205,6 +228,24 @@ obj.batched_value_grad_and_hessian(…)  # same as vmap_value_grad_and_hessian
 ```
 
 Batched methods use `jax.vmap` and evaluate the entire batch as **one** history entry. The eval counter is incremented by the batch size. When `"batched_loss"` is not in the `save` list (default), only the batch minimum loss is stored.
+
+### Aux evaluation
+
+Available on problems that opt into the power-penalty contract (`ConstrainedVoyagerProblem`, `UIFOProblem`). These methods return the loss plus an `aux` pytree dict carrying the loss decomposition, a physical `is_feasible` flag, per-constraint violations, and the raw per-group power arrays. See the [Power thresholds and aux diagnostics](#power-thresholds-and-aux-diagnostics) section for the aux schema.
+
+```python
+obj.value_aux(params)                     # → (float, dict)
+obj.value_and_grad_aux(params)            # → (float, Array[n_params], dict)
+obj.vmap_value_aux(params_batch)          # → (Array[batch], dict)
+obj.vmap_value_and_grad_aux(params_batch) # → (Array[batch], Array[batch, n_params], dict)
+```
+
+- `value_aux(params)` returns `(loss, aux)`. The loss is logged into the standard loss history; aux fields are recorded into the per-field aux histories only when the matching save token is enabled.
+- `value_and_grad_aux(params)` computes loss, gradient, and aux in one forward+backward pass via `jax.value_and_grad(..., has_aux=True)`. The gradient is taken with respect to the loss (the penalty preset does not affect the gradient because the powers are intermediate simulation outputs, not parameters).
+- `vmap_value_aux` and `vmap_value_and_grad_aux` are the batched variants. Because `aux` is a JAX pytree, a batched call adds a leading batch dim to every leaf, including the `power_values` sub-arrays.
+- The aux methods raise `RuntimeError` on problems that do not expose `objective_function_aux` (for example `VoyagerProblem`, `VoyagerTuningProblem`, or any non-optical `ContinuousProblem`).
+
+Warmup helpers `warmup_value_aux`, `warmup_value_and_grad_aux`, `warmup_vmap_value_aux`, and `warmup_vmap_value_and_grad_aux` compile the aux callables before `start_logging()`. On problems without an aux objective they are a no-op (with a notice at `verbose >= 1`) rather than raising, so an algorithm that unconditionally warms up aux does not break on a non-constrained problem.
 
 ### Callable shorthand
 
@@ -313,10 +354,10 @@ obj.set_space_mode(
 
 Sets the wrapped problem's penalty function and re-binds all internal JAX evaluation paths.
 
-For problems that expose a penalty function (e.g. `ConstrainedVoyagerProblem`, `UIFOProblem`), this forwards to `problem.set_penalty_fn(fn)`, which updates the problem's penalty callable and re-traces its JIT-compiled `objective_function` so the new penalty actually takes effect. The Objective then re-binds its own cached `value` / `grad` / `hessian` / `vmap_*` callables, mirroring the tail of `set_space_mode`.
+For problems that opt into the power-penalty contract (`ConstrainedVoyagerProblem`, `UIFOProblem`), this forwards to `problem.set_penalty_fn(fn)`, which updates the problem's penalty callable and re-traces its JIT-compiled `objective_function` so the new penalty actually takes effect. The Objective then re-binds its own cached `value` / `grad` / `hessian` / `vmap_*` callables, mirroring the tail of `set_space_mode`.
 
 - Must be called before `start_logging()`
-- Raises `RuntimeError` if the wrapped problem does not expose `set_penalty_fn` (penalty support is opt-in on the problem side; `VoyagerProblem` and `VoyagerTuningProblem` do not implement it)
+- Raises `RuntimeError` if the wrapped problem does not opt into the power-penalty contract. The opt-in marker is the class attribute `_supports_power_penalty`; problems without a power-constraint path (`VoyagerProblem`, `VoyagerTuningProblem`, and any non-optical `ContinuousProblem`) leave it `False` and reject the call rather than silently rebuilding, even though they inherit the method from `OpticalSetupProblem`
 - Composes with `set_space_mode` in either order before `start_logging()`
 
 ```python
@@ -327,6 +368,22 @@ obj.set_penalty_fn(zero_penalty)   # disable the penalty term entirely
 ```
 
 The current penalty function is exposed via the read-only `obj.penalty_fn` property (`None` for problems without penalty support).
+
+### Power thresholds and aux diagnostics
+
+`obj.power_thresholds` returns a dict with the constant per-group thresholds (`"hard"`, `"soft"`, `"detector"`) for problems that opt into the penalty contract, or `None` otherwise. Thresholds are physical constants; they do not change across evaluations or after `set_penalty_fn`.
+
+The constrained problems also expose a JIT-compiled `objective_function_aux(params)` alongside `objective_function`. It returns `(loss, aux)` where `aux` is a pytree dict carrying the loss decomposition and physical diagnostics:
+
+| Key | Shape | Description |
+|-----|-------|-------------|
+| `sensitivity_loss` | scalar | The unpenalised sensitivity loss. |
+| `penalty` | scalar | The summed penalty contribution. |
+| `is_feasible` | scalar bool | `True` iff every per-group power is at or below its threshold. This is a physical check, independent of the active `power_penalty_fn` preset. |
+| `violations` | `(n_constraints, n_freq)` | Per-constraint penalty values. |
+| `power_values` | dict with `hard`, `soft`, `detector` leaves | Raw per-group power arrays. |
+
+`aux` is a JAX pytree, so `objective_function_aux` vmapps cleanly: a batched call adds a leading batch dim to every leaf, including the `power_values` sub-arrays. The Objective-level `value_aux` / `value_and_grad_aux` / `vmap_*_aux` wrappers thread aux through logging and the save-token system; see the [Aux evaluation](#aux-evaluation) subsection and the aux tokens in [Choosing what to save](#choosing-what-to-save).
 
 ---
 
@@ -370,6 +427,7 @@ bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
 | `n_params` | `int` | Number of optimizable parameters. |
 | `problem` | `ContinuousProblem` | The wrapped problem instance. |
 | `penalty_fn` | `Callable \| None` | The wrapped problem's penalty function, or `None` if the problem does not expose one. Update it via `set_penalty_fn(fn)`. |
+| `power_thresholds` | `dict[str, float] \| None` | Per-group power thresholds (`hard`, `soft`, `detector`) for problems that opt into the penalty contract, or `None`. Constants; do not change across evaluations. |
 
 ### Budget Tracking
 
@@ -397,6 +455,9 @@ bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
 | `best_loss` | `float \| None` | Lowest loss observed. `None` before the first evaluation. |
 | `best_params` | `Array \| None` | Raw parameters at `best_loss` (may be in unbounded space). |
 | `best_params_bounded` | `Array \| None` | Best parameters mapped to bounded space via the active mapping (custom mapping if configured, otherwise sigmoid). **Use this for final output.** |
+| `best_eval_index` | `int \| None` | Index into the loss history holding the best loss, or `None` before the first improvement. |
+| `best_batch_index` | `int \| None` | Within-batch index of the best loss when it came from a batched evaluation, or `None` for single-point evals. |
+| `best_is_feasible` | `bool \| None` | Feasibility of the best-loss point, or `None` when the `is_feasible` save token was never enabled, no evaluation has improved yet, or the best point came from a non-aux evaluation. Uses the physical `power <= threshold` check, so it stays meaningful even when the penalty is disabled with `zero_penalty`. For batched best losses, the feasibility of the winning batch element is returned when `batched_is_feasible` storage is on; otherwise the per-call reduced entry is used. |
 
 ### Current State
 
@@ -417,6 +478,15 @@ These properties return **copies** to prevent external mutation.
 | `params_history` | `list` | All recorded parameter vectors (raw space, i.e. as it was given to the `Objective`). |
 | `params_history_bounded` | `list` | Params history mapped to bounded space. |
 | `time_steps` | `list[float]` | Elapsed time at each recorded evaluation. |
+| `sensitivity_loss_history` | `list` | Per-eval unpenalised sensitivity loss (aux evals only, when `sensitivity_loss` or `batched_sensitivity_loss` is enabled). |
+| `penalty_history` | `list` | Per-eval summed penalty (aux evals only, when `penalty` or `batched_penalty` is enabled). |
+| `is_feasible_history` | `list` | Per-eval physical feasibility flag (aux evals only, when `is_feasible` or `batched_is_feasible` is enabled). |
+| `violations_history` | `list` | Per-eval per-constraint violation arrays (aux evals only, when `violations` or `batched_violations` is enabled). |
+| `power_hard_history` | `list` | Per-eval hard-group power arrays (aux evals only, when `power_values` or `batched_power_values` is enabled). |
+| `power_soft_history` | `list` | Per-eval soft-group power arrays (aux evals only, when `power_values` or `batched_power_values` is enabled). |
+| `power_detector_history` | `list` | Per-eval detector-group power arrays (aux evals only, when `power_values` or `batched_power_values` is enabled). |
+
+The aux histories are aligned with the standard histories by index. Non-aux evaluations (`value`, `grad`, `hessian`, `vmap_*`) do not append to them, so an aux history may be shorter than `loss_history` when a run mixes aux and non-aux calls.
 
 ### Reduced History
 
