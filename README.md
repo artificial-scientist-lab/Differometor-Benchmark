@@ -1,3 +1,6 @@
+> [!IMPORTANT]  
+> **BETA RELEASE:** This repository is currently in beta. The official competition will start on **July ~6**.
+
 # Differometor Benchmark
 
 A benchmarking framework for optimization algorithms on gravitational-wave detector design problems, built on top of the [Differometor](https://github.com/artificial-scientist-lab/Differometor) simulator.
