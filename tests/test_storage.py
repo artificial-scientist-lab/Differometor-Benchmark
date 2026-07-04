@@ -17,6 +17,8 @@ from dfbench.core.storage import (
     RunMetadata,
     RunPathResolver,
     RunState,
+    RunStateValidationException,
+    validate_run_state,
 )
 from dfbench.core.storage.backends import StorageBackend
 from dfbench.core.storage.serializers import CheckpointSerializer
@@ -181,7 +183,7 @@ class TestRunPathResolver:
         )
         assert p.name == "voyager_adam_gd_2026-01-01_00-00-00.npz"
         assert "time100s_evals1000" in p.parts
-        assert "lr0.1" in p.parts
+        assert "adam_gd_lr0.1" in p.parts
 
     def test_unlimited_budget(self):
         r = RunPathResolver()
@@ -322,3 +324,373 @@ class TestSerializerExtensionSync:
         state = _make_state()
         path = manager.save(state)
         assert path.suffix == ".json"
+
+
+# ---------------------------------------------------------------------
+# RunState invariants (#2)
+# ---------------------------------------------------------------------
+
+
+def _mutate(state: RunState, **kw) -> RunState:
+    """Return a shallow copy of ``state`` with the given fields replaced."""
+    import dataclasses as dc
+
+    return dc.replace(state, **kw)
+
+
+class TestValidateRunState:
+    # --- baseline -------------------------------------------------------
+
+    def test_valid_state_passes_strict(self):
+        report = validate_run_state(_make_state(), strict=True)
+        assert report.ok
+        assert report.errors == []
+
+    def test_valid_state_passes_non_strict(self):
+        report = validate_run_state(_make_state(), strict=False)
+        assert report.ok
+
+    def test_empty_state_is_valid(self):
+        """eval_count==0, all histories empty, best_loss=inf is legal."""
+        state = RunState(
+            loss_history=np.array([], dtype=object),
+            grad_history=np.array([], dtype=object),
+            hessian_history=np.array([], dtype=object),
+            params_history=np.array([], dtype=object),
+            eval_type_history=np.array([], dtype=object),
+            time_steps=np.array([], dtype=object),
+            eval_count=0,
+            best_loss=float("inf"),
+            best_params=np.array([], dtype=np.float64),
+            improvement_count=0,
+            evals_since_improvement=0,
+            log_call_count=0,
+            eval_type_counts={},
+            metadata=RunMetadata(),
+        )
+        report = validate_run_state(state)
+        assert report.ok, [str(e) for e in report.errors]
+
+    def test_legacy_reduced_state_is_valid(self):
+        """RunData.to_run_state drops grad/hessian/eval_type to empty and
+        zeroes improvement/log_call counters. That shape must validate."""
+        state = RunState(
+            loss_history=np.array([1.0, 2.0], dtype=object),
+            grad_history=np.array([], dtype=object),
+            hessian_history=np.array([], dtype=object),
+            params_history=np.array(
+                [np.array([0.0, 0.0]), np.array([1.0, 1.0])], dtype=object
+            ),
+            eval_type_history=np.array([], dtype=object),
+            time_steps=np.array([0.0, 0.1], dtype=object),
+            eval_count=2,
+            best_loss=1.0,
+            best_params=np.array([0.0, 0.0], dtype=np.float64),
+            improvement_count=0,
+            evals_since_improvement=0,
+            log_call_count=0,
+            eval_type_counts={},
+            metadata=RunMetadata(),
+        )
+        report = validate_run_state(state)
+        assert report.ok, [str(e) for e in report.errors]
+
+    # --- Tier A: structural --------------------------------------------
+
+    def test_A1_negative_eval_count(self):
+        s = _mutate(_make_state(), eval_count=-1)
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A1" for e in r.errors)
+
+    def test_A1_float_eval_count(self):
+        s = _mutate(_make_state(), eval_count=5.0)
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A1" for e in r.errors)
+
+    def test_A2_loss_history_wrong_type(self):
+        s = _mutate(_make_state(), loss_history=[1.0, 0.5, 0.3, 0.2, 0.1])
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A2" for e in r.errors)
+
+    def test_A2_ndarray_histories_are_allowed(self):
+        """NumPy collapses uniform-shape object arrays to N-D numeric
+        arrays (e.g. five (2,) gradients → shape (5, 2)). The contract is
+        "first axis is the time axis", not strictly 1-D, so this is legal."""
+        s = _mutate(
+            _make_state(),
+            grad_history=np.zeros((5, 2), dtype=np.float64),
+        )
+        r = validate_run_state(s)
+        # A2 must pass; the only error, if any, would be from elsewhere.
+        assert all(e.invariant != "A2" for e in r.errors)
+
+    def test_A3_history_length_mismatch(self):
+        s = _mutate(
+            _make_state(),
+            time_steps=np.array([0.0, 0.1, 0.2], dtype=object),  # len 3, eval_count 5
+        )
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A3" for e in r.errors)
+
+    def test_A3_empty_history_is_allowed(self):
+        """A disabled history (empty array) must not trip A3."""
+        s = _mutate(
+            _make_state(),
+            grad_history=np.array([], dtype=object),
+        )
+        r = validate_run_state(s)
+        assert r.ok, [str(e) for e in r.errors]
+
+    def test_A4_best_params_2d(self):
+        s = _mutate(
+            _make_state(),
+            best_params=np.zeros((2, 2), dtype=np.float64),
+        )
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A4" for e in r.errors)
+
+    def test_A5_eval_type_counts_non_int_key(self):
+        s = _mutate(_make_state(), eval_type_counts={"1": 5})
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A5" for e in r.errors)
+
+    def test_A5_eval_type_counts_negative_value(self):
+        s = _mutate(_make_state(), eval_type_counts={1: -5})
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A5" for e in r.errors)
+
+    def test_A5_eval_type_counts_wrong_type(self):
+        s = _mutate(_make_state(), eval_type_counts=None)
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A5" for e in r.errors)
+
+    def test_A6_metadata_not_runmetadata(self):
+        s = _mutate(_make_state(), metadata={"problem_name": "x"})
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A6" for e in r.errors)
+
+    def test_A7_negative_improvement_count(self):
+        s = _mutate(_make_state(), improvement_count=-1)
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A7" for e in r.errors)
+
+    def test_A7_negative_log_call_count(self):
+        s = _mutate(_make_state(), log_call_count=-2)
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "A7" for e in r.errors)
+
+    # --- Tier B: semantic (skipped when strict=False) ------------------
+
+    def test_B1_best_loss_inf_with_recorded_loss(self):
+        """eval_count>0 with a real loss recorded but best_loss=inf is wrong."""
+        s = _mutate(_make_state(eval_count=3), best_loss=float("inf"))
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "B1" for e in r.errors)
+
+    def test_B1_best_loss_finite_without_recorded_loss(self):
+        """best_loss finite but loss_history is all-NaN/empty is wrong."""
+        s = RunState(
+            loss_history=np.array([np.nan], dtype=object),
+            grad_history=np.array([], dtype=object),
+            hessian_history=np.array([], dtype=object),
+            params_history=np.array([], dtype=object),
+            eval_type_history=np.array([], dtype=object),
+            time_steps=np.array([0.0], dtype=object),
+            eval_count=1,
+            best_loss=0.5,
+            best_params=np.array([], dtype=np.float64),
+            improvement_count=0,
+            evals_since_improvement=0,
+            log_call_count=0,
+            eval_type_counts={},
+            metadata=RunMetadata(),
+        )
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "B1" for e in r.errors)
+
+    def test_B1_inf_best_loss_legal_for_grad_only_evals(self):
+        """A hessian-only / grad-only call increments eval_count and appends
+        NaN to loss_history without updating best_loss. This is legal."""
+        s = RunState(
+            loss_history=np.array([np.nan], dtype=object),
+            grad_history=np.array([np.array([0.1, 0.2])], dtype=object),
+            hessian_history=np.array([np.eye(2)], dtype=object),
+            params_history=np.array([np.array([0.0, 0.0])], dtype=object),
+            eval_type_history=np.array([2], dtype=object),  # grad-only
+            time_steps=np.array([0.0], dtype=object),
+            eval_count=1,
+            best_loss=float("inf"),
+            best_params=np.array([], dtype=np.float64),
+            improvement_count=0,
+            evals_since_improvement=1,
+            log_call_count=1,
+            eval_type_counts={2: 1},
+            metadata=RunMetadata(),
+        )
+        r = validate_run_state(s)
+        assert r.ok, [str(e) for e in r.errors]
+
+    def test_B2_best_loss_drift_is_the_headline_check(self):
+        """best_loss=0.05 but nanmin(loss_history)=0.1 → must be caught."""
+        s = _mutate(_make_state(eval_count=5), best_loss=0.05)
+        r = validate_run_state(s)
+        assert not r.ok
+        assert any(e.invariant == "B2" for e in r.errors), [str(e) for e in r.errors]
+
+    def test_B2_handles_batched_loss_entries(self):
+        """Batched loss entries reduce via nanmin before comparing."""
+        s = RunState(
+            loss_history=np.array(
+                [np.array([1.0, 0.5, 0.3]), np.array([0.2, 0.1, 0.4])],
+                dtype=object,
+            ),
+            grad_history=np.array([], dtype=object),
+            hessian_history=np.array([], dtype=object),
+            params_history=np.array([np.zeros(2), np.ones(2)], dtype=object),
+            eval_type_history=np.array([], dtype=object),
+            time_steps=np.array([0.0, 0.1], dtype=object),
+            eval_count=2,
+            best_loss=0.1,
+            best_params=np.ones(2),
+            improvement_count=0,
+            evals_since_improvement=0,
+            log_call_count=0,
+            eval_type_counts={},
+            metadata=RunMetadata(),
+        )
+        r = validate_run_state(s)
+        assert r.ok, [str(e) for e in r.errors]
+
+    def test_B4_call_count_drift(self):
+        s = _mutate(_make_state(), eval_type_counts={1: 5, 3: 1})  # sum=6 != log=5
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "B4" for e in r.errors)
+
+    def test_B5_improvement_exceeds_calls(self):
+        s = _mutate(_make_state(), improvement_count=99)
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "B5" for e in r.errors)
+
+    def test_B6_stagnation_exceeds_evals(self):
+        s = _mutate(_make_state(eval_count=5), evals_since_improvement=99)
+        r = validate_run_state(s)
+        assert not r.ok and any(e.invariant == "B6" for e in r.errors)
+
+    # --- strict vs non-strict ------------------------------------------
+
+    def test_strict_false_skips_b_tier(self):
+        """A state failing only B2 must pass under strict=False."""
+        s = _mutate(_make_state(eval_count=5), best_loss=0.05)  # B2 violation
+        r_loose = validate_run_state(s, strict=False)
+        assert r_loose.ok, [str(e) for e in r_loose.errors]
+        r_strict = validate_run_state(s, strict=True)
+        assert not r_strict.ok
+
+    # --- aggregation ----------------------------------------------------
+
+    def test_collects_multiple_errors(self):
+        """A state failing both A3 and B2 reports both in one pass."""
+        s = _mutate(
+            _mutate(_make_state(eval_count=5), best_loss=0.05),  # B2
+            time_steps=np.array([0.0, 0.1, 0.2], dtype=object),  # A3
+        )
+        r = validate_run_state(s)
+        assert not r.ok
+        invs = {e.invariant for e in r.errors}
+        assert "A3" in invs and "B2" in invs
+        assert len(r.errors) >= 2
+
+    # --- raise_if_invalid ----------------------------------------------
+
+    def test_raise_if_invalid_raises_with_errors(self):
+        s = _mutate(_make_state(eval_count=5), best_loss=0.05)
+        r = validate_run_state(s)
+        with pytest.raises(RunStateValidationException) as exc_info:
+            r.raise_if_invalid()
+        assert len(exc_info.value.errors) >= 1
+        assert any(e.invariant == "B2" for e in exc_info.value.errors)
+
+    def test_raise_if_invalid_noop_when_ok(self):
+        validate_run_state(_make_state()).raise_if_invalid()  # must not raise
+
+
+# ---------------------------------------------------------------------
+# CheckpointManager validation gates (#2)
+# ---------------------------------------------------------------------
+
+
+class TestCheckpointManagerValidation:
+    def _manager(self, tmp_path, **kw) -> CheckpointManager:
+        return CheckpointManager(
+            backend=LocalFilesystemBackend(root=tmp_path),
+            resolver=RunPathResolver(root=str(tmp_path)),
+            **kw,
+        )
+
+    def test_save_rejects_invalid_state(self, tmp_path):
+        manager = self._manager(tmp_path)
+        s = _mutate(_make_state(eval_count=5), best_loss=0.05)  # B2 violation
+        with pytest.raises(RunStateValidationException, match="B2"):
+            manager.save(s)
+        # Nothing was written.
+        assert not list(tmp_path.rglob("*.npz"))
+
+    def test_load_rejects_tampered_artifact(self, tmp_path):
+        """Save a valid state with validation off, mutate the bytes,
+        reload with validation on → must reject."""
+        manager = self._manager(tmp_path, validate_on_save=False)
+        valid = _make_state()
+        path = manager.save(valid)
+
+        # Tamper: load bytes, break B2, write back without going through
+        # the manager. We do this by re-serializing a bad state directly.
+        bad = _mutate(valid, best_loss=0.05)
+        tampered_bytes = NpzCheckpointSerializer().serialize(bad)
+        LocalFilesystemBackend(root=tmp_path).save_bytes(path, tampered_bytes)
+
+        with pytest.raises(RunStateValidationException, match="B2"):
+            manager.load(path)
+
+    def test_load_succeeds_when_validation_disabled(self, tmp_path):
+        manager = self._manager(
+            tmp_path, validate_on_save=False, validate_on_load=False
+        )
+        bad = _mutate(_make_state(eval_count=5), best_loss=0.05)
+        path = manager.save(bad)
+        loaded = manager.load(path)  # no raise
+        assert loaded.eval_count == 5
+
+    def test_save_load_round_trip_valid_state(self, tmp_path):
+        manager = self._manager(tmp_path)
+        s = _make_state()
+        path = manager.save(s)
+        loaded = manager.load(path)
+        assert loaded.eval_count == s.eval_count
+        assert manager.last_checkpoint_eval == s.eval_count
+
+    def test_legacy_minimal_npz_loads_with_validation_off(self, tmp_path):
+        """The pre-invariant legacy NPZ (no metadata/version, missing keys)
+        must still load when the organizer disables load-time validation."""
+        import io
+
+        buf = io.BytesIO()
+        np.savez_compressed(
+            buf,
+            loss_history=np.array([1.0, 2.0], dtype=object),
+            grad_history=np.array([], dtype=object),
+            hessian_history=np.array([], dtype=object),
+            params_history=np.array([], dtype=object),
+            eval_type_history=np.array([], dtype=object),
+            time_steps=np.array([0.0, 0.1], dtype=object),
+            eval_count=np.int64(2),
+            best_loss=np.float64(1.0),
+            best_params=np.array([], dtype=np.float64),
+            improvement_count=np.int64(0),
+            evals_since_improvement=np.int64(0),
+        )
+        path = tmp_path / "legacy.npz"
+        LocalFilesystemBackend(root=tmp_path).save_bytes(path, buf.getvalue())
+
+        manager = self._manager(tmp_path, validate_on_load=False)
+        loaded = manager.load(path)
+        assert loaded.eval_count == 2
