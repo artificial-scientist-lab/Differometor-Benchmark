@@ -145,7 +145,7 @@ For advanced combinations (gradients, Hessians, eval types, full batched arrays)
 | `"batched_param"` | Store full `(batch, n_params)` parameter arrays |
 | `"batched"` | Convenience alias expanding to all four `batched_*` tokens above |
 
-Aux diagnostics tokens are recorded by the `*_aux` evaluation methods on problems that opt into the power-penalty contract (`ConstrainedVoyagerProblem`, `UIFOProblem`). Each token controls one aux field, so enabling `is_feasible` does not force storing the bulky `power_values` arrays.
+Aux diagnostics tokens are recorded by the `*_aux` evaluation methods, and also by the standard loss-bearing methods (`value`, `value_and_grad`, `vmap_value`, `vmap_value_and_grad`, `value_grad_and_hessian`, `vmap_value_grad_and_hessian`) when auto-logging is active. Auto-logging turns on when at least one aux token is in the `save` list and the problem opts into the power-penalty contract (`ConstrainedVoyagerProblem`, `UIFOProblem`); the standard methods then run the aux objective in the same forward pass and populate the aux histories without changing their return signatures (see [Auto-logging aux](#auto-logging-aux-from-the-standard-methods)). Each token controls one aux field, so enabling `is_feasible` does not force storing the bulky `power_values` arrays.
 
 | Token | Effect |
 |-------|--------|
@@ -246,6 +246,26 @@ obj.vmap_value_and_grad_aux(params_batch) # → (Array[batch], Array[batch, n_pa
 - The aux methods raise `RuntimeError` on problems that do not expose `objective_function_aux` (for example `VoyagerProblem`, `VoyagerTuningProblem`, or any non-optical `ContinuousProblem`).
 
 Warmup helpers `warmup_value_aux`, `warmup_value_and_grad_aux`, `warmup_vmap_value_aux`, and `warmup_vmap_value_and_grad_aux` compile the aux callables before `start_logging()`. On problems without an aux objective they are a no-op (with a notice at `verbose >= 1`) rather than raising, so an algorithm that unconditionally warms up aux does not break on a non-constrained problem.
+
+### Auto-logging aux from the standard methods
+
+When one or more aux save tokens are enabled and the problem exposes `objective_function_aux`, the standard loss-bearing methods (`value`, `value_and_grad`, `vmap_value`, `vmap_value_and_grad`, `value_grad_and_hessian`, `vmap_value_grad_and_hessian`) run the aux objective in the same forward pass and record the enabled aux diagnostics. No code change is needed in the optimization loop: a plain `obj.value(params)` call populates `is_feasible_history`, `sensitivity_loss_history`, and so on, in addition to `loss_history`.
+
+This rebinds the internal loss-bearing callables to the aux variants at bind time, so the aux pytree comes out of the same simulation that produced the loss. There is no second forward pass. The returned values keep their usual shapes (`value` still returns a scalar, `value_and_grad` still returns `(loss, grad)`); the aux pytree is stashed internally and fed to `_log_aux` without changing the public signatures.
+
+Grad-only and Hessian-only calls (`grad`, `hessian`, `vmap_grad`, `vmap_hessian`) do not compute a loss, so they have no aux to record. They append `None` placeholders to the enabled aux histories so the aux histories stay length-aligned with `loss_history`. `best_is_feasible` and the aux history properties treat `None` entries as missing.
+
+Auto-logging is active only when both conditions hold: at least one aux token is in the `save` list, and the problem opts into the power-penalty contract. On problems without an aux objective, or when no aux token is enabled, the standard methods use the scalar primal and the aux histories stay empty, so non-aux runs pay no overhead. Toggling save tokens or calling `set_penalty_fn` (which retraces) re-evaluates the condition, so auto-logging stays in sync after a penalty swap.
+
+```python
+obj = Objective(problem, save=["is_feasible"])
+obj.start_logging()
+# Plain loop; is_feasible_history fills up alongside loss_history.
+while not obj.budget_exceeded:
+    loss, grad = obj.value_and_grad(params)
+    params = params - 0.1 * grad
+print(obj.best_is_feasible)
+```
 
 ### Callable shorthand
 
