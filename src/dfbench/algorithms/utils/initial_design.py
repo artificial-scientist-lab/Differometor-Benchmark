@@ -10,7 +10,6 @@ def create_initial_design(
     random_seed: int | None = 42,
     sampler: Literal["sobol", "uniform", "prior"] = "sobol",
 ) -> torch.Tensor:
-
     match sampler:
         case "sobol":
             # Generate initial Sobol samples
