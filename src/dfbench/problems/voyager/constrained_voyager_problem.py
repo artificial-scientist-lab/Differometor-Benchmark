@@ -11,9 +11,10 @@ from differometor.utils import (
     calculate_powers,
 )
 
-from ..base_problem import OpticalSetupProblem
+from ..base_problem import OpticalSetupProblem, register_problem
 
 
+@register_problem
 class ConstrainedVoyagerProblem(OpticalSetupProblem):
     """Voyager optimization with realistic 3-noise model and power constraints.
 
@@ -45,6 +46,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
         super().__init__(name="voyager_constrained", n_frequencies=n_frequencies)
         if power_penalty_fn is not None:
             self._power_penalty_fn = power_penalty_fn
+        self._bounds_overrides = bounds_overrides
 
         ### Calculate the target sensitivity ###
         # --------------------------------------#
@@ -105,9 +107,6 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
                 for pair in self._optimization_pairs
             ]
         ).T
-
-        # abstract for pure objective_function
-        bounds = self._bounds  # noqa: F841
 
         # build the three modulation setups and store as instance attributes
         # Use the setups already created above
@@ -216,3 +215,13 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
         )  # Voyager uses homodyne detection
 
         return sensitivities
+
+    def to_spec(self) -> dict:
+        """Return a serializable spec sufficient to rebuild this problem."""
+        spec = self._base_spec()
+        spec["type"] = "ConstrainedVoyagerProblem"
+        if self._bounds_overrides:
+            spec["bounds_overrides"] = {
+                k: [float(v[0]), float(v[1])] for k, v in self._bounds_overrides.items()
+            }
+        return spec

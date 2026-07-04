@@ -14,6 +14,7 @@ The framework provides a standardised `Objective` wrapper that sits between ever
 | [Installation](Installation) | Environment setup with `uv` or `pip`, GPU support |
 | [Objective API Reference](Objective-API-Reference) | Complete reference for the `Objective` wrapper class |
 | [Problems](Problems) | Available optimization problems and how they work |
+| [Storage & Checkpointing](Storage-and-Checkpointing) | Modular checkpointing, storage backends, and run reconstruction (organizer-only; submitters do not need this, `Objective` handles saving internally) |
 | [Algorithms](Algorithms) | Catalogue of built-in algorithms and their parameters |
 | [Implementing a New Algorithm](Implementing-a-New-Algorithm) | Step-by-step tutorial for contributors |
 | [Benchmarking](Benchmarking) | Running benchmarks, metrics, and result analysis |

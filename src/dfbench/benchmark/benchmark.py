@@ -24,6 +24,7 @@ Usage:
 from __future__ import annotations
 
 import csv
+import io
 import json
 import numpy as np
 import jax.numpy as jnp
@@ -34,8 +35,16 @@ from typing import Any
 from jaxtyping import Array, Float
 
 from dfbench import Objective
-from dfbench.core.problem import ContinuousProblem
+from dfbench.core.problem import ContinuousProblem, build_problem_from_spec
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
+from dfbench.core.storage import (
+    LocalFilesystemBackend,
+    NpzRunCollectionSerializer,
+    RunCollectionSerializer,
+    RunMetadata,
+    RunState,
+    StorageBackend,
+)
 from dfbench.benchmark.metrics import (
     run_min_loss,
     run_has_success,
@@ -119,6 +128,90 @@ class RunData:
             if best_params is not None
             else np.array([]),
             eval_count=obj.eval_count,
+        )
+
+    @classmethod
+    def from_run_state(cls, state: RunState) -> "RunData":
+        """Build a :class:`RunData` from a loaded :class:`RunState`.
+
+        The benchmark metrics only need the reduced (non-batched) loss /
+        params histories plus timing. This conversion bridges the
+        canonical storage contract to the metric-evaluation layer.
+        """
+        loss = np.asarray(state.loss_history, dtype=object)
+        # Reduce batched losses to per-step minima (matches loss_history_reduced)
+        loss_reduced = np.array(
+            [
+                float(np.nanmin(np.asarray(step)))
+                if np.asarray(step).ndim > 0
+                else float(step)
+                for step in loss.tolist()
+            ],
+            dtype=np.float32,
+        )
+        # Best params come from the state directly (already bounded at save time)
+        best_params = (
+            np.asarray(state.best_params, dtype=np.float64)
+            if state.best_params.size > 0
+            else np.array([])
+        )
+        # Params history: reduce batched entries to the argmin-of-loss representative
+        params = np.asarray(state.params_history, dtype=object)
+        params_reduced = []
+        for i, step_params in enumerate(params.tolist()):
+            arr = np.asarray(step_params)
+            if arr.ndim > 1:  # batched
+                step_loss = np.asarray(loss[i]) if i < len(loss) else None
+                if step_loss is not None and step_loss.ndim > 0:
+                    idx = int(np.nanargmin(step_loss))
+                else:
+                    idx = 0
+                params_reduced.append(arr[idx])
+            elif arr.ndim == 1:
+                params_reduced.append(arr)
+            else:
+                params_reduced.append(np.array([]))
+        return cls(
+            loss_history=loss_reduced,
+            time_steps=np.asarray(state.time_steps, dtype=np.float32),
+            params_history=np.array(params_reduced, dtype=object)
+            if params_reduced
+            else np.array([], dtype=object),
+            best_loss=float(state.best_loss),
+            best_params=best_params,
+            eval_count=int(state.eval_count),
+        )
+
+    def to_run_state(self, metadata=None) -> RunState:
+        """Build a :class:`RunState` from this :class:`RunData`.
+
+        Used when saving benchmark data: the benchmark extracts
+        :class:`RunData` (the reduced view used by metrics) and this
+        wraps it in the canonical storage contract for serialization.
+        Histories not tracked by :class:`RunData` (gradients, Hessians,
+        eval types) are stored as empty arrays.
+        """
+        from dfbench.core.storage.state import RunMetadata
+
+        return RunState(
+            loss_history=np.asarray(self.loss_history, dtype=object),
+            grad_history=np.array([], dtype=object),
+            hessian_history=np.array([], dtype=object),
+            params_history=np.asarray(self.params_history, dtype=object),
+            eval_type_history=np.array([], dtype=object),
+            time_steps=np.asarray(self.time_steps, dtype=object),
+            eval_count=int(self.eval_count),
+            best_loss=float(self.best_loss),
+            best_params=(
+                np.asarray(self.best_params, dtype=np.float64)
+                if self.best_params.size > 0
+                else np.array([], dtype=np.float64)
+            ),
+            improvement_count=0,
+            evals_since_improvement=0,
+            log_call_count=0,
+            eval_type_counts={},
+            metadata=metadata or RunMetadata(),
         )
 
 
@@ -242,6 +335,8 @@ class Benchmark:
         max_time: float = 300.0,
         n_time_samples: int = 100,
         random_baseline_loss: float | None = None,
+        storage_backend: StorageBackend | None = None,
+        run_collection_serializer: RunCollectionSerializer | None = None,
     ):
         """Initialize the benchmark suite.
 
@@ -256,6 +351,16 @@ class Benchmark:
                 If None, AUC normalization is disabled.
             random_seed: Master random seed for reproducibility. If provided, generates
                 deterministic per-run seeds.
+            storage_backend: Where benchmark run data (NPZ/JSON) is
+                physically stored. Defaults to a local filesystem backend
+                (current working directory). Swapping this redirects all
+                benchmark artifacts without code changes here.
+            run_collection_serializer: How the multi-run collection for
+                each algorithm is encoded on disk. Defaults to
+                :class:`NpzRunCollectionSerializer`, which stores each
+                run as a full self-describing :class:`RunState` (with
+                embedded ``problem_spec``). Swapping this changes the
+                on-disk format for benchmark data.
         """
         self._problem = problem
         self._success_loss = success_loss
@@ -265,6 +370,12 @@ class Benchmark:
         self._n_time_samples = n_time_samples
         self._random_baseline_loss = random_baseline_loss
         self._random_seed = random_seed
+        self._storage_backend: StorageBackend = (
+            storage_backend or LocalFilesystemBackend()
+        )
+        self._collection_serializer: RunCollectionSerializer = (
+            run_collection_serializer or NpzRunCollectionSerializer()
+        )
 
         # Generate time sample points (excluding 0, evenly spaced up to max_time)
         # E.g., n_time_samples=10, max_time=30 -> [3, 6, 9, 12, 15, 18, 21, 24, 27, 30]
@@ -603,46 +714,83 @@ class Benchmark:
         save_dir.mkdir(parents=True, exist_ok=True)
         return save_dir
 
+    def _problem_spec(self) -> dict | None:
+        """Return the problem's reconstructive spec as a typed-container dict.
+
+        Produces a :class:`~dfbench.core.problem.ProblemSpec`-shaped dict
+        (``{"type", "version", "params"}``) when the problem implements
+        ``to_problem_spec``; falls back to the legacy ``to_spec()`` dict
+        for older problem classes. Returns ``None`` if neither is
+        available or the problem fails to describe itself.
+        """
+        spec_fn = getattr(self._problem, "to_problem_spec", None)
+        if callable(spec_fn):
+            try:
+                return spec_fn().to_dict()
+            except Exception:
+                pass
+        legacy = getattr(self._problem, "to_spec", None)
+        if callable(legacy):
+            try:
+                return legacy()
+            except Exception:
+                return None
+        return None
+
     def _save_algorithm_run_data(
         self,
         algo_data: AlgorithmRunData,
         save_dir: Path,
     ) -> Path:
-        """Save one algorithm's run data to NPZ file."""
+        """Save one algorithm's runs as a self-describing collection.
+
+        Each run is wrapped in a :class:`RunState` (with embedded
+        :class:`RunMetadata` including the ``problem_spec``) and serialized
+        via :attr:`_collection_serializer`. The backend writes the bytes
+        atomically.
+        """
         safe_name = algo_data.algorithm_name.replace("/", "_").replace(" ", "_")
-        npz_path = save_dir / f"{safe_name}.npz"
+        ext = getattr(self._collection_serializer, "extension", "npz")
+        file_path = save_dir / f"{safe_name}.{ext}"
 
-        # Extract arrays from runs
-        np.savez(
-            npz_path,
+        # Wrap each RunData in a RunState with full metadata
+        problem_name = getattr(self._problem, "name", "problem")
+        spec = self._problem_spec()
+        run_states = []
+        for run in algo_data.runs:
+            meta = RunMetadata(
+                problem_name=problem_name,
+                algorithm_name=algo_data.algorithm_name,
+                timestamp=datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+                max_time=self._max_time,
+                unbounded=False,
+            )
+            if spec is not None:
+                meta.extra["problem_spec"] = spec
+            run_states.append(run.to_run_state(metadata=meta))
+
+        data = self._collection_serializer.serialize_collection(
             algorithm_name=algo_data.algorithm_name,
-            hyperparameters=json.dumps(algo_data.hyperparameters),
-            n_runs=len(algo_data.runs),
-            loss_histories=np.array(
-                [r.loss_history for r in algo_data.runs], dtype=object
-            ),
-            time_steps_list=np.array(
-                [r.time_steps for r in algo_data.runs], dtype=object
-            ),
-            params_histories=np.array(
-                [r.params_history for r in algo_data.runs], dtype=object
-            ),
-            best_losses=np.array([r.best_loss for r in algo_data.runs]),
-            best_params_list=np.array(
-                [r.best_params for r in algo_data.runs], dtype=object
-            ),
-            eval_counts=np.array([r.eval_count for r in algo_data.runs]),
+            hyperparameters=algo_data.hyperparameters,
+            runs=run_states,
         )
+        self._storage_backend.save_bytes(file_path, data)
 
-        print(f"  Saved {len(algo_data.runs)} runs to {npz_path.name}")
-        return npz_path
+        print(f"  Saved {len(algo_data.runs)} runs to {file_path.name}")
+        return file_path
 
     def _save_metadata(
         self,
         all_run_data: list[AlgorithmRunData],
         save_dir: Path,
     ) -> None:
-        """Save metadata.json file."""
+        """Save metadata.json file via the storage backend.
+
+        Records the benchmark configuration plus the problem's
+        reconstructive ``problem_spec`` so the benchmark directory is
+        fully self-describing.
+        """
+        ext = getattr(self._collection_serializer, "extension", "npz")
         metadata = {
             "problem_name": getattr(self._problem, "name", "problem"),
             "success_loss": self._success_loss,
@@ -652,28 +800,33 @@ class Benchmark:
             "random_seed": self._random_seed,
             "random_baseline_loss": self._random_baseline_loss,
             "timestamp": datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+            "problem_spec": self._problem_spec(),
             "algorithms": [
                 {
                     "name": ad.algorithm_name,
                     "hyperparameters": ad.hyperparameters,
-                    "file": f"{ad.algorithm_name.replace('/', '_').replace(' ', '_')}.npz",
+                    "file": f"{ad.algorithm_name.replace('/', '_').replace(' ', '_')}.{ext}",
                 }
                 for ad in all_run_data
             ],
         }
 
-        with open(save_dir / "metadata.json", "w") as f:
-            json.dump(metadata, f, indent=2)
+        metadata_path = save_dir / "metadata.json"
+        self._storage_backend.save_bytes(
+            metadata_path, json.dumps(metadata, indent=2).encode("utf-8")
+        )
 
-        print(f"\nMetadata saved to: {save_dir / 'metadata.json'}")
+        print(f"\nMetadata saved to: {metadata_path}")
 
     def _load_run_data(self, data_dir: Path) -> list[AlgorithmRunData]:
-        """Load saved run data from disk.
+        """Load saved run data from disk via the storage backend.
 
-        Supports both new format (with time_steps) and legacy format (with wall_time_indices).
+        Supports the current collection format (self-describing
+        :class:`RunState` per run) and the legacy per-algorithm NPZ
+        format (with ``time_steps_list`` or ``all_wall_time_indices``).
         """
-        with open(data_dir / "metadata.json", "r") as f:
-            metadata = json.load(f)
+        metadata_bytes = self._storage_backend.load_bytes(data_dir / "metadata.json")
+        metadata = json.loads(metadata_bytes.decode("utf-8"))
 
         print(f"\nLoading run data from: {data_dir}")
         print(f"  Saved max_time: {metadata.get('max_time', 'N/A')}")
@@ -681,50 +834,62 @@ class Benchmark:
         all_run_data = []
 
         for algo_info in metadata["algorithms"]:
-            npz_path = data_dir / algo_info["file"]
+            file_path = data_dir / algo_info["file"]
             print(f"  Loading {algo_info['name']}...")
 
-            with np.load(npz_path, allow_pickle=True) as data:
-                # Check if this is new format or legacy format
-                if "time_steps_list" in data:
-                    # New format
-                    runs = self._load_new_format(data)
-                elif "all_wall_time_indices" in data:
-                    # Legacy format - convert wall_time_indices to time_steps
-                    runs = self._load_legacy_format(data, metadata)
-                else:
-                    raise ValueError(
-                        f"Unknown data format in {npz_path}, time_steps or wall_time_indices missing."
-                    )
+            data_bytes = self._storage_backend.load_bytes(file_path)
 
-                all_run_data.append(
-                    AlgorithmRunData(
-                        algorithm_name=str(data["algorithm_name"]),
-                        runs=runs,
-                        hyperparameters=algo_info.get("hyperparameters", {}),
-                    )
+            # Try the collection format first
+            try:
+                algo_name, hyperparams, run_states = (
+                    self._collection_serializer.deserialize_collection(data_bytes)
                 )
+                runs = [RunData.from_run_state(s) for s in run_states]
+            except Exception:
+                # Fall back to legacy per-algorithm NPZ format
+                runs = self._load_legacy_npz(data_bytes, metadata)
 
-        return all_run_data
-
-    def _load_new_format(self, data) -> list[RunData]:
-        """Load runs from new NPZ format."""
-        runs = []
-        n_runs = int(data["n_runs"])
-
-        for i in range(n_runs):
-            runs.append(
-                RunData(
-                    loss_history=data["loss_histories"][i],
-                    time_steps=data["time_steps_list"][i],
-                    params_history=data["params_histories"][i],
-                    best_loss=float(data["best_losses"][i]),
-                    best_params=data["best_params_list"][i],
-                    eval_count=int(data["eval_counts"][i]),
+            all_run_data.append(
+                AlgorithmRunData(
+                    algorithm_name=algo_info["name"],
+                    runs=runs,
+                    hyperparameters=algo_info.get("hyperparameters", {}),
                 )
             )
 
-        return runs
+        return all_run_data
+
+    def _load_legacy_npz(self, data_bytes: bytes, metadata: dict) -> list[RunData]:
+        """Load runs from a legacy per-algorithm NPZ file.
+
+        Handles both the ``time_steps_list`` format and the older
+        ``all_wall_time_indices`` format, converting the latter via
+        linear interpolation.
+        """
+        with np.load(io.BytesIO(data_bytes), allow_pickle=True) as data:
+            if "time_steps_list" in data:
+                runs = []
+                n_runs = int(data["n_runs"])
+                for i in range(n_runs):
+                    runs.append(
+                        RunData(
+                            loss_history=data["loss_histories"][i],
+                            time_steps=data["time_steps_list"][i],
+                            params_history=data["params_histories"][i],
+                            best_loss=float(data["best_losses"][i]),
+                            best_params=data["best_params_list"][i],
+                            eval_count=int(data["eval_counts"][i]),
+                        )
+                    )
+                return runs
+
+            if "all_wall_time_indices" in data:
+                return self._load_legacy_format(data, metadata)
+
+            raise ValueError(
+                "Unknown legacy data format: missing time_steps_list and "
+                "all_wall_time_indices."
+            )
 
     def _load_legacy_format(self, data, metadata) -> list[RunData]:
         """Load runs from legacy format and convert wall_time_indices to time_steps.
@@ -813,6 +978,32 @@ class Benchmark:
 
         return time_steps
 
+    @staticmethod
+    def reconstruct_problem(data_dir: str | Path) -> ContinuousProblem | None:
+        """Rebuild the problem that produced a benchmark directory.
+
+        Reads the ``problem_spec`` recorded in ``metadata.json`` and
+        reconstructs the problem via :func:`build_problem_from_spec`.
+        Accepts both the typed container form
+        (``{"type", "version", "params"}``) and the legacy flat form
+        (``{"type", <kwargs>}``); both are normalized via
+        :meth:`ProblemSpec.from_dict`.
+
+        Returns ``None`` if no spec was recorded (e.g. the problem did
+        not implement ``to_spec`` or the data was saved by an older
+        version).
+        """
+        data_dir = Path(data_dir)
+        metadata_path = data_dir / "metadata.json"
+        if not metadata_path.exists():
+            return None
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        spec = metadata.get("problem_spec")
+        if spec is None:
+            return None
+        return build_problem_from_spec(spec)
+
     # --------- Output ---------
 
     def _print_header(self, load_from: str | Path | None) -> None:
@@ -883,40 +1074,41 @@ class Benchmark:
         print("=" * 90)
 
     def _save_results_to_csv(self, results: list[BenchmarkResult]) -> None:
-        """Save benchmark results to CSV file."""
+        """Save benchmark results to a CSV file via the storage backend."""
         output_dir = Path("./data/benchmark_results")
-        output_dir.mkdir(parents=True, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         problem_name = getattr(self._problem, "name", "problem")
         output_path = output_dir / f"benchmark_{problem_name}_{timestamp}.csv"
 
-        with open(output_path, "w", newline="") as csvfile:
-            writer = csv.writer(csvfile)
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
 
-            # Header
-            header = ["algorithm_name", "time_sample"]
-            for fld in fields(BenchmarkResult):
-                if fld.name in ("algorithm_name", "time_samples", "n_runs"):
-                    continue
-                header.extend([f"{fld.name}_mean", f"{fld.name}_std"])
-            writer.writerow(header)
+        # Header
+        header = ["algorithm_name", "time_sample"]
+        for fld in fields(BenchmarkResult):
+            if fld.name in ("algorithm_name", "time_samples", "n_runs"):
+                continue
+            header.extend([f"{fld.name}_mean", f"{fld.name}_std"])
+        writer.writerow(header)
 
-            # Data rows
-            for result in results:
-                for i, t in enumerate(self._time_samples):
-                    row = [result.algorithm_name, float(t)]
+        # Data rows
+        for result in results:
+            for i, t in enumerate(self._time_samples):
+                row = [result.algorithm_name, float(t)]
 
-                    for fld in fields(BenchmarkResult):
-                        if fld.name in ("algorithm_name", "time_samples", "n_runs"):
-                            continue
-                        metric = getattr(result, fld.name)
+                for fld in fields(BenchmarkResult):
+                    if fld.name in ("algorithm_name", "time_samples", "n_runs"):
+                        continue
+                    metric = getattr(result, fld.name)
 
-                        if isinstance(metric, SingleMetric):
-                            row.extend([float(metric.value[i]), 0.0])
-                        elif isinstance(metric, AggregateMetric):
-                            row.extend([float(metric.mean[i]), float(metric.std[i])])
+                    if isinstance(metric, SingleMetric):
+                        row.extend([float(metric.value[i]), 0.0])
+                    elif isinstance(metric, AggregateMetric):
+                        row.extend([float(metric.mean[i]), float(metric.std[i])])
 
-                    writer.writerow(row)
+                writer.writerow(row)
+
+        self._storage_backend.save_bytes(output_path, buffer.getvalue().encode("utf-8"))
 
         print(f"\nResults saved to: {output_path}")

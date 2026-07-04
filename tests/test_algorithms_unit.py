@@ -387,7 +387,7 @@ class TestDogleg:
             mock_problem,
             max_evals=30,
             max_time=60.0,
-            save_hessian_history=True,
+            save=["hessian"],
         )
         Dogleg().optimize(obj, random_seed=42)
         assert len(obj.hessian_history) > 0

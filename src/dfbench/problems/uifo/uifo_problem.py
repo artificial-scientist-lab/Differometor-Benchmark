@@ -11,7 +11,7 @@ from differometor.utils import (
     calculate_powers,
 )
 
-from ..base_problem import OpticalSetupProblem
+from ..base_problem import OpticalSetupProblem, register_problem
 
 
 # ---------------------------------------------------------------------------
@@ -163,6 +163,7 @@ def topology_from_string(
     return centers, boundaries
 
 
+@register_problem
 class UIFOProblem(OpticalSetupProblem):
     """UIFO (Quasi-Universal Interferometer) optimization problem.
 
@@ -270,6 +271,7 @@ class UIFOProblem(OpticalSetupProblem):
         self._size = size
         self._topology_seed = topology_seed
         self._topology_string = None  # computed lazily or set below
+        self._bounds_overrides = bounds_overrides
 
         ### Calculate the target sensitivity using Voyager reference ###
         # -------------------------------------------------------------#
@@ -386,9 +388,6 @@ class UIFOProblem(OpticalSetupProblem):
             upper_bounds.append(property_bounds[property_name][1])
         self._bounds = np.array([lower_bounds, upper_bounds])
 
-        # abstract for pure objective_function
-        bounds = self._bounds  # noqa: F841
-
         # build the three modulation setups and store as instance attributes
         self._q_arrays, *self._q_metadata = run_build_step(
             self._setup[0],
@@ -502,6 +501,24 @@ class UIFOProblem(OpticalSetupProblem):
                 self._power_penalty_fn, "__name__", str(self._power_penalty_fn)
             ),
         }
+
+    def to_spec(self) -> dict:
+        """Return a serializable spec sufficient to rebuild this problem.
+
+        Reconstruction uses the explicit ``topology_string`` (deterministic,
+        independent of the RNG used to generate the topology) plus ``size``,
+        so an equivalent problem can be rebuilt in any process without
+        relying on the original seed.
+        """
+        spec = self._base_spec()
+        spec["type"] = "UIFOProblem"
+        spec["size"] = int(self._size)
+        spec["topology"] = str(self._topology_string)
+        if self._bounds_overrides:
+            spec["bounds_overrides"] = {
+                k: [float(v[0]), float(v[1])] for k, v in self._bounds_overrides.items()
+            }
+        return spec
 
     def calculate_sensitivity(
         self,

@@ -14,9 +14,7 @@ import numpy as np
 import torch
 from dataclasses import dataclass, field
 from botorch.models import SingleTaskGP
-from botorch.acquisition import (
-    qLogExpectedImprovement as qLogEI
-)
+from botorch.acquisition import qLogExpectedImprovement as qLogEI
 from botorch.generation import MaxPosteriorSampling
 from botorch.utils.transforms import normalize
 from jaxtyping import Array, Float
@@ -119,7 +117,6 @@ class BotorchTuRBO(OptimizationAlgorithm):
         self.max_cholesky_size = float("inf")
         self.batch_size = batch_size
 
-
     def _generate_batch(
         self,
         state: TurboState,
@@ -207,7 +204,6 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
         return X_next
 
-
     def optimize(
         self,
         objective: Objective,
@@ -279,7 +275,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
         def run_turbo_instance(init_X: torch.Tensor | None = None):
             """Run a single TuRBO instance until restart is triggered or budget exhausted."""
-            
+
             train_X = create_initial_design(
                 dimensions=problem.n_params,
                 n_initial=n_initial,
@@ -290,9 +286,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
                 train_X = torch.cat([init_X, train_X], dim=0)
 
             train_Y_raw, valid_mask = evaluate_y(
-                X=train_X,
-                bounds=problem_bounds_torch,
-                obj=obj
+                X=train_X, bounds=problem_bounds_torch, obj=obj
             )
             train_Y_raw = train_Y_raw.unsqueeze(-1)
 

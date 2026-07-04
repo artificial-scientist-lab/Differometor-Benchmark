@@ -59,7 +59,6 @@ class BotorchBO(OptimizationAlgorithm):
         self.dtype = torch.float64
         self.batch_size = batch_size
 
-
     def optimize(
         self,
         objective: Objective,
@@ -137,9 +136,7 @@ class BotorchBO(OptimizationAlgorithm):
 
         # Evaluate initial samples
         train_Y_raw, valid_mask = evaluate_y(
-            X=train_X,
-            bounds=problem_bounds_torch,
-            obj=obj
+            X=train_X, bounds=problem_bounds_torch, obj=obj
         )
         train_Y_raw = train_Y_raw.unsqueeze(-1)
 

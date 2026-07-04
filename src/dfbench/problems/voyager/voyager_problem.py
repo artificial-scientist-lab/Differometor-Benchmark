@@ -10,9 +10,10 @@ from differometor.setups import voyager
 from differometor.simulate import run, run_build_step, simulate
 from differometor.utils import update_setup
 
-from ..base_problem import OpticalSetupProblem
+from ..base_problem import OpticalSetupProblem, register_problem
 
 
+@register_problem
 class VoyagerProblem(OpticalSetupProblem):
     """Voyager optimization with single-noise sensitivity.
 
@@ -39,6 +40,7 @@ class VoyagerProblem(OpticalSetupProblem):
 
         # use a predefined Voyager setup with one noise detector and two signal detectors
         self._setup, component_property_pairs = voyager()
+        self._bounds_overrides = bounds_overrides
 
         # run the simulation with the frequency as the changing parameter
         carrier, signal, noise, detector_ports, *_ = run(
@@ -111,9 +113,6 @@ class VoyagerProblem(OpticalSetupProblem):
             ]
         ).T
 
-        # abstract for pure objective_function
-        bounds = self._bounds  # noqa: F841
-
         @jax.jit
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],
@@ -174,3 +173,13 @@ class VoyagerProblem(OpticalSetupProblem):
         sensitivities = noise / jnp.abs(powers)
 
         return sensitivities
+
+    def to_spec(self) -> dict:
+        """Return a serializable spec sufficient to rebuild this problem."""
+        spec = self._base_spec()
+        spec["type"] = "VoyagerProblem"
+        if self._bounds_overrides:
+            spec["bounds_overrides"] = {
+                k: [float(v[0]), float(v[1])] for k, v in self._bounds_overrides.items()
+            }
+        return spec
