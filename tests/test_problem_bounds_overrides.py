@@ -25,6 +25,10 @@ class _StubProblem(OpticalSetupProblem):
 
     def __init__(self):
         super().__init__(name="stub", n_frequencies=10)
+        self._build_objective_function()
+
+    def _build_objective_function(self) -> None:
+        self.objective_function = lambda params: jnp.sum(params**2)
 
     @property
     def bounds(self):
@@ -33,9 +37,6 @@ class _StubProblem(OpticalSetupProblem):
     @property
     def optimization_pairs(self):
         return [("comp", "param_a"), ("comp", "param_b")]
-
-    def objective_function(self, params):
-        return jnp.sum(params**2)
 
     def calculate_sensitivity(self, optimized_parameters):
         return jnp.ones(10)

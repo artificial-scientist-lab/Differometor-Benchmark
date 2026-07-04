@@ -408,6 +408,19 @@ class UIFOProblem(OpticalSetupProblem):
             self._optimization_pairs,
         )
 
+        self._build_objective_function()
+
+        # Compute and cache topology string
+        self._topology_string = topology_to_string(
+            self._centers, self._boundaries, size
+        )
+
+    def _build_objective_function(self) -> None:
+        """(Re)build the JIT-compiled objective function.
+
+        Re-tracing picks up the current ``_power_penalty_fn`` so that
+        ``set_penalty_fn`` takes effect on subsequent evaluations.
+        """
         @jax.jit
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],
@@ -447,11 +460,6 @@ class UIFOProblem(OpticalSetupProblem):
             return sensitivity_loss + penalty
 
         self.objective_function = objective_function
-
-        # Compute and cache topology string
-        self._topology_string = topology_to_string(
-            self._centers, self._boundaries, size
-        )
 
     @property
     def optimization_pairs(self) -> list[tuple]:

@@ -129,6 +129,14 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
             self._optimization_pairs,
         )
 
+        self._build_objective_function()
+
+    def _build_objective_function(self) -> None:
+        """(Re)build the JIT-compiled objective function.
+
+        Re-tracing picks up the current ``_power_penalty_fn`` so that
+        ``set_penalty_fn`` takes effect on subsequent evaluations.
+        """
         @jax.jit
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],

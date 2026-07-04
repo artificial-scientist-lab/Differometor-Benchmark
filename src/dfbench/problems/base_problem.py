@@ -35,7 +35,7 @@ def relu_penalty(value, threshold):
 
 
 def zero_penalty(value, threshold):
-    """No penalty — disables power constraints."""
+    """No penalty: Ignores power constraints."""
     return jnp.zeros_like(value)
 
 
@@ -112,6 +112,27 @@ class OpticalSetupProblem(ContinuousProblem):
         soft = fn(powers[1].squeeze(1), SOFT_SIDE_POWER_THRESHOLD)
         det = fn(powers[2].squeeze(1), DETECTOR_POWER_THRESHOLD)
         return jnp.concatenate([hard, det, soft], axis=0)
+
+    def set_penalty_fn(self, fn: Callable) -> None:
+        """Set the penalty function and rebuild the objective function.
+
+        Updates ``_power_penalty_fn`` and re-traces the JIT-compiled
+        ``objective_function`` so the new penalty takes effect.
+
+        Must be called before the problem is wrapped in a logging
+        ``Objective`` (or before ``Objective.start_logging()``).
+        """
+        self._power_penalty_fn = fn
+        self._build_objective_function()
+
+    @abstractmethod
+    def _build_objective_function(self) -> None:
+        """(Re)build and assign the JIT-compiled ``objective_function``.
+
+        Subclasses define their closed-over objective here. Called both
+        from ``__init__`` and from ``set_penalty_fn`` so the compiled
+        function picks up the current ``_power_penalty_fn``.
+        """
 
     def _calculate_loss(self, sensitivities, reference_sensitivities, powers):
         """Calculate loss and penalties from sensitivities and power constraints."""

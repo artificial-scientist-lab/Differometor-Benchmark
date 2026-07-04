@@ -588,6 +588,39 @@ class Objective:
         self.unbounded = unbounded
         self._bind_evaluation_functions()
 
+    def set_penalty_fn(self, fn: Callable) -> None:
+        """Set the wrapped problem's penalty function and rebind JAX callables.
+
+        Forwards to ``problem.set_penalty_fn(fn)`` (which updates the
+        problem's ``_power_penalty_fn`` and re-traces its JIT-compiled
+        ``objective_function``), then rebinds this Objective's cached
+        evaluation callables so they pick up the new objective.
+
+        Must be called before ``start_logging()`` so evaluation histories
+        stay consistent.
+
+        Args:
+            fn: Callable ``fn(value, threshold) -> penalty`` applied
+                per-element to compute power-constraint violations.
+
+        Raises:
+            RuntimeError: If logging already started for the current run,
+                or if the wrapped problem does not expose ``set_penalty_fn``
+                (penalty support is opt-in on the problem side).
+        """
+        if self._start_time is not None:
+            raise RuntimeError(
+                "set_penalty_fn() must be called before start_logging() so "
+                "evaluation histories stay consistent."
+            )
+        if not hasattr(self._problem, "set_penalty_fn"):
+            raise RuntimeError(
+                f"Problem {type(self._problem).__name__} does not expose "
+                "set_penalty_fn; penalty support is opt-in on the problem side."
+            )
+        self._problem.set_penalty_fn(fn)  # type: ignore[attr-defined]
+        self._bind_evaluation_functions()
+
     def __call__(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate the objective function at given parameters.
 
@@ -618,6 +651,16 @@ class Objective:
     def problem(self) -> ContinuousProblem:
         """The underlying optimization problem."""
         return self._problem
+
+    @property
+    def penalty_fn(self) -> Callable | None:
+        """The penalty function of the wrapped problem, or ``None`` if unsupported.
+
+        Returns the problem's ``power_penalty_fn``. Use ``set_penalty_fn``
+        to update it (which also re-traces the objective and rebinds
+        this Objective's JAX callables).
+        """
+        return getattr(self._problem, "power_penalty_fn", None)
 
     # --------- Optimization Tracking Functions/Properties ---------
 
