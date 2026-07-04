@@ -33,6 +33,11 @@ written with a newer version than they understand.
 """
 
 
+def _empty_object_array() -> np.ndarray:
+    """Return an empty object-dtype array, the empty-history default."""
+    return np.array([], dtype=object)
+
+
 @dataclass
 class RunMetadata:
     """Small, human-readable descriptors for a run.
@@ -93,6 +98,14 @@ class RunState:
     All numeric histories are stored as plain ``numpy.ndarray`` (object
     dtype for ragged/batched entries). This is the single data contract
     every serializer reads from and writes to.
+
+    The aux histories (``sensitivity_loss_history``, ``penalty_history``,
+    ``is_feasible_history``, ``violations_history``, and the three
+    ``power_*_history`` fields) are populated only when the matching
+    :class:`~dfbench.core.storage.saveconfig.SaveConfig` token is enabled
+    and the run used the ``value_aux`` / ``vmap_value_aux`` methods. They
+    are kept as separate leaf arrays rather than a dict so both the NPZ
+    and JSON serializers can encode them without pickling.
     """
 
     # Aligned histories (all length == eval_count, modulo placeholders)
@@ -116,6 +129,24 @@ class RunState:
 
     # Metadata sidecar
     metadata: RunMetadata = field(default_factory=RunMetadata)
+
+    # Best-loss location (defaults: unknown for legacy checkpoints)
+    best_eval_index: int | None = None
+    best_batch_index: int | None = None
+
+    # Aux diagnostics histories (aligned with the histories above; empty
+    # when the corresponding save token was not enabled or no aux eval ran).
+    # Kept as separate leaf arrays rather than a dict so both NPZ and JSON
+    # serializers can encode them without pickling.
+    sensitivity_loss_history: np.ndarray = field(
+        default_factory=_empty_object_array
+    )
+    penalty_history: np.ndarray = field(default_factory=_empty_object_array)
+    is_feasible_history: np.ndarray = field(default_factory=_empty_object_array)
+    violations_history: np.ndarray = field(default_factory=_empty_object_array)
+    power_hard_history: np.ndarray = field(default_factory=_empty_object_array)
+    power_soft_history: np.ndarray = field(default_factory=_empty_object_array)
+    power_detector_history: np.ndarray = field(default_factory=_empty_object_array)
 
 
 # ------------------------------------------------------------------
@@ -265,6 +296,13 @@ def _check_structural(state: RunState) -> list[RunStateValidationError]:
         "params_history",
         "eval_type_history",
         "time_steps",
+        "sensitivity_loss_history",
+        "penalty_history",
+        "is_feasible_history",
+        "violations_history",
+        "power_hard_history",
+        "power_soft_history",
+        "power_detector_history",
     )
     for name in history_fields:
         arr = getattr(state, name)
@@ -373,6 +411,13 @@ def _check_aligned(
         "params_history",
         "eval_type_history",
         "time_steps",
+        "sensitivity_loss_history",
+        "penalty_history",
+        "is_feasible_history",
+        "violations_history",
+        "power_hard_history",
+        "power_soft_history",
+        "power_detector_history",
     )
     lengths: dict[str, int] = {}
     bad_shapes = {e.field for e in errs if e.invariant == "A2"}

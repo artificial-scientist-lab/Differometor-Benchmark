@@ -197,6 +197,8 @@ class UIFOProblem(OpticalSetupProblem):
     - Format: ``"<interior_chars>-<boundary_chars>"`` in row-major order.
     """
 
+    _supports_power_penalty = True
+
     def __init__(
         self,
         size: int = 3,
@@ -415,51 +417,68 @@ class UIFOProblem(OpticalSetupProblem):
             self._centers, self._boundaries, size
         )
 
+    def _eval_core(self, optimized_parameters):
+        """Shared evaluation body for the UIFO objective.
+
+        Runs the three modulation simulations, computes sensitivities and
+        per-group powers, then the loss tuple. Used by both
+        ``objective_function`` and ``objective_function_aux`` so the two
+        stay in sync after ``_build_objective_function`` re-traces them.
+        """
+        q_results = simulate(
+            **{**self._q_arrays, "optimized_parameters": optimized_parameters}
+        )
+        ampl_results = simulate(
+            **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
+        )
+        freq_results = simulate(
+            **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
+        )
+        results = [
+            (*q_results, *self._q_metadata),
+            (*ampl_results, *self._ampl_metadata),
+            (*freq_results, *self._freq_metadata),
+        ]
+
+        sensitivities = calculate_sensitivities(
+            results,
+            self._sensitivity_function,
+            self._frequencies,
+            homodyne=self._homodyne,
+        )
+        powers = calculate_powers(q_results[0], *self._q_metadata)
+        sensitivity_loss, penalty, violations = self._calculate_loss(
+            sensitivities, self._target_sensitivities, powers
+        )
+        return powers, sensitivity_loss, penalty, violations
+
     def _build_objective_function(self) -> None:
-        """(Re)build the JIT-compiled objective function.
+        """(Re)build the JIT-compiled objective and aux objective.
 
         Re-tracing picks up the current ``_power_penalty_fn`` so that
-        ``set_penalty_fn`` takes effect on subsequent evaluations.
+        ``set_penalty_fn`` takes effect on subsequent evaluations. Both
+        the plain and the aux variant close over the same ``_eval_core``
+        call so their results agree up to the returned aux dict.
         """
         @jax.jit
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],
         ) -> Float:
-            # simulate the three modulation setups
-            q_results = simulate(
-                **{**self._q_arrays, "optimized_parameters": optimized_parameters}
-            )
-            ampl_results = simulate(
-                **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
-            )
-            freq_results = simulate(
-                **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
-            )
-            results = [
-                (*q_results, *self._q_metadata),
-                (*ampl_results, *self._ampl_metadata),
-                (*freq_results, *self._freq_metadata),
-            ]
-
-            # calculate the sensitivities taking into account the three noise sources
-            sensitivities = calculate_sensitivities(
-                results,
-                self._sensitivity_function,
-                self._frequencies,
-                homodyne=self._homodyne,
-            )
-
-            # calculate the light power at all components within the setup
-            powers = calculate_powers(q_results[0], *self._q_metadata)
-
-            # calculate the loss taking into account power violations
-            sensitivity_loss, penalty, _ = self._calculate_loss(
-                sensitivities, self._target_sensitivities, powers
-            )
-
+            _, sensitivity_loss, penalty, _ = self._eval_core(optimized_parameters)
             return sensitivity_loss + penalty
 
+        @jax.jit
+        def objective_function_aux(
+            optimized_parameters: Float[Array, "{self.n_params}"],
+        ) -> tuple[Float, dict]:
+            powers, sensitivity_loss, penalty, violations = self._eval_core(
+                optimized_parameters
+            )
+            aux = self._build_aux(powers, sensitivity_loss, penalty, violations)
+            return sensitivity_loss + penalty, aux
+
         self.objective_function = objective_function
+        self.objective_function_aux = objective_function_aux
 
     @property
     def optimization_pairs(self) -> list[tuple]:
