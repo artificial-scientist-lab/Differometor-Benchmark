@@ -39,9 +39,9 @@ class _PenaltyStubProblem(OpticalSetupProblem):
         # Values chosen above the respective thresholds so the penalty
         # is non-zero for the squashed/relu presets.
         self._powers = [
-            jnp.array([[1.0e7]]),   # hard-side group (> HARD threshold)
-            jnp.array([[1.0e4]]),   # soft-side group (> SOFT threshold)
-            jnp.array([[1.0]]),     # detector group (> DETECTOR threshold)
+            jnp.array([[1.0e7]]),  # hard-side group (> HARD threshold)
+            jnp.array([[1.0e4]]),  # soft-side group (> SOFT threshold)
+            jnp.array([[1.0]]),  # detector group (> DETECTOR threshold)
         ]
         self._build_objective_function()
 
@@ -96,7 +96,6 @@ def problem():
 
 
 class TestSetPenaltyFn:
-
     def test_default_penalty_fn_is_squashed_relu(self, problem):
         assert problem.power_penalty_fn is squashed_relu_penalty
 
@@ -295,9 +294,7 @@ class TestObjectiveFunctionAux:
             "power_values",
         }
         assert set(aux["power_values"].keys()) == {"hard", "soft", "detector"}
-        assert loss == pytest.approx(
-            float(aux["sensitivity_loss"] + aux["penalty"])
-        )
+        assert loss == pytest.approx(float(aux["sensitivity_loss"] + aux["penalty"]))
 
     def test_is_feasible_false_when_power_exceeds_threshold(self, problem):
         # The stub's fixed powers all exceed their thresholds.
@@ -308,9 +305,9 @@ class TestObjectiveFunctionAux:
         # Build a stub with all powers below their thresholds.
         problem = _PenaltyStubProblem()
         problem._powers = [
-            jnp.array([[1.0]]),    # well below HARD (3.5e6)
-            jnp.array([[1.0]]),    # well below SOFT (2e3)
-            jnp.array([[1e-3]]),   # well below DETECTOR (1e-2)
+            jnp.array([[1.0]]),  # well below HARD (3.5e6)
+            jnp.array([[1.0]]),  # well below SOFT (2e3)
+            jnp.array([[1e-3]]),  # well below DETECTOR (1e-2)
         ]
         problem._build_objective_function()
         _, aux = problem.objective_function_aux(jnp.array([0.0, 0.0]))
@@ -329,6 +326,7 @@ class TestObjectiveFunctionAux:
         assert float(loss) == pytest.approx(
             float(aux["sensitivity_loss"] + aux["penalty"])
         )
+
 
 # ======================================================================
 # Objective-level aux methods (Layer 2)
@@ -558,7 +556,7 @@ class TestAuxHistories:
         obj = Objective(problem, save=["is_feasible"])
         obj.start_logging()
         obj.value(jnp.array([0.0, 0.0]))  # real aux entry
-        obj.grad(jnp.array([0.0, 0.0]))    # no loss -> None placeholder
+        obj.grad(jnp.array([0.0, 0.0]))  # no loss -> None placeholder
         assert len(obj.is_feasible_history) == 2
         assert obj.is_feasible_history[0] is not None
         assert obj.is_feasible_history[1] is None
@@ -634,9 +632,7 @@ class TestBestIsFeasible:
 
 class TestAuxCheckpointRoundtrip:
     def test_npz_roundtrip_preserves_aux_histories(self, problem, tmp_path):
-        obj = Objective(
-            problem, save=["aux"], checkpoint_dir=str(tmp_path)
-        )
+        obj = Objective(problem, save=["aux"], checkpoint_dir=str(tmp_path))
         obj.start_logging()
         obj.value_aux(jnp.array([0.0, 0.0]))
         obj.value_aux(jnp.array([0.3, -0.2]))

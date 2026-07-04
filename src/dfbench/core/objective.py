@@ -589,9 +589,9 @@ class Objective:
                 return loss
 
             def _value_and_grad_with_aux(params):
-                (value, aux), grad = jax.value_and_grad(
-                    self._func_aux, has_aux=True
-                )(params)
+                (value, aux), grad = jax.value_and_grad(self._func_aux, has_aux=True)(
+                    params
+                )
                 self._last_aux = aux
                 return value, grad
 
@@ -661,17 +661,16 @@ class Objective:
         # always bound when the problem opts in, regardless of save tokens,
         # so callers can request aux on demand even with no token enabled.
         if self._func_aux is not None:
+
             def _value_and_grad_aux_unwrapped(params):
-                (value, aux), grad = jax.value_and_grad(
-                    self._func_aux, has_aux=True
-                )(params)
+                (value, aux), grad = jax.value_and_grad(self._func_aux, has_aux=True)(
+                    params
+                )
                 return value, grad, aux
 
             self._value_and_grad_aux_func = jax.jit(_value_and_grad_aux_unwrapped)
             self._vmap_func_aux = jax.vmap(self._func_aux)
-            self._vmap_value_and_grad_aux_func = jax.vmap(
-                self._value_and_grad_aux_func
-            )
+            self._vmap_value_and_grad_aux_func = jax.vmap(self._value_and_grad_aux_func)
         else:
             self._value_and_grad_aux_func = None
             self._vmap_func_aux = None
@@ -1949,9 +1948,7 @@ class Objective:
         if n_items > 1:
             loss_arr = jnp.asarray(loss) if loss is not None else None
             rep_idx = (
-                self._representative_index(loss=loss_arr)
-                if loss_arr is not None
-                else 0
+                self._representative_index(loss=loss_arr) if loss_arr is not None else 0
             )
         else:
             rep_idx = 0
@@ -2241,7 +2238,9 @@ class Objective:
         Returns:
             Scalar loss value.
         """
-        loss = self._value_func_logging(params) if self._auto_aux else self._func(params)
+        loss = (
+            self._value_func_logging(params) if self._auto_aux else self._func(params)
+        )
         aux = self._last_aux
         self._last_aux = None
         self._aux_recorded = aux is not None
@@ -2671,9 +2670,7 @@ class Objective:
             state.penalty_history.tolist() if state.penalty_history.size else []
         )
         self._is_feasible_history = (
-            state.is_feasible_history.tolist()
-            if state.is_feasible_history.size
-            else []
+            state.is_feasible_history.tolist() if state.is_feasible_history.size else []
         )
         self._violations_history = (
             state.violations_history.tolist() if state.violations_history.size else []

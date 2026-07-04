@@ -138,9 +138,7 @@ class RunState:
     # when the corresponding save token was not enabled or no aux eval ran).
     # Kept as separate leaf arrays rather than a dict so both NPZ and JSON
     # serializers can encode them without pickling.
-    sensitivity_loss_history: np.ndarray = field(
-        default_factory=_empty_object_array
-    )
+    sensitivity_loss_history: np.ndarray = field(default_factory=_empty_object_array)
     penalty_history: np.ndarray = field(default_factory=_empty_object_array)
     is_feasible_history: np.ndarray = field(default_factory=_empty_object_array)
     violations_history: np.ndarray = field(default_factory=_empty_object_array)

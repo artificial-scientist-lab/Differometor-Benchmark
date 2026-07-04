@@ -460,6 +460,7 @@ class UIFOProblem(OpticalSetupProblem):
         the plain and the aux variant close over the same ``_eval_core``
         call so their results agree up to the returned aux dict.
         """
+
         @jax.jit
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],

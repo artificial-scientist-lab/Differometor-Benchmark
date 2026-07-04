@@ -107,6 +107,7 @@ class VoyagerTuningProblem(OpticalSetupProblem):
         Re-tracing picks up the current ``_power_penalty_fn`` so that
         ``set_penalty_fn`` takes effect on subsequent evaluations.
         """
+
         @jax.jit
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],
