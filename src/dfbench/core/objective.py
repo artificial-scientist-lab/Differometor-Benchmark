@@ -336,12 +336,27 @@ class Objective:
         self._improvement_count = 0
         self._evals_since_improvement = 0
         self._best_params = None
+        self._best_eval_index: int | None = None
+        self._best_batch_index: int | None = None
         self._loss_history = []
         self._grad_history = []
         self._hessian_history = []
         self._params_history = []
         self._eval_type_history = []
         self._time_steps = []
+
+        # Aux diagnostics histories (populated only when the matching save
+        # token is enabled in self._save_config; see _log_aux). Each entry is
+        # aligned with the other histories by index. power_values is split
+        # into three leaf histories so both NPZ and JSON serializers can store
+        # the arrays without pickling a dict.
+        self._sensitivity_loss_history: list = []
+        self._penalty_history: list = []
+        self._is_feasible_history: list = []
+        self._violations_history: list = []
+        self._power_hard_history: list = []
+        self._power_soft_history: list = []
+        self._power_detector_history: list = []
 
         # Random seed for reproducibility (set by algorithm via set_seed method)
         self._seed = None
@@ -488,16 +503,117 @@ class Objective:
             return _unbounded_value
         return self._problem.objective_function
 
+    def value_function_aux(self, *, unbounded: bool | None = None) -> Callable | None:
+        """Return an unlogged JAX-compatible ``(loss, aux)`` value function.
+
+        Mirrors :meth:`value_function` but calls the wrapped problem's
+        ``objective_function_aux``. Returns ``None`` when the problem does
+        not expose an aux objective (penalty support is opt-in on the
+        problem side); the public ``value_aux`` methods translate that into
+        a clear ``RuntimeError``.
+
+        Args:
+            unbounded: If True, map unbounded params to bounded space before
+                calling the problem aux objective. If False, call it
+                directly. None uses the Objective's active mode.
+        """
+        aux_fn = getattr(self._problem, "objective_function_aux", None)
+        if aux_fn is None:
+            return None
+        use_unbounded = self.unbounded if unbounded is None else unbounded
+        if use_unbounded:
+
+            def _unbounded_value_aux(params):
+                bounded = self._map_unbounded_to_bounded(params)
+                return aux_fn(bounded)
+
+            return _unbounded_value_aux
+        return aux_fn
+
+    def _aux_tokens_active(self) -> bool:
+        """Return whether any aux save token is enabled."""
+        cfg = self._save_config
+        return bool(
+            cfg.sensitivity_loss
+            or cfg.batched_sensitivity_loss
+            or cfg.penalty
+            or cfg.batched_penalty
+            or cfg.is_feasible
+            or cfg.batched_is_feasible
+            or cfg.power_values
+            or cfg.batched_power_values
+            or cfg.violations
+            or cfg.batched_violations
+        )
+
     def _bind_evaluation_functions(self) -> None:
-        """Bind evaluation callables for the currently active search space."""
+        """Bind evaluation callables for the currently active search space.
+
+        When aux save tokens are enabled and the problem exposes
+        ``objective_function_aux``, the loss-bearing callables (value,
+        value_and_grad, vmap_value, vmap_value_and_grad) are bound to the
+        aux variants so that a plain ``obj.value(params)`` loop also
+        records the enabled aux diagnostics in a single forward pass. The
+        aux pytree is stashed on ``self._last_aux`` for the public methods
+        to feed into ``_log_aux``. Grad-only and Hessian-only callables
+        keep using the scalar primal (they do not compute a loss, so there
+        is no aux to record); ``_log`` appends ``None`` placeholders for
+        those calls so the aux histories stay aligned with ``loss_history``.
+
+        When no aux token is enabled, or the problem has no aux objective,
+        ``_auto_aux`` is ``False`` and the loss-bearing callables use the
+        plain scalar primal, so non-aux problems and non-aux runs pay no
+        overhead.
+        """
         self._func = self.value_function()
         self._grad_func = jax.jit(jax.grad(self._func))
-        self._value_and_grad_func = jax.jit(jax.value_and_grad(self._func))
+
+        # Aux auto-logging: active iff an aux token is on and the problem
+        # exposes objective_function_aux. Re-evaluated on every rebind so
+        # toggling save tokens (or swapping the problem via set_penalty_fn,
+        # which retraces) keeps the behaviour in sync.
+        self._func_aux = self.value_function_aux()
+        self._auto_aux = self._aux_tokens_active() and self._func_aux is not None
+        # Stash for the most recent loss-bearing eval; read by the public
+        # methods to feed _log_aux without changing their return signatures.
+        self._last_aux: dict | None = None
+        # Set True by callers that already feed a real aux pytree to
+        # _log_aux, so _log skips the None-placeholder alignment path.
+        self._aux_recorded: bool = False
+
+        if self._auto_aux:
+            # Loss-bearing callables run the aux variants and stash aux.
+            def _value_with_aux(params):
+                loss, aux = self._func_aux(params)
+                self._last_aux = aux
+                return loss
+
+            def _value_and_grad_with_aux(params):
+                (value, aux), grad = jax.value_and_grad(self._func_aux, has_aux=True)(
+                    params
+                )
+                self._last_aux = aux
+                return value, grad
+
+            self._value_func_logging = jax.jit(_value_with_aux)
+            self._value_and_grad_func = jax.jit(_value_and_grad_with_aux)
+            self._vmap_func = jax.vmap(_value_with_aux)
+            self._vmap_value_and_grad_func = jax.vmap(_value_and_grad_with_aux)
+        else:
+            # Non-aux path: keep self._func as the single source so tests
+            # that monkeypatch obj._func after construction still work, and
+            # grad/hessian/value_and_grad stay in sync with it.
+            self._value_func_logging = None
+            self._value_and_grad_func = jax.jit(jax.value_and_grad(self._func))
+            self._vmap_func = jax.vmap(self._func)
+            self._vmap_value_and_grad_func = jax.vmap(self._value_and_grad_func)
 
         # Memory-efficient Hessian: compute columns in chunks via
         # forward-over-reverse (jvp of grad).  hessian_batch_size controls
         # how many columns are computed in parallel (1 = fully sequential,
-        # n_params = fully parallel like jax.hessian).
+        # n_params = fully parallel like jax.hessian). The Hessian always
+        # differentiates the scalar primal (self._func), so it is unaffected
+        # by aux auto-logging.
         _grad_for_hessian = jax.grad(self._func)
         _hbs = self._hessian_batch_size
 
@@ -535,13 +651,30 @@ class Objective:
             return value, grad, hessian
 
         self._value_grad_and_hessian_func = _value_grad_and_hessian
-        self._vmap_func = jax.vmap(self._func)
         self._vmap_grad_func = jax.vmap(self._grad_func)
         self._vmap_hessian_func = jax.vmap(self._hessian_func)
-        self._vmap_value_and_grad_func = jax.vmap(self._value_and_grad_func)
         self._vmap_value_grad_and_hessian_func = jax.vmap(
             self._value_grad_and_hessian_func
         )
+
+        # Explicit aux variants (value_aux / value_and_grad_aux / vmap_*_aux):
+        # always bound when the problem opts in, regardless of save tokens,
+        # so callers can request aux on demand even with no token enabled.
+        if self._func_aux is not None:
+
+            def _value_and_grad_aux_unwrapped(params):
+                (value, aux), grad = jax.value_and_grad(self._func_aux, has_aux=True)(
+                    params
+                )
+                return value, grad, aux
+
+            self._value_and_grad_aux_func = jax.jit(_value_and_grad_aux_unwrapped)
+            self._vmap_func_aux = jax.vmap(self._func_aux)
+            self._vmap_value_and_grad_aux_func = jax.vmap(self._value_and_grad_aux_func)
+        else:
+            self._value_and_grad_aux_func = None
+            self._vmap_func_aux = None
+            self._vmap_value_and_grad_aux_func = None
 
     def set_space_mode(
         self,
@@ -588,6 +721,43 @@ class Objective:
         self.unbounded = unbounded
         self._bind_evaluation_functions()
 
+    def set_penalty_fn(self, fn: Callable) -> None:
+        """Set the wrapped problem's penalty function and rebind JAX callables.
+
+        Forwards to ``problem.set_penalty_fn(fn)`` (which updates the
+        problem's ``_power_penalty_fn`` and re-traces its JIT-compiled
+        ``objective_function``), then rebinds this Objective's cached
+        evaluation callables so they pick up the new objective.
+
+        Must be called before ``start_logging()`` so evaluation histories
+        stay consistent.
+
+        Args:
+            fn: Callable ``fn(value, threshold) -> penalty`` applied
+                per-element to compute power-constraint violations.
+
+        Raises:
+            RuntimeError: If logging already started for the current run,
+                or if the wrapped problem does not opt into the power-penalty
+                contract (``_supports_power_penalty`` is ``False``). Problems
+                without a power-constraint path reject the call rather than
+                silently no-op'ing.
+        """
+        if self._start_time is not None:
+            raise RuntimeError(
+                "set_penalty_fn() must be called before start_logging() so "
+                "evaluation histories stay consistent."
+            )
+        if not getattr(self._problem, "_supports_power_penalty", False):
+            raise RuntimeError(
+                f"Problem {type(self._problem).__name__} does not opt into "
+                "the power-penalty contract (_supports_power_penalty is "
+                "False); set_penalty_fn is only supported on problems that "
+                "compute power violations."
+            )
+        self._problem.set_penalty_fn(fn)  # type: ignore[attr-defined]
+        self._bind_evaluation_functions()
+
     def __call__(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate the objective function at given parameters.
 
@@ -618,6 +788,27 @@ class Objective:
     def problem(self) -> ContinuousProblem:
         """The underlying optimization problem."""
         return self._problem
+
+    @property
+    def penalty_fn(self) -> Callable | None:
+        """The penalty function of the wrapped problem, or ``None`` if unsupported.
+
+        Returns the problem's ``power_penalty_fn``. Use ``set_penalty_fn``
+        to update it (which also re-traces the objective and rebinds
+        this Objective's JAX callables).
+        """
+        return getattr(self._problem, "power_penalty_fn", None)
+
+    @property
+    def power_thresholds(self) -> dict[str, float] | None:
+        """Per-group power thresholds, or ``None`` if the problem has no penalty path.
+
+        Delegates to the wrapped problem's ``power_thresholds`` property.
+        Returns a dict with keys ``"hard"``, ``"soft"``, ``"detector"`` when
+        the problem opts into the power-penalty contract, otherwise ``None``.
+        Thresholds are constants; they do not change across evaluations.
+        """
+        return getattr(self._problem, "power_thresholds", None)
 
     # --------- Optimization Tracking Functions/Properties ---------
 
@@ -734,6 +925,55 @@ class Objective:
         return self._best_loss if self._best_loss != jnp.inf else None
 
     @property
+    def best_eval_index(self) -> int | None:
+        """Index into the loss history holding the best loss, or ``None``.
+
+        When the best loss came from a batched evaluation and
+        ``batched_loss`` storage is on, the within-batch index is exposed
+        via :attr:`best_batch_index`.
+        """
+        return self._best_eval_index
+
+    @property
+    def best_batch_index(self) -> int | None:
+        """Within-batch index of the best loss, or ``None`` for single-point evals."""
+        return self._best_batch_index
+
+    @property
+    def best_is_feasible(self) -> bool | None:
+        """Feasibility of the best-loss point, or ``None`` if unknown.
+
+        Returns ``True``/``False`` when the ``is_feasible`` save token was
+        enabled and the best-loss point has a recorded feasibility flag.
+        Returns ``None`` when the token was never enabled, when no
+        evaluation has improved yet, or when the best point came from a
+        non-aux evaluation (``value`` / ``grad`` / ``hessian`` without aux).
+
+        For batched best losses, the feasibility of the winning batch
+        element is returned when ``batched_is_feasible`` storage is on;
+        otherwise the per-call reduced entry is used.
+        """
+        if self._best_eval_index is None:
+            return None
+        if not (self._save_config.is_feasible or self._save_config.batched_is_feasible):
+            return None
+        if self._best_eval_index >= len(self._is_feasible_history):
+            return None
+        entry = self._is_feasible_history[self._best_eval_index]
+        if entry is None:
+            return None
+        arr = jnp.asarray(entry)
+        if arr.ndim == 0:
+            return bool(arr)
+        if self._best_batch_index is None:
+            # Reduced storage: entry is already the representative scalar.
+            return bool(arr)
+        if self._save_config.batched_is_feasible and arr.ndim >= 1:
+            idx = min(self._best_batch_index, int(arr.shape[0]) - 1)
+            return bool(arr[idx])
+        return bool(arr)
+
+    @property
     def current_loss(self) -> Float[Array, "batch"] | Float | None:
         """Most recent loss value from last evaluation."""
         if len(self._loss_history) == 0:
@@ -799,6 +1039,43 @@ class Objective:
     def time_steps(self) -> list[float]:
         """Copy of elapsed time at each evaluation in seconds."""
         return self._time_steps.copy()
+
+    # --------- Aux diagnostics histories ---------
+
+    @property
+    def sensitivity_loss_history(self) -> list:
+        """Copy of the per-eval unpenalised sensitivity loss history (aux evals only)."""
+        return list(self._sensitivity_loss_history)
+
+    @property
+    def penalty_history(self) -> list:
+        """Copy of the per-eval summed penalty history (aux evals only)."""
+        return list(self._penalty_history)
+
+    @property
+    def is_feasible_history(self) -> list:
+        """Copy of the per-eval physical feasibility flag history (aux evals only)."""
+        return list(self._is_feasible_history)
+
+    @property
+    def violations_history(self) -> list:
+        """Copy of the per-eval per-constraint violation history (aux evals only)."""
+        return list(self._violations_history)
+
+    @property
+    def power_hard_history(self) -> list:
+        """Copy of the per-eval hard-group power history (aux evals only)."""
+        return list(self._power_hard_history)
+
+    @property
+    def power_soft_history(self) -> list:
+        """Copy of the per-eval soft-group power history (aux evals only)."""
+        return list(self._power_soft_history)
+
+    @property
+    def power_detector_history(self) -> list:
+        """Copy of the per-eval detector-group power history (aux evals only)."""
+        return list(self._power_detector_history)
 
     @property
     def improvement_count(self) -> int:
@@ -1376,7 +1653,17 @@ class Objective:
         | Float[Array, "batch n_params n_params"]
         | None = None,
     ) -> None:
-        """Internal: Log timestamp, evaluation results, and optionally save to file."""
+        """Internal: Log timestamp, evaluation results, and optionally save to file.
+
+        When aux save tokens are enabled but this eval did not produce an aux
+        pytree (grad-only, hessian-only, or a manual ``log_evaluation``
+        without aux), append ``None`` placeholders to the enabled aux
+        histories so they stay length-aligned with ``loss_history``. The
+        loss-bearing public methods (``value``, ``value_and_grad``,
+        ``vmap_value``, ``vmap_value_and_grad``, ``value_grad_and_hessian``,
+        ``vmap_value_grad_and_hessian``) feed the real aux pytree to
+        ``_log_aux`` themselves; this branch only covers the no-aux calls.
+        """
         if self._start_time is None:
             return
         time_exceeded = self.time_exceeded
@@ -1387,6 +1674,25 @@ class Objective:
         ):
             self._time_steps.append(self.time_elapsed)
         self._log_evals(params, loss, grad, hessian, time_exceeded=time_exceeded)
+        # Aux alignment: when auto-aux is on (aux tokens enabled AND the
+        # problem exposes an aux objective), loss-bearing calls already fed
+        # a real aux pytree to _log_aux and set _aux_recorded. Grad-only,
+        # hessian-only, and manual log_evaluation calls do not produce aux,
+        # so append None placeholders to keep the aux histories aligned with
+        # loss_history. When the problem has no aux objective, _auto_aux is
+        # False and we never touch the aux histories.
+        if self._auto_aux and not self._aux_recorded:
+            n_items = 1
+            if params is not None and self._ndim(params) == 2:
+                n_items = int(params.shape[0])
+            elif loss is not None and self._ndim(loss) > 0:
+                n_items = int(loss.shape[0])
+            elif grad is not None and self._ndim(grad) > 1:
+                n_items = int(grad.shape[0])
+            elif hessian is not None and self._ndim(hessian) > 2:
+                n_items = int(hessian.shape[0])
+            self._log_aux_placeholder(n_items)
+        self._aux_recorded = False
         self._log_to_file()
 
     def _log_evals(
@@ -1540,6 +1846,8 @@ class Objective:
                 if not jnp.isnan(loss) and loss < self._best_loss:
                     self._best_loss = loss
                     self._best_params = params
+                    self._best_eval_index = len(self._loss_history) - 1
+                    self._best_batch_index: int | None = None
                     improved = True
             else:  # batched saved case
                 if not jnp.all(jnp.isnan(loss)):
@@ -1550,6 +1858,8 @@ class Objective:
                         # only set best_params if params provided
                         if params is not None:
                             self._best_params = params[min_idx]
+                        self._best_eval_index = len(self._loss_history) - 1
+                        self._best_batch_index = min_idx
                         improved = True
 
         # Update incremental improvement / stagnation counters
@@ -1575,6 +1885,141 @@ class Objective:
                 pass
 
         return
+
+    def _log_aux_placeholder(self, n_items: int) -> None:
+        """Append ``None`` to every enabled aux history for alignment.
+
+        Called by ``_log`` for evals that did not produce an aux pytree
+        (grad-only, hessian-only, manual ``log_evaluation``). Keeps the aux
+        histories the same length as ``loss_history`` so downstream
+        indexing by ``best_eval_index`` stays valid. ``best_is_feasible``
+        and the aux history properties treat ``None`` entries as missing.
+        """
+        cfg = self._save_config
+        if cfg.sensitivity_loss or cfg.batched_sensitivity_loss:
+            self._sensitivity_loss_history.append(None)
+        if cfg.penalty or cfg.batched_penalty:
+            self._penalty_history.append(None)
+        if cfg.is_feasible or cfg.batched_is_feasible:
+            self._is_feasible_history.append(None)
+        if cfg.violations or cfg.batched_violations:
+            self._violations_history.append(None)
+        if cfg.power_values or cfg.batched_power_values:
+            self._power_hard_history.append(None)
+            self._power_soft_history.append(None)
+            self._power_detector_history.append(None)
+
+    def _log_aux(self, aux: dict, loss, n_items: int) -> None:
+        """Record aux diagnostics into the per-field aux histories.
+
+        Called by the public ``*_aux`` methods after ``_log``. Each field is
+        gated by its own :class:`SaveConfig` flag (either the non-batched or
+        the batched variant), so enabling ``is_feasible`` does not force
+        storing the bulky ``power_values`` arrays. For batched calls
+        (``n_items > 1``), the ``batched_*`` flag controls whether the full
+        batched leaf is stored or the representative point (the
+        ``_representative_index`` picked by loss) is extracted first; this
+        matches the reduction rule used for gradients and Hessians.
+
+        When no aux token is enabled this is effectively a no-op (the flags
+        short-circuit before touching the pytree), so ``value`` / ``grad`` /
+        ``hessian`` calls pay no aux overhead.
+        """
+        if self._start_time is None:
+            return
+        cfg = self._save_config
+        # Fast path: no aux token enabled (neither non-batched nor batched),
+        # nothing to do.
+        if not (
+            cfg.sensitivity_loss
+            or cfg.batched_sensitivity_loss
+            or cfg.penalty
+            or cfg.batched_penalty
+            or cfg.is_feasible
+            or cfg.batched_is_feasible
+            or cfg.power_values
+            or cfg.batched_power_values
+            or cfg.violations
+            or cfg.batched_violations
+        ):
+            return
+
+        # Representative index for reduced storage of batched calls.
+        if n_items > 1:
+            loss_arr = jnp.asarray(loss) if loss is not None else None
+            rep_idx = (
+                self._representative_index(loss=loss_arr) if loss_arr is not None else 0
+            )
+        else:
+            rep_idx = 0
+
+        def _store(field_history: list, leaf, want: bool, batched_flag: bool):
+            """Append ``leaf`` to ``field_history`` if ``want`` is set.
+
+            For batched calls (``n_items > 1``) with a leading batch axis,
+            store the full array when ``batched_flag`` is set, otherwise
+            reduce to the representative point.
+            """
+            if not want:
+                return
+            arr = jnp.asarray(leaf)
+            if n_items > 1 and arr.ndim >= 1 and arr.shape[0] == n_items:
+                if batched_flag:
+                    field_history.append(arr)
+                else:
+                    field_history.append(arr[rep_idx])
+            else:
+                field_history.append(arr)
+
+        if cfg.sensitivity_loss or cfg.batched_sensitivity_loss:
+            _store(
+                self._sensitivity_loss_history,
+                aux["sensitivity_loss"],
+                True,
+                cfg.batched_sensitivity_loss,
+            )
+        if cfg.penalty or cfg.batched_penalty:
+            _store(
+                self._penalty_history,
+                aux["penalty"],
+                True,
+                cfg.batched_penalty,
+            )
+        if cfg.is_feasible or cfg.batched_is_feasible:
+            _store(
+                self._is_feasible_history,
+                aux["is_feasible"],
+                True,
+                cfg.batched_is_feasible,
+            )
+        if cfg.violations or cfg.batched_violations:
+            _store(
+                self._violations_history,
+                aux["violations"],
+                True,
+                cfg.batched_violations,
+            )
+        if cfg.power_values or cfg.batched_power_values:
+            pv = aux["power_values"]
+            want = True
+            _store(
+                self._power_hard_history,
+                pv["hard"],
+                want,
+                cfg.batched_power_values,
+            )
+            _store(
+                self._power_soft_history,
+                pv["soft"],
+                want,
+                cfg.batched_power_values,
+            )
+            _store(
+                self._power_detector_history,
+                pv["detector"],
+                want,
+                cfg.batched_power_values,
+            )
 
     def _log_to_file(self) -> None:
         """Internal: checkpoint via :meth:`CheckpointManager.tick`.
@@ -1670,6 +2115,80 @@ class Objective:
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
+    def warmup_value_aux(self) -> None:
+        """Warm up ``value_aux()`` twice on deterministic params.
+
+        No-op (with a warning at ``verbose >= 1``) when the wrapped problem
+        does not expose an aux objective.
+        """
+        if self._func_aux is None:
+            if self._verbose >= 1:
+                print(
+                    f"warmup_value_aux: problem "
+                    f"{type(self._problem).__name__} has no aux objective; skipping."
+                )
+            return
+        self._warmup_twice(self.value_aux, self._deterministic_warmup_params()[0])
+
+    def warmup_value_and_grad_aux(self) -> None:
+        """Warm up ``value_and_grad_aux()`` twice on deterministic params.
+
+        No-op (with a warning at ``verbose >= 1``) when the wrapped problem
+        does not expose an aux objective.
+        """
+        if self._value_and_grad_aux_func is None:
+            if self._verbose >= 1:
+                print(
+                    f"warmup_value_and_grad_aux: problem "
+                    f"{type(self._problem).__name__} has no aux objective; skipping."
+                )
+            return
+        self._warmup_twice(
+            self.value_and_grad_aux, self._deterministic_warmup_params()[0]
+        )
+
+    def warmup_vmap_value_aux(self, batch_size: int = 2) -> None:
+        """Warm up ``vmap_value_aux()`` twice on a deterministic batch.
+
+        No-op (with a warning at ``verbose >= 1``) when the wrapped problem
+        does not expose an aux objective.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
+        if self._vmap_func_aux is None:
+            if self._verbose >= 1:
+                print(
+                    f"warmup_vmap_value_aux: problem "
+                    f"{type(self._problem).__name__} has no aux objective; skipping."
+                )
+            return
+        self._warmup_twice(
+            self.vmap_value_aux,
+            self._deterministic_warmup_params(n_samples=batch_size),
+        )
+
+    def warmup_vmap_value_and_grad_aux(self, batch_size: int = 2) -> None:
+        """Warm up ``vmap_value_and_grad_aux()`` twice on a deterministic batch.
+
+        No-op (with a warning at ``verbose >= 1``) when the wrapped problem
+        does not expose an aux objective.
+
+        Args:
+            batch_size: Number of samples in the warmup batch. Defaults to 2.
+        """
+        if self._vmap_value_and_grad_aux_func is None:
+            if self._verbose >= 1:
+                print(
+                    f"warmup_vmap_value_and_grad_aux: problem "
+                    f"{type(self._problem).__name__} has no aux objective; skipping."
+                )
+            return
+        self._warmup_twice(
+            self.vmap_value_and_grad_aux,
+            self._deterministic_warmup_params(n_samples=batch_size),
+        )
+
     def start_logging(self) -> None:
         """Start the optimization timer. Call this before beginning optimization.
 
@@ -1708,15 +2227,26 @@ class Objective:
     def value(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate objective function at given parameters.
 
+        When aux save tokens are enabled and the problem exposes an aux
+        objective, this runs the aux objective in a single forward pass,
+        stashes the aux pytree internally, and records the enabled aux
+        diagnostics. The returned value is still the scalar loss.
+
         Args:
             params: Parameter vector of shape (n_params,).
 
         Returns:
             Scalar loss value.
         """
-        loss = self._func(params)
-
+        loss = (
+            self._value_func_logging(params) if self._auto_aux else self._func(params)
+        )
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, loss)
+        if aux is not None:
+            self._log_aux(aux, loss, n_items=1)
         return loss
 
     def grad(self, params: Float[Array, "n_params"]) -> Float[Array, "n_params"]:
@@ -1747,6 +2277,10 @@ class Objective:
     ) -> tuple[Float, Float[Array, "n_params"]]:
         """Compute both value and gradient (more efficient than separate calls).
 
+        When aux save tokens are enabled and the problem exposes an aux
+        objective, the aux pytree is produced in the same forward+backward
+        pass (via ``has_aux=True``) and recorded into the aux histories.
+
         Args:
             params: Parameter vector of shape (n_params,).
 
@@ -1754,8 +2288,12 @@ class Objective:
             Tuple of (loss, gradient).
         """
         value, grad = self._value_and_grad_func(params)
-
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, value, grad)
+        if aux is not None:
+            self._log_aux(aux, value, n_items=1)
         return value, grad
 
     def value_grad_and_hessian(
@@ -1763,14 +2301,22 @@ class Objective:
     ) -> tuple[Float, Float[Array, "n_params"], Float[Array, "n_params n_params"]]:
         """Compute value, gradient, and Hessian at a single parameter vector."""
         value, grad, hessian = self._value_grad_and_hessian_func(params)
-
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, value, grad, hessian)
+        if aux is not None:
+            self._log_aux(aux, value, n_items=1)
         return value, grad, hessian
 
     def vmap_value(
         self, params: Float[Array, "batch n_params"]
     ) -> Float[Array, "batch"]:
         """Evaluate objective function on a batch of parameters.
+
+        When aux save tokens are enabled and the problem exposes an aux
+        objective, the batched aux pytree (every leaf gains a leading batch
+        dim) is produced in the same vmapped forward pass and recorded.
 
         Args:
             params: Parameter batch of shape (batch, n_params).
@@ -1779,8 +2325,12 @@ class Objective:
             Loss array of shape (batch,).
         """
         losses = self._vmap_func(params)
-
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, losses)
+        if aux is not None:
+            self._log_aux(aux, losses, n_items=int(params.shape[0]))
         return losses
 
     def vmap_grad(
@@ -1813,6 +2363,10 @@ class Objective:
     ) -> tuple[Float[Array, "batch"], Float[Array, "batch n_params"]]:
         """Compute both values and gradients for a batch of parameters.
 
+        When aux save tokens are enabled and the problem exposes an aux
+        objective, the batched aux pytree is produced in the same vmapped
+        forward+backward pass and recorded.
+
         Args:
             params: Parameter batch of shape (batch, n_params).
 
@@ -1820,8 +2374,12 @@ class Objective:
             Tuple of (losses, gradients) with shapes (batch,) and (batch, n_params).
         """
         values, grads = self._vmap_value_and_grad_func(params)
-
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, values, grads)
+        if aux is not None:
+            self._log_aux(aux, values, n_items=int(params.shape[0]))
         return values, grads
 
     def vmap_value_grad_and_hessian(
@@ -1833,8 +2391,12 @@ class Objective:
     ]:
         """Compute values, gradients, and Hessians for a batch of parameters."""
         values, grads, hessians = self._vmap_value_grad_and_hessian_func(params)
-
+        aux = self._last_aux
+        self._last_aux = None
+        self._aux_recorded = aux is not None
         self._log(params, values, grads, hessians)
+        if aux is not None:
+            self._log_aux(aux, values, n_items=int(params.shape[0]))
         return values, grads, hessians
 
     def batched_value(
@@ -1870,6 +2432,122 @@ class Objective:
     ]:
         """Alias for vmap_value_grad_and_hessian on a batch of parameters."""
         return self.vmap_value_grad_and_hessian(params)
+
+    # --------- Aux evaluation methods ---------
+
+    def _require_aux(self):
+        """Return the bound aux value function or raise if unsupported.
+
+        Problems that opt into the power-penalty contract expose
+        ``objective_function_aux``; ``_bind_evaluation_functions`` then
+        binds the ``*_aux`` callables. Problems without that path leave
+        them ``None`` and this helper raises a clear ``RuntimeError`` so
+        the failure surfaces at the Objective boundary, not inside JAX.
+        """
+        if self._func_aux is None:
+            raise RuntimeError(
+                f"Problem {type(self._problem).__name__} does not expose "
+                "objective_function_aux; aux diagnostics are only available "
+                "on problems that opt into the power-penalty contract."
+            )
+        return self._func_aux
+
+    def value_aux(self, params: Float[Array, "n_params"]) -> tuple[Float, dict]:
+        """Evaluate the objective and return ``(loss, aux)``.
+
+        ``aux`` is a pytree dict with the loss decomposition, a physical
+        ``is_feasible`` flag, per-constraint violations, and the raw
+        per-group power arrays. See the Objective API reference for the
+        full schema.
+
+        The loss is logged into the standard loss history; aux fields are
+        recorded into the per-field aux histories only when the matching
+        save token is enabled (see the constructor ``save`` argument).
+
+        Args:
+            params: Parameter vector of shape (n_params,).
+
+        Raises:
+            RuntimeError: If the wrapped problem does not expose an aux
+                objective.
+        """
+        self._require_aux()
+        loss, aux = self._func_aux(params)
+        self._aux_recorded = True
+        self._log(params, loss)
+        self._log_aux(aux, loss, n_items=1)
+        return loss, aux
+
+    def value_and_grad_aux(
+        self, params: Float[Array, "n_params"]
+    ) -> tuple[Float, Float[Array, "n_params"], dict]:
+        """Compute value, gradient, and aux in one forward+backward pass.
+
+        Uses ``jax.value_and_grad(..., has_aux=True)`` so the aux pytree is
+        threaded through the backward pass without being differentiated.
+
+        Args:
+            params: Parameter vector of shape (n_params,).
+
+        Raises:
+            RuntimeError: If the wrapped problem does not expose an aux
+                objective.
+        """
+        self._require_aux()
+        if self._value_and_grad_aux_func is None:
+            raise RuntimeError("aux grad callable not bound")
+        value, grad, aux = self._value_and_grad_aux_func(params)
+        self._aux_recorded = True
+        self._log(params, value, grad)
+        self._log_aux(aux, value, n_items=1)
+        return value, grad, aux
+
+    def vmap_value_aux(
+        self, params: Float[Array, "batch n_params"]
+    ) -> tuple[Float[Array, "batch"], dict]:
+        """Evaluate the aux objective on a batch of parameters.
+
+        Returns ``(losses, aux)`` where ``aux`` is the same pytree as the
+        single-point variant with a leading batch dimension on every leaf
+        (including the ``power_values`` sub-arrays), because a dict is a
+        JAX pytree and ``vmap`` maps over it directly.
+
+        Args:
+            params: Parameter batch of shape (batch, n_params).
+
+        Raises:
+            RuntimeError: If the wrapped problem does not expose an aux
+                objective.
+        """
+        self._require_aux()
+        if self._vmap_func_aux is None:
+            raise RuntimeError("aux vmap callable not bound")
+        losses, aux = self._vmap_func_aux(params)
+        self._aux_recorded = True
+        self._log(params, losses)
+        self._log_aux(aux, losses, n_items=int(params.shape[0]))
+        return losses, aux
+
+    def vmap_value_and_grad_aux(
+        self, params: Float[Array, "batch n_params"]
+    ) -> tuple[Float[Array, "batch"], Float[Array, "batch n_params"], dict]:
+        """Compute values, gradients, and aux for a batch of parameters.
+
+        Args:
+            params: Parameter batch of shape (batch, n_params).
+
+        Raises:
+            RuntimeError: If the wrapped problem does not expose an aux
+                objective.
+        """
+        self._require_aux()
+        if self._vmap_value_and_grad_aux_func is None:
+            raise RuntimeError("aux vmap value_and_grad callable not bound")
+        values, grads, aux = self._vmap_value_and_grad_aux_func(params)
+        self._aux_recorded = True
+        self._log(params, values, grads)
+        self._log_aux(aux, values, n_items=int(params.shape[0]))
+        return values, grads, aux
 
     # Redirect everythging else to jax. ...probably a bad idea
     # def __getattr__(self, name: str) -> Callable:
@@ -1926,7 +2604,7 @@ class Objective:
     def _build_run_state(self, algorithm_name: str | None = None) -> RunState:
         """Build a :class:`RunState` snapshot of the current optimization state.
 
-        This is the single place that converts the Objective's internal
+        This is the place that converts the Objective's internal
         histories/counters into the canonical, serializer-agnostic
         :class:`RunState` data contract.
         """
@@ -1942,11 +2620,24 @@ class Objective:
             params_history=np.asarray(self._params_history, dtype=object),
             eval_type_history=np.asarray(self._eval_type_history, dtype=object),
             time_steps=np.asarray(self._time_steps, dtype=object),
+            sensitivity_loss_history=np.asarray(
+                self._sensitivity_loss_history, dtype=object
+            ),
+            penalty_history=np.asarray(self._penalty_history, dtype=object),
+            is_feasible_history=np.asarray(self._is_feasible_history, dtype=object),
+            violations_history=np.asarray(self._violations_history, dtype=object),
+            power_hard_history=np.asarray(self._power_hard_history, dtype=object),
+            power_soft_history=np.asarray(self._power_soft_history, dtype=object),
+            power_detector_history=np.asarray(
+                self._power_detector_history, dtype=object
+            ),
             eval_count=self._eval_count,
             best_loss=float(self._best_loss),
             best_params=best_params,
             improvement_count=int(self._improvement_count),
             evals_since_improvement=int(self._evals_since_improvement),
+            best_eval_index=self._best_eval_index,
+            best_batch_index=self._best_batch_index,
             log_call_count=int(self._log_call_count),
             eval_type_counts=dict(self._eval_type_counts),
             metadata=self._build_metadata(algorithm_name),
@@ -1970,6 +2661,31 @@ class Objective:
             state.eval_type_history.tolist() if state.eval_type_history.size else []
         )
         self._time_steps = state.time_steps.tolist() if state.time_steps.size else []
+        self._sensitivity_loss_history = (
+            state.sensitivity_loss_history.tolist()
+            if state.sensitivity_loss_history.size
+            else []
+        )
+        self._penalty_history = (
+            state.penalty_history.tolist() if state.penalty_history.size else []
+        )
+        self._is_feasible_history = (
+            state.is_feasible_history.tolist() if state.is_feasible_history.size else []
+        )
+        self._violations_history = (
+            state.violations_history.tolist() if state.violations_history.size else []
+        )
+        self._power_hard_history = (
+            state.power_hard_history.tolist() if state.power_hard_history.size else []
+        )
+        self._power_soft_history = (
+            state.power_soft_history.tolist() if state.power_soft_history.size else []
+        )
+        self._power_detector_history = (
+            state.power_detector_history.tolist()
+            if state.power_detector_history.size
+            else []
+        )
 
         self._eval_count = int(state.eval_count)
         self._best_loss = jnp.array(state.best_loss)
@@ -1978,6 +2694,8 @@ class Objective:
         )
         self._improvement_count = int(state.improvement_count)
         self._evals_since_improvement = int(state.evals_since_improvement)
+        self._best_eval_index = state.best_eval_index
+        self._best_batch_index = state.best_batch_index
         self._log_call_count = int(state.log_call_count)
         self._eval_type_counts = dict(state.eval_type_counts)
 
@@ -2142,9 +2860,18 @@ class Objective:
         self._hessian_history = []
         self._params_history = []
         self._time_steps = []
+        self._sensitivity_loss_history = []
+        self._penalty_history = []
+        self._is_feasible_history = []
+        self._violations_history = []
+        self._power_hard_history = []
+        self._power_soft_history = []
+        self._power_detector_history = []
 
         self._best_loss = jnp.inf
         self._best_params = None
+        self._best_eval_index = None
+        self._best_batch_index = None
         self._improvement_count = 0
         self._evals_since_improvement = 0
         self._eval_type_history = []

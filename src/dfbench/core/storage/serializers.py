@@ -93,6 +93,17 @@ class NpzCheckpointSerializer:
             params_history=np.asarray(state.params_history, dtype=object),
             eval_type_history=np.asarray(state.eval_type_history, dtype=object),
             time_steps=np.asarray(state.time_steps, dtype=object),
+            sensitivity_loss_history=np.asarray(
+                state.sensitivity_loss_history, dtype=object
+            ),
+            penalty_history=np.asarray(state.penalty_history, dtype=object),
+            is_feasible_history=np.asarray(state.is_feasible_history, dtype=object),
+            violations_history=np.asarray(state.violations_history, dtype=object),
+            power_hard_history=np.asarray(state.power_hard_history, dtype=object),
+            power_soft_history=np.asarray(state.power_soft_history, dtype=object),
+            power_detector_history=np.asarray(
+                state.power_detector_history, dtype=object
+            ),
             eval_count=np.array(state.eval_count, dtype=np.int64),
             best_loss=np.asarray(state.best_loss, dtype=np.float64),
             best_params=(
@@ -103,6 +114,16 @@ class NpzCheckpointSerializer:
             improvement_count=np.array(state.improvement_count, dtype=np.int64),
             evals_since_improvement=np.array(
                 state.evals_since_improvement, dtype=np.int64
+            ),
+            best_eval_index=(
+                np.array(state.best_eval_index, dtype=np.int64)
+                if state.best_eval_index is not None
+                else np.array([], dtype=np.int64)
+            ),
+            best_batch_index=(
+                np.array(state.best_batch_index, dtype=np.int64)
+                if state.best_batch_index is not None
+                else np.array([], dtype=np.int64)
             ),
             log_call_count=np.array(state.log_call_count, dtype=np.int64),
             eval_type_counts=np.array(
@@ -154,6 +175,19 @@ class NpzCheckpointSerializer:
             else:
                 counts = {}
 
+            # best_eval_index / best_batch_index: stored as empty int arrays
+            # when None; reconstruct as None when the loaded array is empty.
+            bei = (
+                int(d["best_eval_index"].item())
+                if "best_eval_index" in files and d["best_eval_index"].size > 0
+                else None
+            )
+            bbi = (
+                int(d["best_batch_index"].item())
+                if "best_batch_index" in files and d["best_batch_index"].size > 0
+                else None
+            )
+
             return RunState(
                 loss_history=_obj("loss_history"),
                 grad_history=_obj("grad_history"),
@@ -161,6 +195,13 @@ class NpzCheckpointSerializer:
                 params_history=_obj("params_history"),
                 eval_type_history=_obj("eval_type_history"),
                 time_steps=_obj("time_steps"),
+                sensitivity_loss_history=_obj("sensitivity_loss_history"),
+                penalty_history=_obj("penalty_history"),
+                is_feasible_history=_obj("is_feasible_history"),
+                violations_history=_obj("violations_history"),
+                power_hard_history=_obj("power_hard_history"),
+                power_soft_history=_obj("power_soft_history"),
+                power_detector_history=_obj("power_detector_history"),
                 eval_count=int(d["eval_count"]) if "eval_count" in files else 0,
                 best_loss=float(d["best_loss"])
                 if "best_loss" in files
@@ -178,6 +219,8 @@ class NpzCheckpointSerializer:
                     if "evals_since_improvement" in files
                     else 0
                 ),
+                best_eval_index=bei,
+                best_batch_index=bbi,
                 log_call_count=(
                     int(d["log_call_count"]) if "log_call_count" in files else 0
                 ),
@@ -211,6 +254,13 @@ class JsonCheckpointSerializer:
             "params_history": _tolist(state.params_history),
             "eval_type_history": _tolist(state.eval_type_history),
             "time_steps": _tolist(state.time_steps),
+            "sensitivity_loss_history": _tolist(state.sensitivity_loss_history),
+            "penalty_history": _tolist(state.penalty_history),
+            "is_feasible_history": _tolist(state.is_feasible_history),
+            "violations_history": _tolist(state.violations_history),
+            "power_hard_history": _tolist(state.power_hard_history),
+            "power_soft_history": _tolist(state.power_soft_history),
+            "power_detector_history": _tolist(state.power_detector_history),
             "eval_count": state.eval_count,
             "best_loss": state.best_loss,
             "best_params": (
@@ -220,6 +270,8 @@ class JsonCheckpointSerializer:
             ),
             "improvement_count": state.improvement_count,
             "evals_since_improvement": state.evals_since_improvement,
+            "best_eval_index": state.best_eval_index,
+            "best_batch_index": state.best_batch_index,
             "log_call_count": state.log_call_count,
             "eval_type_counts": {str(k): v for k, v in state.eval_type_counts.items()},
         }
@@ -246,11 +298,24 @@ class JsonCheckpointSerializer:
             params_history=_to_obj_array(payload.get("params_history", [])),
             eval_type_history=_to_obj_array(payload.get("eval_type_history", [])),
             time_steps=np.asarray(payload.get("time_steps", []), dtype=object),
+            sensitivity_loss_history=_to_obj_array(
+                payload.get("sensitivity_loss_history", [])
+            ),
+            penalty_history=_to_obj_array(payload.get("penalty_history", [])),
+            is_feasible_history=_to_obj_array(payload.get("is_feasible_history", [])),
+            violations_history=_to_obj_array(payload.get("violations_history", [])),
+            power_hard_history=_to_obj_array(payload.get("power_hard_history", [])),
+            power_soft_history=_to_obj_array(payload.get("power_soft_history", [])),
+            power_detector_history=_to_obj_array(
+                payload.get("power_detector_history", [])
+            ),
             eval_count=int(payload.get("eval_count", 0)),
             best_loss=float(payload.get("best_loss", float("inf"))),
             best_params=np.asarray(payload.get("best_params", []), dtype=np.float64),
             improvement_count=int(payload.get("improvement_count", 0)),
             evals_since_improvement=int(payload.get("evals_since_improvement", 0)),
+            best_eval_index=payload.get("best_eval_index"),
+            best_batch_index=payload.get("best_batch_index"),
             log_call_count=int(payload.get("log_call_count", 0)),
             eval_type_counts={
                 int(k): int(v) for k, v in payload.get("eval_type_counts", {}).items()

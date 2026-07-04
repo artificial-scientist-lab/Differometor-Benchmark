@@ -56,7 +56,7 @@ class VoyagerProblem(OpticalSetupProblem):
 
         # calculate the sensitivity
         self._target_sensitivities = noise / jnp.abs(powers)
-        target_loss = jnp.sum(jnp.log10(self._target_sensitivities))
+        self._target_loss = jnp.sum(jnp.log10(self._target_sensitivities))
 
         ### Start from random parameters and optimize the sensitivity ###
         # ---------------------------------------------------------------#
@@ -113,6 +113,16 @@ class VoyagerProblem(OpticalSetupProblem):
             ]
         ).T
 
+        # abstract for pure objective_function
+        self._build_objective_function()
+
+    def _build_objective_function(self) -> None:
+        """(Re)build the JIT-compiled objective function.
+
+        Re-tracing picks up the current ``_power_penalty_fn`` so that
+        ``set_penalty_fn`` takes effect on subsequent evaluations.
+        """
+
         @jax.jit
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],
@@ -129,7 +139,7 @@ class VoyagerProblem(OpticalSetupProblem):
             sensitivities = noise / jnp.abs(powers)
 
             # loss relative to target loss => loss < 0 is better than voyager setup
-            return jnp.sum(jnp.log10(sensitivities)) - target_loss
+            return jnp.sum(jnp.log10(sensitivities)) - self._target_loss
 
         self.objective_function = objective_function
 

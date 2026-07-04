@@ -38,7 +38,7 @@ def relu_penalty(value, threshold):
 
 
 def zero_penalty(value, threshold):
-    """No penalty — disables power constraints."""
+    """No penalty: Ignores power constraints."""
     return jnp.zeros_like(value)
 
 
@@ -87,6 +87,13 @@ class OpticalSetupProblem(ContinuousProblem):
     algorithms in the dfbench framework.
     """
 
+    #: Opt-in flag: subclasses that compute a power-constraint penalty set this
+    #: to ``True`` so :meth:`set_penalty_fn` and the Objective aux path know the
+    #: problem actually has a penalty contract. ``VoyagerProblem`` and
+    #: ``VoyagerTuningProblem`` leave it ``False`` because they have no power
+    #: constraints, even though they inherit the method.
+    _supports_power_penalty: bool = False
+
     def __init__(
         self,
         name: str,
@@ -121,6 +128,22 @@ class OpticalSetupProblem(ContinuousProblem):
         """Lower floor applied to detector signal magnitudes."""
         return self._signal_floor
 
+    @property
+    def power_thresholds(self) -> dict[str, float] | None:
+        """Per-group power thresholds, or ``None`` when the problem has no penalty path.
+
+        Returns a dict with keys ``"hard"``, ``"soft"``, ``"detector"`` mapping
+        to the constant threshold values used by :meth:`_compute_power_violations`.
+        Only meaningful on subclasses where ``_supports_power_penalty`` is ``True``.
+        """
+        if not self._supports_power_penalty:
+            return None
+        return {
+            "hard": float(HARD_SIDE_POWER_THRESHOLD),
+            "soft": float(SOFT_SIDE_POWER_THRESHOLD),
+            "detector": float(DETECTOR_POWER_THRESHOLD),
+        }
+
     def _compute_power_violations(self, powers):
         """Apply ``power_penalty_fn`` to each component group and concatenate."""
         fn = self._power_penalty_fn
@@ -128,6 +151,81 @@ class OpticalSetupProblem(ContinuousProblem):
         soft = fn(powers[1].squeeze(1), SOFT_SIDE_POWER_THRESHOLD)
         det = fn(powers[2].squeeze(1), DETECTOR_POWER_THRESHOLD)
         return jnp.concatenate([hard, det, soft], axis=0)
+
+    def _build_aux(self, powers, sensitivity_loss, penalty, violations):
+        """Build the per-eval aux diagnostics dict from a power-constraint eval.
+
+        Args:
+            powers: ``(hard, soft, detector)`` tuple of per-group power arrays
+                as returned by ``calculate_powers``.
+            sensitivity_loss: scalar sensitivity loss (the unpenalised objective).
+            penalty: scalar summed penalty contribution.
+            violations: ``(n_constraints, n_freq)`` array of per-constraint
+                penalty values, as returned by :meth:`_calculate_loss`.
+
+        Returns:
+            A dict pytree with leaves that vmapp cleanly:
+
+            - ``sensitivity_loss``: scalar float.
+            - ``penalty``: scalar float.
+            - ``is_feasible``: scalar bool, ``True`` iff every per-group power
+              is at or below its threshold. This is a physical check, independent
+              of the active ``power_penalty_fn`` preset.
+            - ``violations``: ``(n_constraints, n_freq)`` array.
+            - ``power_values``: dict with ``"hard"``, ``"soft"``, ``"detector"``
+              leaves holding the raw per-group power arrays.
+        """
+        hard, soft, det = powers
+        is_feasible = jnp.logical_and(
+            jnp.all(hard.squeeze(1) <= HARD_SIDE_POWER_THRESHOLD),
+            jnp.logical_and(
+                jnp.all(soft.squeeze(1) <= SOFT_SIDE_POWER_THRESHOLD),
+                jnp.all(det.squeeze(1) <= DETECTOR_POWER_THRESHOLD),
+            ),
+        )
+        return {
+            "sensitivity_loss": sensitivity_loss,
+            "penalty": penalty,
+            "is_feasible": is_feasible,
+            "violations": violations,
+            "power_values": {
+                "hard": hard,
+                "soft": soft,
+                "detector": det,
+            },
+        }
+
+    def set_penalty_fn(self, fn: Callable) -> None:
+        """Set the penalty function and rebuild the objective function.
+
+        Updates ``_power_penalty_fn`` and re-traces the JIT-compiled
+        ``objective_function`` so the new penalty takes effect.
+
+        Must be called before the problem is wrapped in a logging
+        ``Objective`` (or before ``Objective.start_logging()``).
+
+        Raises:
+            RuntimeError: If this problem does not opt into the power-penalty
+                contract (``_supports_power_penalty`` is ``False``). Subclasses
+                with a power-constraint path set that flag to ``True``.
+        """
+        if not self._supports_power_penalty:
+            raise RuntimeError(
+                f"{type(self).__name__} has no power-constraint path "
+                f"(_supports_power_penalty is False); set_penalty_fn is only "
+                f"supported on problems that compute power violations."
+            )
+        self._power_penalty_fn = fn
+        self._build_objective_function()
+
+    @abstractmethod
+    def _build_objective_function(self) -> None:
+        """(Re)build and assign the JIT-compiled ``objective_function``.
+
+        Subclasses define their closed-over objective here. Called both
+        from ``__init__`` and from ``set_penalty_fn`` so the compiled
+        function picks up the current ``_power_penalty_fn``.
+        """
 
     def _calculate_loss(self, sensitivities, reference_sensitivities, powers):
         """Calculate loss and penalties from sensitivities and power constraints."""
