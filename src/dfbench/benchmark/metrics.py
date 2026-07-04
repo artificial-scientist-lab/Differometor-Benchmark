@@ -8,6 +8,8 @@ Benchmark class for clarity. Functions are organized into three categories:
 3. Multi-run functions (_multi_*): Require data from all runs (e.g., diversity)
 """
 
+from collections.abc import Sequence
+
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 
@@ -138,7 +140,7 @@ def agg_fraction_true(values: list[bool]) -> float:
 
 
 def agg_mean_std_filtered(
-    values: list[float | None], fallback: float = float("nan")
+    values: Sequence[float | int | None], fallback: float = float("nan")
 ) -> tuple[float, float]:
     """Mean and std of non-None values. Returns (fallback, 0.0) if all None."""
     filtered = [v for v in values if v is not None]
