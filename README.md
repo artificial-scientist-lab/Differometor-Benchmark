@@ -1,5 +1,5 @@
 > [!IMPORTANT]
-> **BETA RELEASE:** This repository is currently in beta. The official competition will start on **July ~6**.
+> **BETA RELEASE:** This repository is currently in beta. The official competition will start on **July ~7**.
 
 # Differometor Benchmark
 
