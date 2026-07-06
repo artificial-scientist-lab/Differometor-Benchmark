@@ -272,7 +272,7 @@ def _history_len(a: np.ndarray) -> int:
 
 def _history_alignment_target(state: RunState) -> int:
     """Return the expected history row count for A3 alignment checks."""
-    if _is_nonneg_int(state.log_call_count):
+    if _is_nonneg_int(state.log_call_count) and int(state.log_call_count) > 0:
         return int(state.log_call_count)
     return int(state.eval_count) if _is_nonneg_int(state.eval_count) else 0
 
@@ -405,7 +405,9 @@ def _check_aligned(
     eval_type). The rule is therefore: every *non-empty* history has
     length ``log_call_count``; empty is always allowed. ``eval_count`` counts
     individual parameter evaluations, while histories store one row per logged
-    call and may contain batched entries.
+    call and may contain batched entries. Legacy reduced states may have
+    ``log_call_count == 0`` with non-empty histories; those fall back to
+    ``eval_count``.
 
     Returns the lengths so semantic checks can reuse them without
     recomputing. Assumes the A2 ndarray check already ran; callers should
