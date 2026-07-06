@@ -286,7 +286,10 @@ class BotorchTuRBO(OptimizationAlgorithm):
                 train_X = torch.cat([init_X, train_X], dim=0)
 
             train_Y_raw, valid_mask = evaluate_y(
-                X=train_X, bounds=problem_bounds_torch, obj=obj
+                X=train_X,
+                bounds=problem_bounds_torch,
+                obj=obj,
+                batch_size=self.batch_size,
             )
             train_Y_raw = train_Y_raw.unsqueeze(-1)
 
@@ -342,7 +345,10 @@ class BotorchTuRBO(OptimizationAlgorithm):
 
                 # Evaluate new candidates
                 Y_next_raw, valid_mask_next = evaluate_y(
-                    X_next, problem_bounds_torch, obj
+                    X=X_next,
+                    bounds=problem_bounds_torch,
+                    obj=obj,
+                    batch_size=self.batch_size,
                 )
                 Y_next_raw = Y_next_raw.unsqueeze(-1)
 

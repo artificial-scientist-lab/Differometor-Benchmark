@@ -108,7 +108,7 @@ class RunState:
     and JSON serializers can encode them without pickling.
     """
 
-    # Aligned histories (all length == eval_count, modulo placeholders)
+    # Aligned histories (all length == log_call_count, modulo placeholders)
     loss_history: np.ndarray
     grad_history: np.ndarray
     hessian_history: np.ndarray
@@ -270,6 +270,13 @@ def _history_len(a: np.ndarray) -> int:
     return int(arr.shape[0])
 
 
+def _history_alignment_target(state: RunState) -> int:
+    """Return the expected history row count for A3 alignment checks."""
+    if _is_nonneg_int(state.log_call_count) and int(state.log_call_count) > 0:
+        return int(state.log_call_count)
+    return int(state.eval_count) if _is_nonneg_int(state.eval_count) else 0
+
+
 def _check_structural(state: RunState) -> list[RunStateValidationError]:
     errs: list[RunStateValidationError] = []
 
@@ -396,7 +403,11 @@ def _check_aligned(
     Histories may legitimately be empty (a SaveConfig flag is off, or the
     run was reduced by ``RunData.to_run_state`` which drops grad/hessian/
     eval_type). The rule is therefore: every *non-empty* history has
-    length ``eval_count``; empty is always allowed.
+    length ``log_call_count``; empty is always allowed. ``eval_count`` counts
+    individual parameter evaluations, while histories store one row per logged
+    call and may contain batched entries. Legacy reduced states may have
+    ``log_call_count == 0`` with non-empty histories; those fall back to
+    ``eval_count``.
 
     Returns the lengths so semantic checks can reuse them without
     recomputing. Assumes the A2 ndarray check already ran; callers should
@@ -419,19 +430,20 @@ def _check_aligned(
     )
     lengths: dict[str, int] = {}
     bad_shapes = {e.field for e in errs if e.invariant == "A2"}
+    target = _history_alignment_target(state)
     for name in history_fields:
         if name in bad_shapes:
             lengths[name] = -1
             continue
         n = _history_len(getattr(state, name))
         lengths[name] = n
-        if n > 0 and n != state.eval_count:
+        if n > 0 and n != target:
             errs.append(
                 RunStateValidationError(
                     field=name,
                     invariant="A3",
                     detail=(
-                        f"length {n} != eval_count {state.eval_count} "
+                        f"length {n} != log_call_count {target} "
                         "(empty is allowed; non-empty must match)"
                     ),
                 )

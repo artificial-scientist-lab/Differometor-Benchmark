@@ -136,7 +136,10 @@ class BotorchBO(OptimizationAlgorithm):
 
         # Evaluate initial samples
         train_Y_raw, valid_mask = evaluate_y(
-            X=train_X, bounds=problem_bounds_torch, obj=obj
+            X=train_X,
+            bounds=problem_bounds_torch,
+            obj=obj,
+            batch_size=self.batch_size,
         )
         train_Y_raw = train_Y_raw.unsqueeze(-1)
 
@@ -192,7 +195,10 @@ class BotorchBO(OptimizationAlgorithm):
 
             # Evaluate candidates
             new_Y_raw, valid_mask_batch = evaluate_y(
-                candidates, problem_bounds_torch, obj
+                candidates,
+                problem_bounds_torch,
+                obj,
+                batch_size=self.batch_size,
             )
             new_Y_raw = new_Y_raw.unsqueeze(-1)
 

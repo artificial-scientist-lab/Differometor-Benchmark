@@ -427,10 +427,44 @@ class TestValidateRunState:
     def test_A3_history_length_mismatch(self):
         s = _mutate(
             _make_state(),
-            time_steps=np.array([0.0, 0.1, 0.2], dtype=object),  # len 3, eval_count 5
+            time_steps=np.array(
+                [0.0, 0.1, 0.2], dtype=object
+            ),  # len 3, log_call_count 5
         )
         r = validate_run_state(s)
         assert not r.ok and any(e.invariant == "A3" for e in r.errors)
+
+    def test_A3_batched_histories_align_to_log_call_count(self):
+        """Batched calls add multiple evals but one history row."""
+        state = RunState(
+            loss_history=np.array(
+                [np.array([2.0, 1.0]), 0.8, np.array([3.0, 4.0, 5.0])],
+                dtype=object,
+            ),
+            grad_history=np.array([], dtype=object),
+            hessian_history=np.array([], dtype=object),
+            params_history=np.array(
+                [
+                    np.array([[0.0, 0.0], [0.1, 0.1]]),
+                    np.array([0.2, 0.2]),
+                    np.array([[0.3, 0.3], [0.4, 0.4], [0.5, 0.5]]),
+                ],
+                dtype=object,
+            ),
+            eval_type_history=np.array([5, 1, 5], dtype=object),
+            time_steps=np.array([0.0, 0.1, 0.2], dtype=object),
+            eval_count=6,
+            best_loss=0.8,
+            best_params=np.array([0.2, 0.2]),
+            improvement_count=2,
+            evals_since_improvement=0,
+            log_call_count=3,
+            eval_type_counts={5: 2, 1: 1},
+            metadata=RunMetadata(),
+        )
+
+        r = validate_run_state(state)
+        assert r.ok, [str(e) for e in r.errors]
 
     def test_A3_empty_history_is_allowed(self):
         """A disabled history (empty array) must not trip A3."""
@@ -547,15 +581,15 @@ class TestValidateRunState:
             grad_history=np.array([], dtype=object),
             hessian_history=np.array([], dtype=object),
             params_history=np.array([np.zeros(2), np.ones(2)], dtype=object),
-            eval_type_history=np.array([], dtype=object),
+            eval_type_history=np.array([5, 5], dtype=object),
             time_steps=np.array([0.0, 0.1], dtype=object),
-            eval_count=2,
+            eval_count=6,
             best_loss=0.1,
             best_params=np.ones(2),
             improvement_count=0,
             evals_since_improvement=0,
-            log_call_count=0,
-            eval_type_counts={},
+            log_call_count=2,
+            eval_type_counts={5: 2},
             metadata=RunMetadata(),
         )
         r = validate_run_state(s)
