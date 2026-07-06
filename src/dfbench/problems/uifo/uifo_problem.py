@@ -17,17 +17,17 @@ from ..base_problem import OpticalSetupProblem, register_problem
 # ---------------------------------------------------------------------------
 # Topology string encoding
 # ---------------------------------------------------------------------------
-# Interior cells: 2 component types × 4 orientations = 8 options → A–H
+# Interior cells: 2 component types × 4 orientations = 8 options -> A–H
 #   A–D = beamsplitter     (left, right, top, bottom)
 #   E–H = directional_beamsplitter (left, right, top, bottom)
 #
-# Boundary cells: 4 component types → L, S, D, H
+# Boundary cells: 4 component types -> L, S, D, H
 #   L = laser, S = squeezer, D = detector, H = balanced_homodyne
 #
 # Format: "<interior_chars>-<boundary_chars>"
 #   Interior chars: row-major order of the size×size interior grid
 #   Boundary chars: row-major order of all boundary positions (edges only,
-#                   no corners), scanning top row → left/right cols → bottom row
+#                   no corners), scanning top row -> left/right cols -> bottom row
 #
 # Example for size=3:
 #   Interior positions (row-major): 11,12,13,21,22,23,31,32,33
@@ -172,16 +172,16 @@ class UIFOProblem(OpticalSetupProblem):
 
     There are three ways to specify the topology (mutually exclusive):
 
-    1. **topology_seed** — Generate a random topology deterministically from a seed.
+    1. **topology_seed** | Generate a random topology deterministically from a seed.
        This is the simplest way to get started::
 
            UIFOProblem(size=3, topology_seed=42)
 
-    2. **topology string** — A compact encoding of the grid layout::
+    2. **topology string** | A string encoding of the grid layout::
 
            UIFOProblem(size=3, topology="AECGCCHEG-SLLSSHLLLLS")
 
-    3. **centers + boundaries dicts** — Explicit component placement::
+    3. **centers + boundaries dicts** | Explicit component placement::
 
            UIFOProblem(
                size=3,
@@ -203,7 +203,7 @@ class UIFOProblem(OpticalSetupProblem):
         self,
         size: int = 3,
         n_frequencies: int = 100,
-        topology_seed: int | None = 42,
+        topology_seed: int | None = None,
         topology: str | None = None,
         centers: dict[str, tuple[str, str]] | None = None,
         boundaries: dict[str, str] | None = None,
@@ -215,7 +215,7 @@ class UIFOProblem(OpticalSetupProblem):
         Args:
             size: Grid size (e.g., 3 for 3×3, 5 for 5×5). Defaults to 3.
             n_frequencies: Number of frequency points. Defaults to 100.
-            topology_seed: Seed for random topology generation. Defaults to 42.
+            topology_seed: Seed for random topology generation. Defaults to ``None``.
                 Pass ``None`` (with no ``topology`` or ``centers``/``boundaries``)
                 to generate a random topology.  Mutually exclusive
                 with ``topology`` and ``centers``/``boundaries``.
@@ -235,9 +235,9 @@ class UIFOProblem(OpticalSetupProblem):
                 Overrides must narrow default bounds.
         """
         # --- Validate topology specification (exactly one path) ---
-        has_seed = topology_seed is not None and topology_seed != 42
+        has_seed = topology_seed is not None
         has_string = topology is not None
-        has_dicts = centers is not None or boundaries is not None
+        has_dicts = centers is not None or boundaries is not None  # Handled by ValueError below
 
         n_specified = sum([has_seed, has_string, has_dicts])
         if n_specified == 0:
