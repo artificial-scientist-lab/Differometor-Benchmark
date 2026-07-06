@@ -412,11 +412,12 @@ class Objective:
     ) -> None:
         """Assemble the storage stack from user-facing knobs.
 
-        Maps ``checkpoint_format`` to a serializer, roots the resolver and
-        backend at ``checkpoint_dir`` (defaulting to the historical
+        Maps ``checkpoint_format`` to a serializer, anchors the backend
+        at ``checkpoint_dir`` (defaulting to the historical
         ``./data/objective_run_data``), and wires the
-        :class:`CheckpointManager`. Subclasses override this to swap a custom
-        serializer / backend / resolver / exporter.
+        :class:`CheckpointManager`. The resolver just builds relative
+        paths; the backend the root. Subclasses override this to
+        swap a custom serializer / backend / resolver / exporter.
         """
         fmt = checkpoint_format.lower()
         if fmt not in self._SERIALIZERS:
@@ -427,14 +428,14 @@ class Objective:
         self._checkpoint_format = fmt
         self._checkpoint_dir = checkpoint_dir
         self._serializer = self._SERIALIZERS[fmt]
-        self._resolver = RunPathResolver(
+        self._resolver = RunPathResolver()
+        self._backend = LocalFilesystemBackend(
             root=(
                 str(checkpoint_dir)
                 if checkpoint_dir is not None
                 else "./data/objective_run_data"
             )
         )
-        self._backend = LocalFilesystemBackend(root=self._resolver.root)
         self._exporter = RunDataExporter()
         self._checkpoint_manager = CheckpointManager(
             backend=self._backend,
@@ -1535,10 +1536,11 @@ class Objective:
         custom_path: str | None = None,
         hyper_param_str: str | None = None,
     ) -> Path:
-        """Generate run data file path via the configured path resolver.
+        """Generate the run data file path via the resolver + backend.
 
-        Delegates to :class:`~dfbench.core.storage.RunPathResolver` so the
-        path layout is not hardcoded here.
+        Asks :class:`~dfbench.core.storage.RunPathResolver` for the
+        relative path, then :meth:`StorageBackend.resolve` for the
+        absolute on-disk path, so the layout is not hardcoded here.
 
         Args:
             algorithm_name: Name of the optimization algorithm.
@@ -1548,7 +1550,7 @@ class Objective:
                 organization.
 
         Returns:
-            Path object for the run data file.
+            Absolute :class:`~pathlib.Path` for the run data file.
         """
         if custom_path is not None:
             return Path(custom_path)
@@ -1556,7 +1558,7 @@ class Objective:
         problem_name = (
             self._problem.name if hasattr(self._problem, "name") else "problem"
         )
-        path = self._resolver.checkpoint_path(
+        key = self._resolver.checkpoint_path(
             problem_name=problem_name,
             algorithm_name=algorithm_name,
             timestamp=self._timestamp,
@@ -1564,7 +1566,7 @@ class Objective:
             max_time=self._max_time,
             max_evals=self._max_evals,
         )
-        return path
+        return Path(self._backend.resolve(key))
 
     def __repr__(self) -> str:
         """String representation for debugging."""
@@ -2742,10 +2744,12 @@ class Objective:
             Path to the saved run data file.
 
         Example:
-            >>> obj.save_run_data(algorithm_name="adam_gd")
-            Path('data/objective_run_data/time100s_evals1000/voyager_adam_gd_2026-01-26_15-30-45.npz')
-            >>> obj.save_run_data(algorithm_name="adam_gd", hyper_param_str="lr0.1")
-            Path('data/objective_run_data/time100s_evals1000/lr0.1/voyager_adam_gd_2026-01-26_15-30-45.npz')
+            >>> path = obj.save_run_data(algorithm_name="adam_gd")
+            >>> path = obj.save_run_data(algorithm_name="adam_gd", hyper_param_str="lr0.1")
+
+        The returned path is absolute (the backend joins the resolver's
+        relative path onto ``checkpoint_dir``). Pass it to
+        ``load_run_data`` to resume.
         """
         if algorithm_name is None:
             algorithm_name = self.algorithm_str or "unknown"
@@ -2782,8 +2786,9 @@ class Objective:
             FileNotFoundError: If run data file doesn't exist.
 
         Example:
-            >>> obj.load_run_data("data/objective_run_data/.../voyager_adam_gd_2026-01-26_15-30-45.npz")
-            >>> obj.warmup_value_and_grad()   # OK — logging not yet active
+            >>> path = obj.save_run_data(algorithm_name="adam_gd")
+            >>> obj.load_run_data(path)
+            >>> obj.warmup_value_and_grad()   # OK, logging not yet active
             >>> obj.start_logging()           # resume wall-clock timer
             >>> print(f"Resuming from {obj.eval_count} evaluations")
         """

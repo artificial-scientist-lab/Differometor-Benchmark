@@ -193,7 +193,7 @@ class TestCheckpointProblemSpec:
 
         manager = CheckpointManager(
             backend=LocalFilesystemBackend(root=tmp_path),
-            resolver=RunPathResolver(root=str(tmp_path)),
+            resolver=RunPathResolver(),
         )
         state = manager.load(path)
         spec = CheckpointManager.extract_problem_spec(state)
@@ -213,7 +213,7 @@ class TestCheckpointProblemSpec:
 
         manager = CheckpointManager(
             backend=LocalFilesystemBackend(root=tmp_path),
-            resolver=RunPathResolver(root=str(tmp_path)),
+            resolver=RunPathResolver(),
         )
         state = manager.load(path)
         spec = CheckpointManager.extract_problem_spec(state)

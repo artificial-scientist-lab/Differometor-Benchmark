@@ -154,7 +154,7 @@ manager = CheckpointManager(serializer=JsonCheckpointSerializer())
 
 ## Storage Backends
 
-A `StorageBackend` is a small protocol (`save_bytes` / `load_bytes` / `exists` / `delete`). Keeping it this narrow means the local filesystem can be swapped for memory, S3, or any other target without touching the serializers or the `CheckpointManager`.
+A `StorageBackend` is a small protocol (`save_bytes` / `load_bytes` / `exists` / `delete` / `resolve`). Keeping it this narrow means the local filesystem can be swapped for memory, S3, or any other target without touching the serializers or the `CheckpointManager`.
 
 ### `LocalFilesystemBackend` (default)
 
@@ -172,16 +172,18 @@ backend = LocalFilesystemBackend(root="./data/objective_run_data")
 
 **Why atomic writes:** HPC jobs get killed without warning, and a half-written checkpoint is worse than no checkpoint. The temp-then-replace pattern guarantees a reader always sees either the previous complete file or the new complete file, never a partial one.
 
+`resolve(key)` returns the absolute on-disk path where `key` lives. `CheckpointManager.save` uses it to hand callers back a path they can `exists()` / `open()` directly.
+
 ---
 
 ## `RunPathResolver`: structured path construction
 
-`RunPathResolver` builds filesystem paths from semantic components, so no `./data/...` string is hardcoded inside `Objective`. The root directory is configurable, letting users redirect all artifacts without editing library code.
+`RunPathResolver` builds relative paths from semantic components, so no `./data/...` string is hardcoded inside `Objective`. The storage root (a directory on disk, an S3 prefix, etc.) exists on the `StorageBackend`, not the resolver; the resolver just gives relative paths that the backend joins onto its root.
 
-Saving layout:
+Path layout:
 
 ```
-{root}/{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.{ext}
+{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.{ext}
 ```
 
 where `budget_dir` is e.g. `time100s_evals1000` or `unlimited`. When
@@ -189,10 +191,10 @@ where `budget_dir` is e.g. `time100s_evals1000` or `unlimited`. When
 `.../{algo}/...`.
 
 ```python
-from dfbench.core.storage import RunPathResolver
+from dfbench.core.storage import RunPathResolver, LocalFilesystemBackend
 
-resolver = RunPathResolver(root="./data/objective_run_data", extension="npz")
-path = resolver.checkpoint_path(
+resolver = RunPathResolver(extension="npz")
+key = resolver.checkpoint_path(
     problem_name="voyager",
     algorithm_name="adam_gd",
     timestamp="2026-01-01_00-00-00",
@@ -200,7 +202,12 @@ path = resolver.checkpoint_path(
     max_time=100.0,
     max_evals=1000,
 )
-# → ./data/objective_run_data/time100s_evals1000/adam_gd_lr0.1/voyager_adam_gd_2026-01-01_00-00-00.npz
+# -> time100s_evals1000/adam_gd_lr0.1/voyager_adam_gd_2026-01-01_00-00-00.npz
+
+# The backend joins the key onto its root:
+backend = LocalFilesystemBackend(root="./data/objective_run_data")
+on_disk = backend.resolve(key)
+# -> /cwd/data/objective_run_data/time100s_evals1000/adam_gd_lr0.1/voyager_adam_gd_2026-01-01_00-00-00.npz
 ```
 
 ---
@@ -241,12 +248,13 @@ from dfbench.core.storage import CheckpointManager, LocalFilesystemBackend, NpzC
 manager = CheckpointManager(
     backend=LocalFilesystemBackend(root="./data/objective_run_data"),
     serializer=NpzCheckpointSerializer(),
-    resolver=RunPathResolver(root="./data/objective_run_data"),
+    resolver=RunPathResolver(),
     save_every=1000,
 )
 
 # Save
 path = manager.save(state)
+# `path` is the absolute on-disk Path (backend.resolve(key)); `manager.load(path)` round-trips.
 
 # Load
 state = manager.load(path)

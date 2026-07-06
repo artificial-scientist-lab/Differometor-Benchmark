@@ -544,7 +544,7 @@ Saves the full optimization state to a checkpoint file via the internal `Checkpo
 
 The checkpoint embeds `RunMetadata` (problem/algo/budget identity, `SaveConfig`, and the problem's typed `ProblemSpec` container; see [Problems](Problems)), so the file is fully self-describing.
 
-Default path (built by `RunPathResolver`): `data/objective_run_data/{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`
+Default path (built by `RunPathResolver`, then anchored to a directory by `LocalFilesystemBackend`): `<checkpoint_dir>/{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`, absolute on disk. `checkpoint_dir` defaults to `./data/objective_run_data`.
 
 The first save without explicit overrides caches the path; subsequent periodic saves overwrite the same file.
 

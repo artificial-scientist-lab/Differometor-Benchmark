@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-07-06
+
+### Fixed
+- Default `checkpoint_dir` (relative `./data/objective_run_data`) no longer double-prefixes the on-disk path. Before the fix, `CheckpointManager.save` returned a path that did not `exists()`: the backend joined its root onto a path that already contained the root. Round-trip was broken for the default config and only passed in tests because `tmp_path` is absolute. `manager.save` now returns the absolute on-disk path via `backend.resolve(key)`.
+
+### Changed
+- `RunPathResolver` no longer takes a `root` field; the `StorageBackend` owns the storage root. The resolver now returns relative paths that the backend joins onto its root.
+- `StorageBackend` protocol gained `resolve(key) -> Path | str` to expose where a key is physically stored. `LocalFilesystemBackend.resolve` returns `self._resolve(key).resolve()` (absolute `Path`).
+- `CheckpointManager` default backend is now `LocalFilesystemBackend(root="./data/objective_run_data")` (the root moved from the resolver to the backend).
+- `CheckpointManager.save` now returns `Path(self.backend.resolve(key))` (absolute on-disk path) rather than the resolver's relative path.
+
+### Removed
+- `RunPathResolver.root` field. Pass `root=` to `LocalFilesystemBackend` instead.
+
 ## [0.2.0] - 2026-07-04
 
 ### Added

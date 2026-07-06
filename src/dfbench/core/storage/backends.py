@@ -1,9 +1,12 @@
 """Storage backends: where serialized bytes physically go.
 
 A :class:`StorageBackend` is a tiny protocol (``save_bytes`` /
-``load_bytes`` / ``exists`` / ``delete``) so that the local filesystem can
-be swapped for memory, S3, etc. without touching serializers or the
-:class:`~dfbench.core.storage.manager.CheckpointManager`.
+``load_bytes`` / ``exists`` / ``delete`` / ``resolve``) so that the local
+filesystem can be swapped for memory, S3, etc. without touching serializers
+or the :class:`~dfbench.core.storage.manager.CheckpointManager`. The
+backend owns the storage root (a directory on disk, an S3 prefix, etc.).
+Callers just hand it opaque keys and use :meth:`resolve` to get the actual
+location of a stored artifact back.
 
 The default :class:`LocalFilesystemBackend` performs an **atomic write**
 (write to a sibling temp file then :func:`os.replace`) and, unlike the
@@ -38,6 +41,18 @@ class StorageBackend(Protocol):
 
     def delete(self, key: str | Path) -> None:
         """Remove ``key`` from the backend (no error if missing)."""
+        ...
+
+    def resolve(self, key: str | Path) -> Path | str:
+        """Return where ``key`` is physically stored.
+
+        A filesystem backend returns an absolute :class:`~pathlib.Path`;
+        a non-filesystem backend returns whatever logical identifier makes
+        sense for it (a URI, a memory id, etc.).
+        :class:`~dfbench.core.storage.manager.CheckpointManager.save`
+        uses this to hand callers back a path they can ``exists()`` /
+        ``open()`` directly.
+        """
         ...
 
 
@@ -103,3 +118,12 @@ class LocalFilesystemBackend:
 
     def delete(self, key: str | Path) -> None:
         self._resolve(key).unlink(missing_ok=True)
+
+    def resolve(self, key: str | Path) -> Path:
+        """Return the absolute on-disk path where ``key`` is.
+
+        Calls :func:`pathlib.Path.resolve` so a relative backend root
+        still produces an absolute path. That absolute path then
+        goes through :meth:`_resolve` thanks to ``is_absolute()``.
+        """
+        return self._resolve(key).resolve()

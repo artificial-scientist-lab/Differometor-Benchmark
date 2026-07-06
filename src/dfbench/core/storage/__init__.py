@@ -3,15 +3,15 @@
 This package decouples *what* is saved (the :class:`RunState` data contract)
 from *how* and *where* it is saved:
 
-* :class:`RunState` - plain dataclass snapshot of an optimization run,
+* :class:`RunState`: plain dataclass snapshot of an optimization run,
   independent of the :class:`~dfbench.core.objective.Objective` class.
-* :class:`CheckpointSerializer` / :class:`RunDataExporter` - format
+* :class:`CheckpointSerializer` / :class:`RunDataExporter`: format
   strategies (NPZ, JSON, PNG) behind small protocols.
-* :class:`StorageBackend` - where bytes go (local filesystem by default,
+* :class:`StorageBackend`: where bytes go (local filesystem by default,
   easily swapped for S3 / memory / etc.).
-* :class:`RunPathResolver` - builds structured paths from components so no
+* :class:`RunPathResolver`: builds structured paths from components so no
   ``./data/...`` string is hardcoded in :class:`Objective`.
-* :class:`CheckpointManager` - the single facade :class:`Objective` calls;
+* :class:`CheckpointManager`: the single facade :class:`Objective` calls;
   it wires a serializer, backend, and resolver together and drives the
   periodic-save / load lifecycle.
 
@@ -20,11 +20,11 @@ Typical usage from inside an Objective::
     from dfbench.core.storage import CheckpointManager, LocalFilesystemBackend
 
     manager = CheckpointManager(
-        backend=LocalFilesystemBackend(),
+        backend=LocalFilesystemBackend(root="./data/objective_run_data"),
         serializer=NpzCheckpointSerializer(),
-        resolver=RunPathResolver(root="./data/objective_run_data"),
+        resolver=RunPathResolver(),
     )
-    path = manager.save(state)
+    path = manager.save(state)   # absolute Path on disk
     state = manager.load(path)
 """
 

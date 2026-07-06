@@ -42,11 +42,13 @@ class CheckpointManager:
 
     Args:
         backend: Where bytes go. Defaults to a local filesystem backend
-            rooted at the resolver's ``root``.
+            rooted at ``./data/objective_run_data`` (the historical
+            default). The backend has the storage root.
         serializer: How a :class:`RunState` is encoded. Defaults to the
             NPZ serializer.
-        resolver: How paths are built from components. Defaults to the
-            historical ``./data/objective_run_data`` layout.
+        resolver: How artifact paths are built from components. Defaults
+            to a :class:`RunPathResolver`, which returns relative paths
+            that the backend combines with its root.
         save_every: Periodic checkpoint cadence in evaluations. ``None``
             disables auto-saving. The manager owns this so the Objective
             does not need to pass it on every call.
@@ -72,7 +74,7 @@ class CheckpointManager:
     ) -> None:
         self.resolver = resolver or RunPathResolver()
         self.backend: StorageBackend = backend or LocalFilesystemBackend(
-            root=self.resolver.root
+            root="./data/objective_run_data"
         )
         self.serializer: CheckpointSerializer = serializer or NpzCheckpointSerializer()
 
@@ -102,9 +104,10 @@ class CheckpointManager:
         """Return the checkpoint path for ``metadata``.
 
         If ``explicit_path`` is given it wins (used by tests and custom
-        layouts). Otherwise the resolver builds the structured path. The
-        first computed structured path is cached so subsequent periodic
-        saves without overrides overwrite the same file.
+        layouts) and is passed straight to the backend. Otherwise the
+        resolver builds a relative path, which the backend then anchors
+        to its root. The first computed path is cached so subsequent
+        periodic saves without overrides overwrite the same file.
         """
         if explicit_path is not None:
             return Path(explicit_path)
@@ -154,11 +157,13 @@ class CheckpointManager:
         explicit_path: str | Path | None = None,
         hyper_param_str: str | None = None,
     ) -> Path:
-        """Serialize and persist ``state``; return the written path.
+        """Serialize and persist ``state``; return the on-disk path.
 
-        If neither ``explicit_path`` nor ``hyper_param_str`` is given, the
-        path computed from ``state.metadata`` is cached so later saves
-        overwrite the same file.
+        The returned :class:`~pathlib.Path` is the absolute path the
+        backend actually wrote to, so callers can ``exists()`` / ``open()``
+        it directly. If neither ``explicit_path`` nor ``hyper_param_str``
+        is given, the path computed from ``state.metadata`` is cached so
+        later saves overwrite the same file.
 
         Raises:
             RunStateValidationException: If ``validate_on_save`` is enabled
@@ -167,20 +172,21 @@ class CheckpointManager:
         if self.validate_on_save:
             validate_run_state(state, strict=True).raise_if_invalid()
         timestamp = state.metadata.timestamp
-        path = self._effective_path(
+        key = self._effective_path(
             state.metadata, timestamp, explicit_path, hyper_param_str
         )
         data = self.serializer.serialize(state)
-        self.backend.save_bytes(path, data)
+        self.backend.save_bytes(key, data)
         self.last_checkpoint_eval = state.eval_count
-        return path
+        return Path(self.backend.resolve(key))
 
     def load(self, path: str | Path) -> RunState:
         """Load and return a :class:`RunState` from ``path``.
 
         The path is cached so subsequent saves without overrides
         overwrite the same file (matches the historical resume-then-save
-        behaviour).
+        behaviour). ``path`` is usually the absolute path returned by
+        :meth:`save`.
 
         Raises:
             RunStateValidationException: If ``validate_on_load`` is enabled

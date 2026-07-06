@@ -172,7 +172,7 @@ class TestLocalFilesystemBackend:
 
 class TestRunPathResolver:
     def test_default_layout(self):
-        r = RunPathResolver(root="./data/run_data")
+        r = RunPathResolver()
         p = r.checkpoint_path(
             problem_name="voyager",
             algorithm_name="adam/gd",
@@ -200,23 +200,25 @@ class TestCheckpointManager:
     def test_save_load_round_trip(self, tmp_path):
         manager = CheckpointManager(
             backend=LocalFilesystemBackend(root=tmp_path),
-            resolver=RunPathResolver(root=str(tmp_path)),
+            resolver=RunPathResolver(),
         )
         state = _make_state()
         path = manager.save(state)
         assert path.exists()
+        assert path.is_absolute()
+        assert str(path).startswith(str(tmp_path.resolve()))  # backend joined its root onto the key
         assert manager.last_checkpoint_eval == state.eval_count
 
         loaded = manager.load(path)
         assert loaded.eval_count == state.eval_count
-        # Cached path means a second save without overrides rewrites same file
+        # Cached path means a second save without overrides rewrites the same file
         path2 = manager.save(state)
         assert path2 == path
 
     def test_tick_skips_when_not_due(self, tmp_path):
         manager = CheckpointManager(
             backend=LocalFilesystemBackend(root=tmp_path),
-            resolver=RunPathResolver(root=str(tmp_path)),
+            resolver=RunPathResolver(),
             save_every=5,
         )
         called = {"n": 0}
@@ -236,13 +238,33 @@ class TestCheckpointManager:
     def test_explicit_path_overrides_resolver(self, tmp_path):
         manager = CheckpointManager(
             backend=LocalFilesystemBackend(root=tmp_path),
-            resolver=RunPathResolver(root="./data/ignored"),
+            resolver=RunPathResolver(),
         )
         state = _make_state()
         explicit = tmp_path / "custom.npz"
         path = manager.save(state, explicit_path=explicit)
-        assert path == explicit
+        assert path.resolve() == explicit.resolve()
         assert explicit.exists()
+
+
+class TestCheckpointManagerDefaultRoot:
+    """Regression: the default relative ./data/objective_run_data root
+    must round-trip without double prefixing. Before the fix, manager.save
+    returned a path that did not exist, because the backend joined its
+    root onto a path that already contained the root."""
+
+    def test_default_relative_root_round_trip(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        manager = CheckpointManager()  # all defaults
+        state = _make_state()
+        path = manager.save(state)
+        assert path.exists(), f"{path} should exist (was the double-prefix bug)"
+        assert path.is_absolute()
+        loaded = manager.load(path)
+        assert loaded.eval_count == state.eval_count
+        # Second save overwrites the cached path
+        path2 = manager.save(state)
+        assert path2 == path
 
 
 # ---------------------------------------------------------------------
@@ -318,7 +340,7 @@ class TestSerializerExtensionSync:
         manager = CheckpointManager(
             backend=LocalFilesystemBackend(root=tmp_path),
             serializer=JsonCheckpointSerializer(),
-            resolver=RunPathResolver(root=str(tmp_path)),
+            resolver=RunPathResolver(),
         )
         assert manager.resolver.extension == "json"
         state = _make_state()
@@ -623,7 +645,7 @@ class TestCheckpointManagerValidation:
     def _manager(self, tmp_path, **kw) -> CheckpointManager:
         return CheckpointManager(
             backend=LocalFilesystemBackend(root=tmp_path),
-            resolver=RunPathResolver(root=str(tmp_path)),
+            resolver=RunPathResolver(),
             **kw,
         )
 

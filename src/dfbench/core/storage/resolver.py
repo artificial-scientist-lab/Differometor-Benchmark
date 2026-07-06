@@ -1,17 +1,18 @@
-"""Structured path construction for run artifacts.
+"""Structured key construction for run artifacts.
 
-A :class:`RunPathResolver` builds filesystem paths from semantic
-components (problem name, algorithm name, hyperparameter string, budget
-limits, timestamp) so that :class:`Objective` and
+A :class:`RunPathResolver` builds relative paths from semantic components
+(problem name, algorithm name, hyperparameter string, budget limits,
+timestamp) so that :class:`Objective` and
 :class:`~dfbench.core.storage.manager.CheckpointManager` never hardcode
-``./data/...`` strings. The root directory is configurable, letting users
-redirect all artifacts to a scratch disk or an S3-prefix-backed backend
-without editing library code.
+``./data/...`` strings. The actual storage root (a directory on disk, an
+S3 prefix, etc.) is in the :class:`StorageBackend`, not the resolver;
+the resolver just emits relative paths that the backend combines with its
+root.
 
-    The default layout mirrors the historical dfbench convention but is now
+    The layout mirrors the historical dfbench convention but is now
     expressed in one place::
 
-    {root}/{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.npz
+    {budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.npz
 
     where ``budget_dir`` is e.g. ``time100s_evals1000`` or ``unlimited``.
     When ``hyper_param_str`` is empty/None the segment collapses to just
@@ -31,18 +32,18 @@ def _safe(s: str) -> str:
 
 @dataclass
 class RunPathResolver:
-    """Build structured artifact paths under a configurable root.
+    """Build structured artifact keys (relative paths).
+
+    The path returned is relative, the storage backend gives a concrete location 
+    on disk or in some other storage.
 
     Attributes:
-        root: Base directory for all artifacts. Defaults to
-            ``./data/objective_run_data`` to match the historical layout.
         extension: File extension (without dot) for checkpoint files,
             e.g. ``"npz"`` or ``"json"``. Used by the manager to build the
             default filename; the serializer itself is format-agnostic to
             the extension.
     """
 
-    root: str | Path = "./data/objective_run_data"
     extension: str = "npz"
 
     def checkpoint_dir(
@@ -53,10 +54,11 @@ class RunPathResolver:
         max_time: float | None = None,
         max_evals: int | None = None,
     ) -> Path:
-        """Return the directory a checkpoint should live in.
+        """Return the relative path for a checkpoint directory.
 
-        The directory is *not* created here; the storage backend creates
-        parents as needed when it writes.
+        Nothing is created here; the storage backend makes the parent
+        directories when it writes. The returned path is rooted by the
+        backend, not by the resolver.
         """
         parts = []
         if max_time is not None:
@@ -65,7 +67,7 @@ class RunPathResolver:
             parts.append(f"evals{max_evals}")
         budget_dir = "_".join(parts) if parts else "unlimited"
 
-        d = Path(self.root) / budget_dir
+        d = Path(budget_dir)
         if hyper_param_str:
             d = d / f"{_safe(algorithm_name)}_{_safe(hyper_param_str)}"
         elif algorithm_name:
@@ -81,7 +83,7 @@ class RunPathResolver:
         max_time: float | None = None,
         max_evals: int | None = None,
     ) -> Path:
-        """Return the full path for a checkpoint file."""
+        """Return the relative path for a checkpoint file."""
         d = self.checkpoint_dir(
             problem_name,
             algorithm_name,
