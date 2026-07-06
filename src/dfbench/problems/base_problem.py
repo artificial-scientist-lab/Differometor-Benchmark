@@ -79,7 +79,7 @@ def name_to_penalty_fn(name: str | None) -> Callable | None:
 def sensitivity_single_noise(noises, powers, frequencies):
     """Single-noise sensitivity model used by lightweight Voyager problems."""
     del frequencies
-    return noises[0] / powers[0]
+    return noises[0] / jnp.abs(powers[0])
 
 
 class OpticalSetupProblem(ContinuousProblem):

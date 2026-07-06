@@ -134,7 +134,7 @@ class VoyagerTuningProblem(OpticalSetupProblem):
                 sensitivity_single_noise,
                 self._frequencies,
                 True,
-                signal_floor,
+                self._signal_floor,
             )
 
             # relative objective as in voyager_tuning.py
