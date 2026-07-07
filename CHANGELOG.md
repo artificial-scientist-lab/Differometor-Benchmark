@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `RunPathResolver` no longer takes a `root` field; the `StorageBackend` owns the storage root. The resolver now returns relative paths that the backend joins onto its root.
+- Hyperparam in file name: `RunPathResolver` now puts the algorithm and hyperparameter string in the checkpoint filename, so a file is self-describing even when copied out of its directory. Pre-change the filename was `{problem}_{algo}_{timestamp}.{ext}`; it is now `{problem}_{algo}_{hyper_param_str}_{timestamp}.{ext}` (the `_{hyper_param_str}` part is omitted when the string is empty/None).
+- Flatter directory option: `RunPathResolver` default layout is now flat inside the budget directory: `{budget_dir}/{problem}_{algo}_{hyper_param_str}_{timestamp}.{ext}`. Set `algo_directory=True` to restore the previous per-algorithm subdirectory layout `{budget_dir}/{algo}_{hyper_param_str}/...`. Defaults to `False`.
 - `StorageBackend` protocol gained `resolve(key) -> Path | str` to expose where a key is physically stored. `LocalFilesystemBackend.resolve` returns `self._resolve(key).resolve()` (absolute `Path`).
 - `CheckpointManager` default backend is now `LocalFilesystemBackend(root="./data/objective_run_data")` (the root moved from the resolver to the backend).
 - `CheckpointManager.save` now returns `Path(self.backend.resolve(key))` (absolute on-disk path) rather than the resolver's relative path.

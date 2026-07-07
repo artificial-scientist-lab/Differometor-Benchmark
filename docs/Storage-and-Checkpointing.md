@@ -180,20 +180,24 @@ backend = LocalFilesystemBackend(root="./data/objective_run_data")
 
 `RunPathResolver` builds relative paths from semantic components, so no `./data/...` string is hardcoded inside `Objective`. The storage root (a directory on disk, an S3 prefix, etc.) exists on the `StorageBackend`, not the resolver; the resolver just gives relative paths that the backend joins onto its root.
 
-Path layout:
+Default path layout (flat inside the budget directory):
 
 ```
-{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.{ext}
+{budget_dir}/{problem}_{algo}_{hyper_param_str}_{timestamp}.{ext}
 ```
 
-where `budget_dir` is e.g. `time100s_evals1000` or `unlimited`. When
-`hyper_param_str` is empty/None the directory segment collapses to just
-`.../{algo}/...`.
+Set `algo_directory=True` to insert an `{algo}_{hyper_param_str}` segment after `{budget_dir}` (collapsing to just `{algo}` when `hyper_param_str` is empty/None):
+
+```
+{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{hyper_param_str}_{timestamp}.{ext}
+```
+
+`budget_dir` is e.g. `time100s_evals1000` or `unlimited`. The algorithm and hyperparameter string are always part of the filename, so a file is self-describing even when copied out of its directory.
 
 ```python
 from dfbench.core.storage import RunPathResolver, LocalFilesystemBackend
 
-resolver = RunPathResolver(extension="npz")
+resolver = RunPathResolver(extension="npz")  # flat default
 key = resolver.checkpoint_path(
     problem_name="voyager",
     algorithm_name="adam_gd",
@@ -202,12 +206,24 @@ key = resolver.checkpoint_path(
     max_time=100.0,
     max_evals=1000,
 )
-# -> time100s_evals1000/adam_gd_lr0.1/voyager_adam_gd_2026-01-01_00-00-00.npz
+# -> time100s_evals1000/voyager_adam_gd_lr0.1_2026-01-01_00-00-00.npz
 
 # The backend joins the key onto its root:
 backend = LocalFilesystemBackend(root="./data/objective_run_data")
 on_disk = backend.resolve(key)
-# -> /cwd/data/objective_run_data/time100s_evals1000/adam_gd_lr0.1/voyager_adam_gd_2026-01-01_00-00-00.npz
+# -> /cwd/data/objective_run_data/time100s_evals1000/voyager_adam_gd_lr0.1_2026-01-01_00-00-00.npz
+
+# Opt into the per-algorithm subdirectory layout:
+resolver = RunPathResolver(extension="npz", algo_directory=True)
+key = resolver.checkpoint_path(
+    problem_name="voyager",
+    algorithm_name="adam_gd",
+    timestamp="2026-01-01_00-00-00",
+    hyper_param_str="lr0.1",
+    max_time=100.0,
+    max_evals=1000,
+)
+# -> time100s_evals1000/adam_gd_lr0.1/voyager_adam_gd_lr0.1_2026-01-01_00-00-00.npz
 ```
 
 ---

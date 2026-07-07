@@ -181,9 +181,35 @@ class TestRunPathResolver:
             max_time=100.0,
             max_evals=1000,
         )
-        assert p.name == "voyager_adam_gd_2026-01-01_00-00-00.npz"
+        # Flat default: no algo dir, hp string lives in the filename.
+        assert p.name == "voyager_adam_gd_lr0.1_2026-01-01_00-00-00.npz"
+        assert "time100s_evals1000" in p.parts
+        assert "adam_gd_lr0.1" not in p.parts
+
+    def test_algo_directory_layout(self):
+        r = RunPathResolver(algo_directory=True)
+        p = r.checkpoint_path(
+            problem_name="voyager",
+            algorithm_name="adam/gd",
+            timestamp="2026-01-01_00-00-00",
+            hyper_param_str="lr0.1",
+            max_time=100.0,
+            max_evals=1000,
+        )
+        assert p.name == "voyager_adam_gd_lr0.1_2026-01-01_00-00-00.npz"
         assert "time100s_evals1000" in p.parts
         assert "adam_gd_lr0.1" in p.parts
+
+    def test_algo_directory_without_hyperparam(self):
+        r = RunPathResolver(algo_directory=True)
+        p = r.checkpoint_path(
+            problem_name="voyager",
+            algorithm_name="adam_gd",
+            timestamp="2026-01-01_00-00-00",
+        )
+        # No hp string: dir segment collapses to just the algo name.
+        assert p.name == "voyager_adam_gd_2026-01-01_00-00-00.npz"
+        assert "adam_gd" in p.parts
 
     def test_unlimited_budget(self):
         r = RunPathResolver()

@@ -9,14 +9,16 @@ S3 prefix, etc.) is in the :class:`StorageBackend`, not the resolver;
 the resolver just emits relative paths that the backend combines with its
 root.
 
-    The layout mirrors the historical dfbench convention but is now
-    expressed in one place::
+    The default layout is flat inside the budget directory::
 
-    {budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.npz
+    {budget_dir}/{problem}_{algo}_{hyper_param_str}_{timestamp}.npz
 
-    where ``budget_dir`` is e.g. ``time100s_evals1000`` or ``unlimited``.
-    When ``hyper_param_str`` is empty/None the segment collapses to just
-    ``{algo}`` (no trailing underscore).
+    Set ``algo_directory=True`` to insert an ``{algo}_{hyper_param_str}``
+    segment after ``{budget_dir}`` (collapsing to just ``{algo}`` when
+    ``hyper_param_str`` is empty/None). ``budget_dir`` is e.g.
+    ``time100s_evals1000`` or ``unlimited``. The algorithm and
+    hyperparameter string are always part of the filename, so a file
+    stays self-describing even when copied out of its directory.
 """
 
 from __future__ import annotations
@@ -34,17 +36,25 @@ def _safe(s: str) -> str:
 class RunPathResolver:
     """Build structured artifact keys (relative paths).
 
-    The path returned is relative, the storage backend gives a concrete location 
-    on disk or in some other storage.
+    The path returned is relative; the storage backend is what anchors it
+    to a concrete location on disk or in some other store.
 
     Attributes:
         extension: File extension (without dot) for checkpoint files,
             e.g. ``"npz"`` or ``"json"``. Used by the manager to build the
             default filename; the serializer itself is format-agnostic to
             the extension.
+        algo_directory: When ``True``, insert an ``{algo}_{hyper_param_str}``
+            directory segment between the budget directory and the file
+            (collapsing to just ``{algo}`` when ``hyper_param_str`` is
+            empty/None). When ``False`` (default), the layout is flat
+            inside the budget directory. The algorithm and hyperparameter
+            string are always part of the filename either way, so a file
+            is self-describing even when copied out of its directory.
     """
 
     extension: str = "npz"
+    algo_directory: bool = False
 
     def checkpoint_dir(
         self,
@@ -68,10 +78,11 @@ class RunPathResolver:
         budget_dir = "_".join(parts) if parts else "unlimited"
 
         d = Path(budget_dir)
-        if hyper_param_str:
-            d = d / f"{_safe(algorithm_name)}_{_safe(hyper_param_str)}"
-        elif algorithm_name:
-            d = d / _safe(algorithm_name)
+        if self.algo_directory:
+            if hyper_param_str:
+                d = d / f"{_safe(algorithm_name)}_{_safe(hyper_param_str)}"
+            elif algorithm_name:
+                d = d / _safe(algorithm_name)
         return d
 
     def checkpoint_path(
@@ -91,8 +102,9 @@ class RunPathResolver:
             max_time,
             max_evals,
         )
+        hp_fmt = f"_{_safe(hyper_param_str)}" if hyper_param_str else ""
         filename = (
-            f"{_safe(problem_name)}_{_safe(algorithm_name)}_{timestamp}"
+            f"{_safe(problem_name)}_{_safe(algorithm_name)}{hp_fmt}_{timestamp}"
             f".{self.extension}"
         )
         return d / filename
