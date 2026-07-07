@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- `batched_param` is no longer a `save` token. It is now the boolean constructor flag `save_batched_params_history: bool = False` on `Objective` and `SaveConfig.from_flags`, sitting alongside `save_params_history`. The `"batched"` convenience alias now expands to `batched_loss`, `batched_grad`, `batched_hessian` (three tokens instead of four). The `SaveConfig.batched_param` field name is kept so existing checkpoints still load via `from_dict`.
+
 ## [0.2.1] - 2026-07-06
 
 ### Fixed
