@@ -21,8 +21,8 @@ src/dfbench/
 │   └── utils.py              # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
 │   ├── derivative_free/      # OMADS, PDFO/Py-BOBYQA, NelderMead, Powell
-│   ├── global_search/        # BasinHopping, DualAnnealing
-│   ├── evolutionary/         # RandomSearch, EvoxPSO, EvoxES, Nevergrad, CMA family
+│   ├── global_search/        # RandomSearch, BasinHopping, DualAnnealing
+│   ├── evolutionary/         # EvoxPSO, EvoxES, Nevergrad, CMA family
 │   ├── gradient_based/
 │   │   ├── optax/            # 34 Optax-based optimizers (OptaxAdam, OptaxLAMB, ...)
 │   │   ├── scipy/            # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)

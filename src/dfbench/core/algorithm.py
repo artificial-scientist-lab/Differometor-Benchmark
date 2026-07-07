@@ -16,7 +16,7 @@ class AlgorithmType(Enum):
 
     Values:
         GRADIENT_BASED: Algorithms using gradient information (e.g., Adam, SA-GD).
-        EVOLUTIONARY: Population-based algorithms (e.g., PSO, Random Search).
+        EVOLUTIONARY: Population-based algorithms (e.g., PSO).
         DERIVATIVE_FREE: Direct-search and local derivative-free algorithms.
         GLOBAL_SEARCH: Stochastic global-search algorithms.
         SURROGATE_BASED: Algorithms using surrogate models (e.g., Bayesian Optimization).

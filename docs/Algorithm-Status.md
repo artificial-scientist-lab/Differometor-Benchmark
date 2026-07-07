@@ -146,7 +146,6 @@ Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
 |-----------|-----------|--------|--------|-------|
 | EvoX ES (12 variants) | `EvoxES` | **Finished** | `main` | See variant table above |
 | EvoX PSO (7 variants) | `EvoxPSO` | **Finished** | `main` | See variant table above |
-| Random Search | `RandomSearch` | **Finished** | `main` | Baseline |
 | Evosax ES (14 variants) | `EvosaxES` | Branch | `algorithm/evo-algorithms` | See variant table above |
 | DE | `DE` | Branch | `algorithm/evo-algorithms` | Differential Evolution (custom impl) |
 | JADE | `JADE` | Branch | `algorithm/evo-algorithms` | Adaptive DE |
@@ -201,6 +200,7 @@ Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
 |-----------|-----------|--------|--------|-------|
 | Basin Hopping | `BasinHopping` | Branch | `algorithm/scipy-nongrad-algorithms` | SciPy stochastic global optimizer |
 | Dual Annealing | `DualAnnealing` | Branch | `algorithm/scipy-nongrad-algorithms` | SciPy stochastic global optimizer |
+| Random Search | `RandomSearch` | **Finished** | `main` | Baseline |
 
 ### Surrogate-Based / Bayesian Optimization
 

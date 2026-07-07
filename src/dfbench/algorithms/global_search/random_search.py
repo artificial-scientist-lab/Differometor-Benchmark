@@ -13,7 +13,7 @@ class RandomSearch(OptimizationAlgorithm):
 
     Attributes:
         algorithm_str (str): Identifier string for this algorithm ("random_search").
-        algorithm_type (AlgorithmType): Type classification (EVOLUTIONARY).
+        algorithm_type (AlgorithmType): Type classification (GLOBAL_SEARCH).
         batch_size (int): Number of samples to evaluate in parallel per batch.
 
     Example:
@@ -28,7 +28,7 @@ class RandomSearch(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "random_search"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.GLOBAL_SEARCH
 
     def __init__(
         self,

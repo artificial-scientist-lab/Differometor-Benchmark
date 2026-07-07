@@ -249,7 +249,6 @@ REGISTRY: list[AlgoSpec] = [
     AlgoSpec(COBYLA, AlgorithmType.GRADIENT_BASED, unbounded=False),
     AlgoSpec(SR1, AlgorithmType.GRADIENT_BASED, unbounded=False),
     # -- evolutionary ---------------------------------------------------------
-    AlgoSpec(RandomSearch, AlgorithmType.EVOLUTIONARY, unbounded=False),
     AlgoSpec(
         EvoxES,
         AlgorithmType.EVOLUTIONARY,
@@ -285,6 +284,7 @@ REGISTRY: list[AlgoSpec] = [
     # -- global search (SciPy) -----------------------------------------------
     AlgoSpec(BasinHopping, AlgorithmType.GLOBAL_SEARCH, unbounded=False),
     AlgoSpec(DualAnnealing, AlgorithmType.GLOBAL_SEARCH, unbounded=False),
+    AlgoSpec(RandomSearch, AlgorithmType.GLOBAL_SEARCH, unbounded=False),
     # -- surrogate-based ------------------------------------------------------
     AlgoSpec(
         BotorchBO,
