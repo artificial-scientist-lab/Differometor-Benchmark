@@ -20,9 +20,8 @@ Standard histories:
 | ``"batched_loss"`` | Store full ``(batch,)`` loss vectors instead of batch min           |
 | ``"batched_grad"`` | Store full ``(batch, n_params)`` gradient arrays                    |
 | ``"batched_hessian"``| Store full ``(batch, n_params, n_params)`` Hessian arrays       |
-| ``"batched_param"``| Store full ``(batch, n_params)`` parameter arrays                  |
-| ``"batched"``      | Convenience alias: expands to ``batched_param``, ``batched_loss``, |
-|                    | ``batched_grad``, ``batched_hessian``                              |
+| ``"batched"``      | Convenience alias: expands to ``batched_loss``, ``batched_grad``,  |
+|                    | ``batched_hessian``                                                |
 
 Aux diagnostics (only recorded by the ``value_aux`` / ``value_and_grad_aux``
 / ``vmap_*_aux`` methods, on problems that opt into the power-penalty
@@ -49,9 +48,10 @@ token is on, batched aux entries are reduced to the representative point
 ``is_feasible`` and ``violations`` reflect that best point. This matches
 the reduction rule used for gradients and Hessians.
 
-The two standard flags (``save_time_steps``, ``save_params_history``)
-remain as explicit booleans because they are the most commonly toggled and
-have less combinatorial interaction with the batched variants.
+The two standard flags (``save_time_steps``, ``save_params_history``,
+``save_batched_params_history``) remain as explicit booleans because they
+are the most commonly toggled and have less combinatorial interaction with
+the batched variants.
 """
 
 from __future__ import annotations
@@ -67,7 +67,6 @@ VALID_TOKENS: frozenset[str] = frozenset(
         "batched_loss",
         "batched_grad",
         "batched_hessian",
-        "batched_param",
         "batched",  # convenience alias, expanded at construction
         # Aux diagnostics (non-batched / reduced):
         "sensitivity_loss",
@@ -88,7 +87,6 @@ VALID_TOKENS: frozenset[str] = frozenset(
 
 # Expansion of the "batched" convenience alias.
 _BATCHED_EXPANSION: list[str] = [
-    "batched_param",
     "batched_loss",
     "batched_grad",
     "batched_hessian",
@@ -184,19 +182,27 @@ class SaveConfig:
         cls,
         save_time_steps: bool = True,
         save_params_history: bool = True,
+        save_batched_params_history: bool = False,
         save: list[str] | None = None,
     ) -> "SaveConfig":
-        """Build a :class:`SaveConfig` from the two standard flags + token list.
+        """Build a :class:`SaveConfig` from the standard flags + token list.
 
         Args:
             save_time_steps: Record timestamps.
             save_params_history: Record parameter history.
+            save_batched_params_history: Store full ``(batch, n_params)``
+                parameter arrays instead of the reduced representative
+                point for batched evals.
             save: List of advanced tokens (see module docstring).
 
         Raises:
             ValueError: If an unknown token is encountered.
         """
-        cfg = cls(time_steps=save_time_steps, params=save_params_history)
+        cfg = cls(
+            time_steps=save_time_steps,
+            params=save_params_history,
+            batched_param=save_batched_params_history,
+        )
         if save:
             expanded: list[str] = []
             for token in save:
@@ -231,8 +237,6 @@ class SaveConfig:
                     cfg.batched_grad = True
                 elif t == "batched_hessian":
                     cfg.batched_hessian = True
-                elif t == "batched_param":
-                    cfg.batched_param = True
                 elif t in _AUX_FIELD_MAP:
                     setattr(cfg, _AUX_FIELD_MAP[t], True)
                 elif t in _BATCHED_AUX_FIELD_MAP:

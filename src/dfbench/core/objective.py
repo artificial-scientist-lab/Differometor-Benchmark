@@ -49,8 +49,8 @@ class Objective:
 
     3. **History tracking** – maintains aligned histories of losses, params,
        gradients, evaluation types, and elapsed time.  The ``save`` list of
-       string tokens (plus the two standard flags ``save_time_steps`` and
-       ``save_params_history``) controls what is stored; the active
+       string tokens (plus the three standard flags ``save_time_steps``,
+       ``save_params_history``, and ``save_batched_params_history``) controls what is stored; the active
        configuration is recorded as a :class:`SaveConfig` and embedded in
        every checkpoint so a resumed run can detect mismatches.
 
@@ -217,6 +217,7 @@ class Objective:
         max_time: float | None = None,
         save_time_steps: bool = True,
         save_params_history: bool = True,
+        save_batched_params_history: bool = False,
         save: list[str] | None = None,
         verbose: int = 0,
         print_every: int = 100,
@@ -239,11 +240,14 @@ class Objective:
             max_time: Maximum wall-clock time in seconds. None for unlimited.
             save_time_steps: Whether to track timestamps for each evaluation.
             save_params_history: Whether to save parameter history.
+            save_batched_params_history: Whether to store full ``(batch, n_params)``
+                parameter arrays for batched evals instead of the reduced
+                representative point. Defaults to False.
             save: List of advanced save tokens for recording additional /
                 batched histories. Valid tokens: ``"grad"``, ``"hessian"``,
                 ``"eval_type"``, ``"batched_loss"``, ``"batched_grad"``,
-                ``"batched_hessian"``, ``"batched_param"``, ``"batched"``
-                (convenience alias expanding to all four batched tokens).
+                ``"batched_hessian"``, ``"batched"``
+                (convenience alias expanding to the three batched tokens above).
                 Defaults to ``None`` (no advanced histories).
             verbose: Verbosity level (0=silent, 1=warnings, 2=info). Defaults to 0.
             print_every: Print progress every N evaluations (if verbose >= 1). Defaults to 100.
@@ -256,7 +260,7 @@ class Objective:
                 dashboard with progress bars.  ``"log"`` prints traditional
                 multi-line log blocks that scroll the terminal.
             unit_mapping: Optional function that maps unbounded
-                parameters to the **[0, 1] range** (unit interval).  Can be a
+                parameters to the [0, 1] range (unit interval).  Can be a
                 scalar function (e.g. ``jax.nn.sigmoid``) or a vector function
                 operating element-wise on arrays — both work because JAX
                 broadcasts element-wise operations.  The Objective handles
@@ -300,6 +304,7 @@ class Objective:
         self._save_config = SaveConfig.from_flags(
             save_time_steps=save_time_steps,
             save_params_history=save_params_history,
+            save_batched_params_history=save_batched_params_history,
             save=save,
         )
         self._display_mode = display_mode
