@@ -24,8 +24,6 @@
   [PSO#super[\*\*]], [CLPSO#super[\*\*]], [CSO#super[\*\*]],
   [DMSPSOEL#super[\*\*]], [FSPSO#super[\*\*]],
   [SLPSOGS#super[\*\*]], [SLPSOUS#super[\*\*]],
-  // Standalone
-  [Random Search],
 )
 
 #let finished-dfo = ()
@@ -91,6 +89,8 @@
   [PDFO UOBYQA], [Py-BOBYQA],
   // SciPy non-grad
   [Basin Hopping], [Dual Annealing],
+  // Standalone Global Search
+  [Random Search],
   // MADS (Mesh Adaptive Direct Search)
   [OMADS MADS], [OMADS OrthoMADS],
   // Future branch

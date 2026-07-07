@@ -101,13 +101,6 @@ class TestNAAdamGD:
 
 
 class TestEvolutionary:
-    def test_random_search_batches_evals(self, mock_problem):
-        """RandomSearch reports its batched evals, not just one per iter."""
-        algo = RandomSearch(batch_size=10)
-        obj = Objective(mock_problem, max_evals=50, max_time=60)
-        algo.optimize(obj, random_seed=42)
-        assert obj.eval_count > 0
-
     def test_evox_es_invalid_variant(self):
         with pytest.raises((ValueError, KeyError)):
             EvoxES(variant="nonexistent_variant")
@@ -257,6 +250,15 @@ class TestPowellSpecific:
         algo = Powell()
         obj = Objective(mock_problem, max_evals=100, max_time=60)
         algo.optimize(obj, random_seed=42, xtol=1e-12, ftol=1e-12)
+        assert obj.eval_count > 0
+
+
+class TestRandomSearchSpecific:
+    def test_random_search_batches_evals(self, mock_problem):
+        """RandomSearch reports its batched evals, not just one per iter."""
+        algo = RandomSearch(batch_size=10)
+        obj = Objective(mock_problem, max_evals=50, max_time=60)
+        algo.optimize(obj, random_seed=42)
         assert obj.eval_count > 0
 
 

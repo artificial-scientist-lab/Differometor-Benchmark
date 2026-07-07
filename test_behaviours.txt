@@ -402,35 +402,41 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 7.16 [P1] LBFGSGD: eval_count accounts for linesearch probes (eval_count >
           number of outer steps).
 
---- Evolutionary algorithms (RandomSearch, EvoxES, EvoxPSO) ---
+--- Evolutionary algorithms (EvoxES, EvoxPSO) ---
 
 7.17 [P0] algorithm_type is AlgorithmType.EVOLUTIONARY.
 7.18 [P0] prepare() sets obj.unbounded = False.
-7.19 [P0] RandomSearch: eval_count == batch_size * n_iterations after run.
-7.20 [P1] EvoxES: invalid variant string raises ValueError.
-7.21 [P1] EvoxPSO: invalid variant string raises ValueError.
-7.22 [P1] EvoxES/EvoxPSO: algorithm_str reflects variant name.
+7.19 [P1] EvoxES: invalid variant string raises ValueError.
+7.20 [P1] EvoxPSO: invalid variant string raises ValueError.
+7.21 [P1] EvoxES/EvoxPSO: algorithm_str reflects variant name.
 
 --- Surrogate-based algorithms (BotorchBO, BotorchTuRBO, ReSTIR) ---
 
-7.23 [P0] algorithm_type is AlgorithmType.SURROGATE_BASED.
-7.24 [P0] After optimize(), best_loss < initial random sample mean (surrogate
+7.22 [P0] algorithm_type is AlgorithmType.SURROGATE_BASED.
+7.23 [P0] After optimize(), best_loss < initial random sample mean (surrogate
           guides search, on a simple problem).
-7.25 [P1] BotorchBO: handles NaN from objective gracefully (retries with
+7.24 [P1] BotorchBO: handles NaN from objective gracefully (retries with
           perturbation).
-7.26 [P1] ReSTIR: knn_predict returns correct shape (M,) for M queries.
-7.27 [P1] ReSTIR: standardize_data output has mean ≈ 0, std ≈ 1.
-7.28 [P1] ReSTIR: importance with tau=1 returns exp(-loss) correctly.
+7.25 [P1] ReSTIR: knn_predict returns correct shape (M,) for M queries.
+7.26 [P1] ReSTIR: standardize_data output has mean ≈ 0, std ≈ 1.
+7.27 [P1] ReSTIR: importance with tau=1 returns exp(-loss) correctly.
 
 --- Generative algorithms (VAESampling) ---
 
-7.29 [P0] algorithm_type is AlgorithmType.GENERATIVE.
-7.30 [P1] ResNetVAE forward pass returns (recon, mu, logvar) with correct
+7.28 [P0] algorithm_type is AlgorithmType.GENERATIVE.
+7.29 [P1] ResNetVAE forward pass returns (recon, mu, logvar) with correct
           shapes.
-7.31 [P1] vae_loss_function returns (total_loss, recon_loss, kld) — all
+7.30 [P1] vae_loss_function returns (total_loss, recon_loss, kld) — all
           finite tensors.
-7.32 [P1] train_vae does not crash on a small synthetic dataset and loss
+7.31 [P1] train_vae does not crash on a small synthetic dataset and loss
           decreases.
+
+--- Global Search-based algorithms (BasinHopping, DualAnnealing, RandomSearch) ---
+
+7.32 [P0] algorithm_type is AlgorithmType.GLOBAL_SEARCH.
+7.33 [P0] RandomSearch: eval_count == batch_size * n_iterations after run.
+7.34 [P1] BasinHopping: invalid minimizer_kwargs raises ValueError.
+7.35 [P1] DualAnnealing: invalid local_search_options raises ValueError.
 
 
 ================================================================================

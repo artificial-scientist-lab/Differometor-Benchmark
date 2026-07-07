@@ -26,7 +26,7 @@ Place your algorithm in the appropriate subdirectory:
 src/dfbench/algorithms/
 ├── derivative_free/     ← direct search and non-gradient local solvers
 ├── global_search/       ← stochastic global optimizers
-├── evolutionary/        ← population-based methods (PSO, ES, random search)
+├── evolutionary/        ← population-based methods (PSO, ES)
 ├── gradient_based/
 │   ├── optax/           ← Optax optimizer wrappers (subclass OptaxAlgorithm)
 │   ├── scipy/           ← SciPy minimize wrappers (subclass ScipyMinimizeAlgorithm)
@@ -62,7 +62,7 @@ class MyAlgorithm(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "my_algorithm"          # unique identifier
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY  # match the algorithms/ subfolder
+    algorithm_type: AlgorithmType = AlgorithmType.GLOBAL_SEARCH  # match the algorithms/ subfolder
 
     def __init__(self, batch_size: int = 50) -> None:
         """Initialize with algorithm-level meta-parameters.

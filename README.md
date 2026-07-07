@@ -163,8 +163,8 @@ src/dfbench/
 │   └── utils.py           # torch↔jax conversion, inverse sigmoid
 ├── algorithms/
 │   ├── derivative_free/   # OMADS, PDFO/Py-BOBYQA, NelderMead, Powell
-│   ├── global_search/     # SciPy BasinHopping, DualAnnealing
-│   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES, Nevergrad, CMA family
+│   ├── global_search/     # RandomSearch, SciPy BasinHopping, DualAnnealing
+│   ├── evolutionary/      # EvoxPSO, EvoxES, Nevergrad, CMA family
 │   ├── gradient_based/
 │   │   ├── optax/         # 34 Optax-based optimizers (OptaxAdam, OptaxLAMB, ...)
 │   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
@@ -302,7 +302,7 @@ class MyAlgorithm(OptimizationAlgorithm):
     """My optimization algorithm."""
 
     algorithm_str = "my_algorithm"
-    algorithm_type = AlgorithmType.EVOLUTIONARY  # match one of the algorithms/ subfolders
+    algorithm_type = AlgorithmType.GLOBAL_SEARCH  # match one of the algorithms/ subfolders
 
     def __init__(self, batch_size: int = 50) -> None:
         """Algorithm-level meta-parameters that don't change between runs."""
@@ -423,7 +423,6 @@ See [Objective API Reference](https://github.com/artificial-scientist-lab/Differ
 | `BFGS`, `LBFGSB`, `NonlinearCG`, `NewtonCG` | Gradient | Classical SciPy gradient and quasi-Newton methods |
 | `TrustNCG`, `TrustKrylov`, `TrustConstr`, `Dogleg`, `SR1` | Gradient | Trust-region and constrained SciPy methods |
 | `TNC`, `SLSQP`, `COBYQA`, `COBYLA` | Gradient | Bounded physical-space SciPy solvers |
-| `RandomSearch` | Evolutionary | Unbiased baseline, no hyperparameters |
 | `EvoxPSO` | Evolutionary | Swarm intelligence, many variants (CLPSO, CSO, ...) |
 | `EvoxES` | Evolutionary | CMA-ES, OpenES, XNES, and more (EvoX backend) |
 | `PyCMACMAES` | Evolutionary | Vanilla CMA-ES (pycma backend) |
@@ -439,6 +438,7 @@ See [Objective API Reference](https://github.com/artificial-scientist-lab/Differ
 | `OmadsMADS`, `OmadsOrthoMADS` | Derivative-Free | MADS / OrthoMADS direct search (OMADS) |
 | `PDFOUOBYQA`, `PDFONEWUOA`, `PDFOLINCOA`, `PyBOBYQA` | Derivative-Free | Powell-style trust-region DFO (PDFO + Py-BOBYQA) |
 | `NelderMead`, `Powell` | Derivative-Free | SciPy classical simplex / direction-set search |
+| `RandomSearch` | Global Search | Unbiased, derivative-free global search baseline, no hyperparameters |
 | `BasinHopping`, `DualAnnealing` | Global Search | SciPy stochastic global optimization |
 | `NevergradOnePlusOne`, `NevergradTBPSA`, `NevergradNGOpt` | Evolutionary | Nevergrad rugged-landscape baselines |
 | `BotorchBO` | Surrogate | Sample-efficient Bayesian Optimization |
@@ -467,7 +467,7 @@ Reference implementations worth reading:
 - `gradient_based/adam_gd.py`: gradient-based pattern (custom loop)
 - `gradient_based/optax/adam.py`: Optax wrapper pattern (minimal subclass)
 - `gradient_based/scipy/_common.py`: shared SciPy wrapper, caching, and budget handling
-- `evolutionary/random_search.py`: simplest batched example
+- `global_search/random_search.py`: simplest batched example
 - `evolutionary/evox_es.py`: wrapping an external library (EvoX/PyTorch)
 - `evolutionary/pycma_cmaes.py`: wrapping pycma (ask/tell, restart strategies)
 - `evolutionary/jax_es.py`: native JAX ES without external library

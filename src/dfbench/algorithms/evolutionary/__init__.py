@@ -5,7 +5,6 @@ from dfbench.algorithms.evolutionary.evox_pso import EvoxPSO
 from dfbench.algorithms.evolutionary.nevergrad.ngopt import NevergradNGOpt
 from dfbench.algorithms.evolutionary.nevergrad.oneplusone import NevergradOnePlusOne
 from dfbench.algorithms.evolutionary.nevergrad.tbpsa import NevergradTBPSA
-from dfbench.algorithms.evolutionary.random_search import RandomSearch
 from dfbench.algorithms.evolutionary.pycma_cmaes import (
     PyCMACMAES,
     PyCMAActiveCMAES,
@@ -22,7 +21,6 @@ __all__ = [
     "NevergradNGOpt",
     "NevergradOnePlusOne",
     "NevergradTBPSA",
-    "RandomSearch",
     "PyCMACMAES",
     "PyCMAActiveCMAES",
     "PyCMAIPOP",

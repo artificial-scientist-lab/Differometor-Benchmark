@@ -11,7 +11,7 @@ from dfbench.algorithms import (
     BFGS, LBFGSB, NonlinearCG, NewtonCG,   # SciPy gradient / quasi-Newton
     TrustNCG, TrustKrylov, TrustConstr,    # SciPy trust-region / constrained
     TNC, SLSQP, COBYQA, COBYLA, Dogleg, SR1,
-    RandomSearch, EvoxPSO, EvoxES,           # evolutionary
+    EvoxPSO, EvoxES,                         # evolutionary
     NevergradOnePlusOne, NevergradTBPSA,     # nevergrad baselines
     NevergradNGOpt,                          # nevergrad meta-optimizer
     PyCMACMAES, PyCMAActiveCMAES, PyCMAIPOP, PyCMABIPOP,
@@ -20,6 +20,7 @@ from dfbench.algorithms import (
     OmadsMADS, OmadsOrthoMADS,               # derivative-free direct search
     PDFOUOBYQA, PDFONEWUOA, PDFOLINCOA, PyBOBYQA,  # Powell DFO
     NelderMead, Powell,                      # SciPy classics
+    RandomSearch,                            # generic, blackbox global search
     BasinHopping, DualAnnealing,             # SciPy global search
     BotorchBO, BotorchTuRBO,                 # surrogate-based (standard)
     AxSAASBO, BAxUS, BotorchqNEI, BotorchqKG,  # structured BO
@@ -48,9 +49,9 @@ The source tree groups algorithms by implementation family under `src/dfbench/al
 | Package directory | Contents |
 |-------------------|----------|
 | `gradient_based/` | Adam-style loops, Optax wrappers, SciPy `minimize` wrappers, and native-JAX gradient methods |
-| `evolutionary/` | Random search, EvoX PSO/ES, Nevergrad wrappers, CMA-ES variants, evosax ES, and native-JAX ES |
+| `evolutionary/` | EvoX PSO/ES, Nevergrad wrappers, CMA-ES variants, evosax ES, and native-JAX ES |
 | `derivative_free/` | OMADS direct search, PDFO / Py-BOBYQA Powell solvers, and SciPy Nelder-Mead / Powell |
-| `global_search/` | SciPy global optimizers: basin hopping and dual annealing |
+| `global_search/` | Random search, SciPy global optimizers: basin hopping and dual annealing |
 | `surrogate_based/` | BoTorch, Ax, HEBO, SMAC, ReSTIR, and TuRBO/L-BFGS hybrids |
 | `generative/` | VAE-based sampling and latent-space BO |
 
@@ -59,9 +60,9 @@ Each class also declares an `AlgorithmType` enum value matching its package dire
 | `AlgorithmType` | Default space | Common evaluation methods | Examples |
 |-----------------|---------------|---------------------------|----------|
 | `GRADIENT_BASED` | unbounded | `value_and_grad()`, Hessian callbacks where needed | Adam, SA-GD, L-BFGS, Optax, SciPy gradient/trust methods |
-| `EVOLUTIONARY` | bounded | `value()`, `vmap_value()` | Random Search, PSO, CMA-ES, evosax, Nevergrad |
+| `EVOLUTIONARY` | bounded | `value()`, `vmap_value()` | PSO, CMA-ES, evosax, Nevergrad |
 | `DERIVATIVE_FREE` | bounded | `value()`, sometimes solver callback adapters | OMADS, PDFO, Py-BOBYQA, Nelder-Mead, Powell |
-| `GLOBAL_SEARCH` | bounded | `value()` through SciPy global-optimizer callbacks | BasinHopping, DualAnnealing |
+| `GLOBAL_SEARCH` | bounded | `value()` through Random Search and SciPy global-optimizer callbacks | Random Search, BasinHopping, DualAnnealing |
 | `SURROGATE_BASED` | bounded | `value()`, `vmap_value()`, sometimes gradients | Bayesian Optimization, TuRBO, ReSTIR, GEBO |
 | `GENERATIVE` | varies | `value()`, `vmap_value()` | VAE Sampling |
 
@@ -216,27 +217,6 @@ to fail loudly until a stable and benchmark-fair implementation is ready.
 ## Evolutionary Algorithms
 
 These algorithms search directly in the bounded parameter space using population-based strategies. They use `obj.vmap_value()` for efficient batch evaluation.
-
-### RandomSearch
-
-Simplest baseline. Draws uniform random samples within bounds and evaluates them in batches.
-
-```python
-optimizer = RandomSearch(batch_size=100)
-optimizer.optimize(
-    objective=obj,
-    max_iterations=None,
-    random_seed=42,
-)
-```
-
-| Hyperparameter | Default | Description |
-|----------------|---------|-------------|
-| `batch_size` | `100` | Samples per batch. |
-
-**Rationale — why include random search?** It serves as the baseline for all other algorithms. If a sophisticated method can't beat random search, something is wrong with its configuration or the problem is too easy to differentiate methods.
-
----
 
 ### EvoxPSO (Particle Swarm Optimization)
 
@@ -642,6 +622,27 @@ from dfbench.algorithms import BasinHopping, DualAnnealing
 | `step_size`     | `0.5`   | (BasinHopping) random hop magnitude in normalised space. |
 | `temperature`   | `5230.0`| (DualAnnealing) initial temperature. |
 | `local_method`  | `"L-BFGS-B"` | Inner local minimizer. |
+
+---
+
+### RandomSearch
+
+Simplest baseline. Draws uniform random samples within bounds and evaluates them in batches.
+
+```python
+optimizer = RandomSearch(batch_size=100)
+optimizer.optimize(
+    objective=obj,
+    max_iterations=None,
+    random_seed=42,
+)
+```
+
+| Hyperparameter | Default | Description |
+|----------------|---------|-------------|
+| `batch_size` | `100` | Samples per batch. |
+
+**Rationale — why include random search?** It serves as the baseline for all other algorithms. If a sophisticated method can't beat random search, something is wrong with its configuration or the problem is too easy to differentiate methods.
 
 ---
 
@@ -1509,7 +1510,6 @@ optimizer.optimize(objective=obj, patience=500, random_seed=42)
 | `NAAdamGD` | Gradient | Noise-based exploration with annealing | Balancing exploration and exploitation |
 | `LBFGSGD` | Gradient | Second-order curvature | Smooth, well-conditioned problems |
 | `OptaxAdam` — `OptaxLBFGS` | Gradient | 34 Optax optimizers (see table above) | Systematic algorithm comparison |
-| `RandomSearch` | Evolutionary | No hyperparameters, unbiased baseline | Baseline comparison |
 | `EvoxPSO` | Evolutionary | Swarm intelligence, many variants | Moderate-dimensional problems |
 | `EvoxES` | Evolutionary | Covariance adaptation (CMA-ES) | General black-box optimization |
 | `PyCMACMAES` / `CMAESCMA` / `CMAESSepCMA` | Evolutionary | CMA-ES backends with full or diagonal covariance | General black-box optimization |
@@ -1523,6 +1523,7 @@ optimizer.optimize(objective=obj, patience=500, random_seed=42)
 | `OmadsOrthoMADS` | Derivative-Free | OrthoMADS poll only, orthogonal dirs | Local refinement, predictable cost |
 | `PDFOUOBYQA` / `PDFONEWUOA` / `PDFOLINCOA` / `PyBOBYQA` | Derivative-Free | Powell trust-region DFO | Smooth bounded problems |
 | `NelderMead` / `Powell` | Derivative-Free | SciPy classical search | Low-dim smooth losses |
+| `RandomSearch` | Global Search | No hyperparameters, unbiased, blackbox baseline | Baseline comparison |
 | `BasinHopping` / `DualAnnealing` | Global Search | SciPy stochastic global | Multimodal landscapes |
 | `AxSAASBO` | Surrogate | Sparse-axis subspace, fully Bayesian | High-dim with few active dims |
 | `BAxUS` | Surrogate | Adaptive expanding subspace | High-dim with unknown effective dim |
