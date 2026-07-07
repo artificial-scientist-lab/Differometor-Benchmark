@@ -166,7 +166,7 @@ class OpticalSetupProblem(ContinuousProblem):
                 as returned by ``calculate_powers``.
             sensitivity_loss: scalar sensitivity loss (the unpenalised objective).
             penalty: scalar summed penalty contribution.
-            violations: ``(n_constraints, n_freq)`` array of per-constraint
+            violations: ``(n_constraints,)`` array of per-constraint
                 penalty values, as returned by :meth:`_calculate_loss`.
 
         Returns:
@@ -177,7 +177,7 @@ class OpticalSetupProblem(ContinuousProblem):
             - ``is_feasible``: scalar bool, ``True`` iff every per-group power
               is at or below its threshold. This is a physical check, independent
               of the active ``power_penalty_fn`` preset.
-            - ``violations``: ``(n_constraints, n_freq)`` array.
+            - ``violations``: ``(n_constraints,)`` array.
             - ``power_values``: dict with ``"hard"``, ``"soft"``, ``"detector"``
               leaves holding the raw per-group power arrays.
         """

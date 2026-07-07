@@ -22,6 +22,7 @@ Objective(
     max_time: float | None = None,
     save_time_steps: bool = True,
     save_params_history: bool = True,
+    save_batched_params_history: bool = False,
     save: list[str] | None = None,
     verbose: int = 0,
     print_every: int = 100,
@@ -46,7 +47,8 @@ Objective(
 | `max_time` | `float \| None` | `None` | Maximum wall-clock seconds beginning at the time `obj.start_logging()` was called. `None` = unlimited. |
 | `save_time_steps` | `bool` | `True` | Record elapsed-time timestamp for each evaluation. |
 | `save_params_history` | `bool` | `True` | Record the parameter vector at each evaluation. |
-| `save` | `list[str] \| None` | `None` | List of advanced save tokens for recording additional / batched histories. Standard tokens: `"grad"`, `"hessian"`, `"eval_type"`, `"batched_loss"`, `"batched_grad"`, `"batched_hessian"`, `"batched_param"`, `"batched"` (convenience alias expanding to all four batched tokens). Aux diagnostics tokens (recorded by the `*_aux` evaluation methods on problems that opt into the power-penalty contract): `"sensitivity_loss"`, `"penalty"`, `"is_feasible"`, `"power_values"`, `"violations"`, `"aux"` (convenience alias expanding to all five), plus per-field `batched_*` variants and `"batched_aux"` (see Choosing what to save). The active configuration is recorded as a `SaveConfig` and embedded in every checkpoint so a resumed run can detect mismatches. |
+| `save_batched_params_history` | `bool` | `False` | Store full `(batch, n_params)` parameter arrays for batched evals instead of the reduced representative point. |
+| `save` | `list[str] \| None` | `None` | List of advanced save tokens for recording additional / batched histories. Standard tokens: `"grad"`, `"hessian"`, `"eval_type"`, `"batched_loss"`, `"batched_grad"`, `"batched_hessian"`, `"batched"` (convenience alias expanding to the three batched tokens above). Aux diagnostics tokens (recorded by the `*_aux` evaluation methods on problems that opt into the power-penalty contract): `"sensitivity_loss"`, `"penalty"`, `"is_feasible"`, `"power_values"`, `"violations"`, `"aux"` (convenience alias expanding to all five), plus per-field `batched_*` variants and `"batched_aux"` (see Choosing what to save). The active configuration is recorded as a `SaveConfig` and embedded in every checkpoint so a resumed run can detect mismatches. |
 | `verbose` | `int` | `0` | Verbosity level. `0` = silent; `1` = periodic progress prints; `2` is WIP. |
 | `print_every` | `int` | `100` | When `verbose ≥ 1`, print a progress summary every N evaluations. |
 | `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
@@ -125,12 +127,13 @@ You do **not** need to handle bounds scaling — the Objective does that automat
 
 ### Choosing what to save
 
-The Objective always records losses. Two standard boolean flags control the most commonly toggled histories:
+The Objective always records losses. Three standard boolean flags control the most commonly toggled histories:
 
 | Flag | Default | Effect |
 |------|---------|--------|
 | `save_time_steps` | `True` | Record elapsed-time timestamps per evaluation |
 | `save_params_history` | `True` | Record parameter vectors (reduced for batches) |
+| `save_batched_params_history` | `False` | Store full `(batch, n_params)` parameter arrays instead of the reduced representative point |
 
 For advanced combinations (gradients, Hessians, eval types, full batched arrays), pass a list of string tokens to `save`:
 
@@ -142,8 +145,7 @@ For advanced combinations (gradients, Hessians, eval types, full batched arrays)
 | `"batched_loss"` | Store full `(batch,)` loss vectors instead of batch min |
 | `"batched_grad"` | Store full `(batch, n_params)` gradient arrays |
 | `"batched_hessian"` | Store full `(batch, n_params, n_params)` Hessian arrays |
-| `"batched_param"` | Store full `(batch, n_params)` parameter arrays |
-| `"batched"` | Convenience alias expanding to all four `batched_*` tokens above |
+| `"batched"` | Convenience alias expanding to the three `batched_*` tokens above |
 
 Aux diagnostics tokens are recorded by the `*_aux` evaluation methods, and also by the standard loss-bearing methods (`value`, `value_and_grad`, `vmap_value`, `vmap_value_and_grad`, `value_grad_and_hessian`, `vmap_value_grad_and_hessian`) when auto-logging is active. Auto-logging turns on when at least one aux token is in the `save` list and the problem opts into the power-penalty contract (`ConstrainedVoyagerProblem`, `UIFOProblem`); the standard methods then run the aux objective in the same forward pass and populate the aux histories without changing their return signatures (see [Auto-logging aux](#auto-logging-aux-from-the-standard-methods)). Each token controls one aux field, so enabling `is_feasible` does not force storing the bulky `power_values` arrays.
 
@@ -544,7 +546,7 @@ Saves the full optimization state to a checkpoint file via the internal `Checkpo
 
 The checkpoint embeds `RunMetadata` (problem/algo/budget identity, `SaveConfig`, and the problem's typed `ProblemSpec` container; see [Problems](Problems)), so the file is fully self-describing.
 
-Default path (built by `RunPathResolver`): `data/objective_run_data/{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.npz`
+Default path (built by `RunPathResolver`, then anchored to a directory by `LocalFilesystemBackend`): `<checkpoint_dir>/{budget_dir}/{problem}_{algo}_{hyper_param_str}_{timestamp}.npz`, absolute on disk. `checkpoint_dir` defaults to `./data/objective_run_data`. Set `RunPathResolver(algo_directory=True)` to add an `{algo}_{hyper_param_str}` subdirectory under `{budget_dir}`.
 
 The first save without explicit overrides caches the path; subsequent periodic saves overwrite the same file.
 

@@ -49,8 +49,8 @@ class Objective:
 
     3. **History tracking** – maintains aligned histories of losses, params,
        gradients, evaluation types, and elapsed time.  The ``save`` list of
-       string tokens (plus the two standard flags ``save_time_steps`` and
-       ``save_params_history``) controls what is stored; the active
+       string tokens (plus the three standard flags ``save_time_steps``,
+       ``save_params_history``, and ``save_batched_params_history``) controls what is stored; the active
        configuration is recorded as a :class:`SaveConfig` and embedded in
        every checkpoint so a resumed run can detect mismatches.
 
@@ -217,6 +217,7 @@ class Objective:
         max_time: float | None = None,
         save_time_steps: bool = True,
         save_params_history: bool = True,
+        save_batched_params_history: bool = False,
         save: list[str] | None = None,
         verbose: int = 0,
         print_every: int = 100,
@@ -239,11 +240,14 @@ class Objective:
             max_time: Maximum wall-clock time in seconds. None for unlimited.
             save_time_steps: Whether to track timestamps for each evaluation.
             save_params_history: Whether to save parameter history.
+            save_batched_params_history: Whether to store full ``(batch, n_params)``
+                parameter arrays for batched evals instead of the reduced
+                representative point. Defaults to False.
             save: List of advanced save tokens for recording additional /
                 batched histories. Valid tokens: ``"grad"``, ``"hessian"``,
                 ``"eval_type"``, ``"batched_loss"``, ``"batched_grad"``,
-                ``"batched_hessian"``, ``"batched_param"``, ``"batched"``
-                (convenience alias expanding to all four batched tokens).
+                ``"batched_hessian"``, ``"batched"``
+                (convenience alias expanding to the three batched tokens above).
                 Defaults to ``None`` (no advanced histories).
             verbose: Verbosity level (0=silent, 1=warnings, 2=info). Defaults to 0.
             print_every: Print progress every N evaluations (if verbose >= 1). Defaults to 100.
@@ -256,7 +260,7 @@ class Objective:
                 dashboard with progress bars.  ``"log"`` prints traditional
                 multi-line log blocks that scroll the terminal.
             unit_mapping: Optional function that maps unbounded
-                parameters to the **[0, 1] range** (unit interval).  Can be a
+                parameters to the [0, 1] range (unit interval).  Can be a
                 scalar function (e.g. ``jax.nn.sigmoid``) or a vector function
                 operating element-wise on arrays — both work because JAX
                 broadcasts element-wise operations.  The Objective handles
@@ -300,6 +304,7 @@ class Objective:
         self._save_config = SaveConfig.from_flags(
             save_time_steps=save_time_steps,
             save_params_history=save_params_history,
+            save_batched_params_history=save_batched_params_history,
             save=save,
         )
         self._display_mode = display_mode
@@ -412,11 +417,12 @@ class Objective:
     ) -> None:
         """Assemble the storage stack from user-facing knobs.
 
-        Maps ``checkpoint_format`` to a serializer, roots the resolver and
-        backend at ``checkpoint_dir`` (defaulting to the historical
+        Maps ``checkpoint_format`` to a serializer, anchors the backend
+        at ``checkpoint_dir`` (defaulting to the historical
         ``./data/objective_run_data``), and wires the
-        :class:`CheckpointManager`. Subclasses override this to swap a custom
-        serializer / backend / resolver / exporter.
+        :class:`CheckpointManager`. The resolver just builds relative
+        paths; the backend the root. Subclasses override this to
+        swap a custom serializer / backend / resolver / exporter.
         """
         fmt = checkpoint_format.lower()
         if fmt not in self._SERIALIZERS:
@@ -427,14 +433,14 @@ class Objective:
         self._checkpoint_format = fmt
         self._checkpoint_dir = checkpoint_dir
         self._serializer = self._SERIALIZERS[fmt]
-        self._resolver = RunPathResolver(
+        self._resolver = RunPathResolver()
+        self._backend = LocalFilesystemBackend(
             root=(
                 str(checkpoint_dir)
                 if checkpoint_dir is not None
                 else "./data/objective_run_data"
             )
         )
-        self._backend = LocalFilesystemBackend(root=self._resolver.root)
         self._exporter = RunDataExporter()
         self._checkpoint_manager = CheckpointManager(
             backend=self._backend,
@@ -1535,10 +1541,11 @@ class Objective:
         custom_path: str | None = None,
         hyper_param_str: str | None = None,
     ) -> Path:
-        """Generate run data file path via the configured path resolver.
+        """Generate the run data file path via the resolver + backend.
 
-        Delegates to :class:`~dfbench.core.storage.RunPathResolver` so the
-        path layout is not hardcoded here.
+        Asks :class:`~dfbench.core.storage.RunPathResolver` for the
+        relative path, then :meth:`StorageBackend.resolve` for the
+        absolute on-disk path, so the layout is not hardcoded here.
 
         Args:
             algorithm_name: Name of the optimization algorithm.
@@ -1548,7 +1555,7 @@ class Objective:
                 organization.
 
         Returns:
-            Path object for the run data file.
+            Absolute :class:`~pathlib.Path` for the run data file.
         """
         if custom_path is not None:
             return Path(custom_path)
@@ -1556,7 +1563,7 @@ class Objective:
         problem_name = (
             self._problem.name if hasattr(self._problem, "name") else "problem"
         )
-        path = self._resolver.checkpoint_path(
+        key = self._resolver.checkpoint_path(
             problem_name=problem_name,
             algorithm_name=algorithm_name,
             timestamp=self._timestamp,
@@ -1564,7 +1571,7 @@ class Objective:
             max_time=self._max_time,
             max_evals=self._max_evals,
         )
-        return path
+        return Path(self._backend.resolve(key))
 
     def __repr__(self) -> str:
         """String representation for debugging."""
@@ -2742,10 +2749,12 @@ class Objective:
             Path to the saved run data file.
 
         Example:
-            >>> obj.save_run_data(algorithm_name="adam_gd")
-            Path('data/objective_run_data/time100s_evals1000/voyager_adam_gd_2026-01-26_15-30-45.npz')
-            >>> obj.save_run_data(algorithm_name="adam_gd", hyper_param_str="lr0.1")
-            Path('data/objective_run_data/time100s_evals1000/lr0.1/voyager_adam_gd_2026-01-26_15-30-45.npz')
+            >>> path = obj.save_run_data(algorithm_name="adam_gd")
+            >>> path = obj.save_run_data(algorithm_name="adam_gd", hyper_param_str="lr0.1")
+
+        The returned path is absolute (the backend joins the resolver's
+        relative path onto ``checkpoint_dir``). Pass it to
+        ``load_run_data`` to resume.
         """
         if algorithm_name is None:
             algorithm_name = self.algorithm_str or "unknown"
@@ -2782,8 +2791,9 @@ class Objective:
             FileNotFoundError: If run data file doesn't exist.
 
         Example:
-            >>> obj.load_run_data("data/objective_run_data/.../voyager_adam_gd_2026-01-26_15-30-45.npz")
-            >>> obj.warmup_value_and_grad()   # OK — logging not yet active
+            >>> path = obj.save_run_data(algorithm_name="adam_gd")
+            >>> obj.load_run_data(path)
+            >>> obj.warmup_value_and_grad()   # OK, logging not yet active
             >>> obj.start_logging()           # resume wall-clock timer
             >>> print(f"Resuming from {obj.eval_count} evaluations")
         """

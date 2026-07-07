@@ -1,21 +1,24 @@
-"""Structured path construction for run artifacts.
+"""Structured key construction for run artifacts.
 
-A :class:`RunPathResolver` builds filesystem paths from semantic
-components (problem name, algorithm name, hyperparameter string, budget
-limits, timestamp) so that :class:`Objective` and
+A :class:`RunPathResolver` builds relative paths from semantic components
+(problem name, algorithm name, hyperparameter string, budget limits,
+timestamp) so that :class:`Objective` and
 :class:`~dfbench.core.storage.manager.CheckpointManager` never hardcode
-``./data/...`` strings. The root directory is configurable, letting users
-redirect all artifacts to a scratch disk or an S3-prefix-backed backend
-without editing library code.
+``./data/...`` strings. The actual storage root (a directory on disk, an
+S3 prefix, etc.) is in the :class:`StorageBackend`, not the resolver;
+the resolver just emits relative paths that the backend combines with its
+root.
 
-    The default layout mirrors the historical dfbench convention but is now
-    expressed in one place::
+    The default layout is flat inside the budget directory::
 
-    {root}/{budget_dir}/{algo}_{hyper_param_str}/{problem}_{algo}_{timestamp}.npz
+    {budget_dir}/{problem}_{algo}_{hyper_param_str}_{timestamp}.npz
 
-    where ``budget_dir`` is e.g. ``time100s_evals1000`` or ``unlimited``.
-    When ``hyper_param_str`` is empty/None the segment collapses to just
-    ``{algo}`` (no trailing underscore).
+    Set ``algo_directory=True`` to insert an ``{algo}_{hyper_param_str}``
+    segment after ``{budget_dir}`` (collapsing to just ``{algo}`` when
+    ``hyper_param_str`` is empty/None). ``budget_dir`` is e.g.
+    ``time100s_evals1000`` or ``unlimited``. The algorithm and
+    hyperparameter string are always part of the filename, so a file
+    stays self-describing even when copied out of its directory.
 """
 
 from __future__ import annotations
@@ -31,19 +34,27 @@ def _safe(s: str) -> str:
 
 @dataclass
 class RunPathResolver:
-    """Build structured artifact paths under a configurable root.
+    """Build structured artifact keys (relative paths).
+
+    The path returned is relative; the storage backend is what anchors it
+    to a concrete location on disk or in some other store.
 
     Attributes:
-        root: Base directory for all artifacts. Defaults to
-            ``./data/objective_run_data`` to match the historical layout.
         extension: File extension (without dot) for checkpoint files,
             e.g. ``"npz"`` or ``"json"``. Used by the manager to build the
             default filename; the serializer itself is format-agnostic to
             the extension.
+        algo_directory: When ``True``, insert an ``{algo}_{hyper_param_str}``
+            directory segment between the budget directory and the file
+            (collapsing to just ``{algo}`` when ``hyper_param_str`` is
+            empty/None). When ``False`` (default), the layout is flat
+            inside the budget directory. The algorithm and hyperparameter
+            string are always part of the filename either way, so a file
+            is self-describing even when copied out of its directory.
     """
 
-    root: str | Path = "./data/objective_run_data"
     extension: str = "npz"
+    algo_directory: bool = False
 
     def checkpoint_dir(
         self,
@@ -53,10 +64,11 @@ class RunPathResolver:
         max_time: float | None = None,
         max_evals: int | None = None,
     ) -> Path:
-        """Return the directory a checkpoint should live in.
+        """Return the relative path for a checkpoint directory.
 
-        The directory is *not* created here; the storage backend creates
-        parents as needed when it writes.
+        Nothing is created here; the storage backend makes the parent
+        directories when it writes. The returned path is rooted by the
+        backend, not by the resolver.
         """
         parts = []
         if max_time is not None:
@@ -65,11 +77,12 @@ class RunPathResolver:
             parts.append(f"evals{max_evals}")
         budget_dir = "_".join(parts) if parts else "unlimited"
 
-        d = Path(self.root) / budget_dir
-        if hyper_param_str:
-            d = d / f"{_safe(algorithm_name)}_{_safe(hyper_param_str)}"
-        elif algorithm_name:
-            d = d / _safe(algorithm_name)
+        d = Path(budget_dir)
+        if self.algo_directory:
+            if hyper_param_str:
+                d = d / f"{_safe(algorithm_name)}_{_safe(hyper_param_str)}"
+            elif algorithm_name:
+                d = d / _safe(algorithm_name)
         return d
 
     def checkpoint_path(
@@ -81,7 +94,7 @@ class RunPathResolver:
         max_time: float | None = None,
         max_evals: int | None = None,
     ) -> Path:
-        """Return the full path for a checkpoint file."""
+        """Return the relative path for a checkpoint file."""
         d = self.checkpoint_dir(
             problem_name,
             algorithm_name,
@@ -89,8 +102,9 @@ class RunPathResolver:
             max_time,
             max_evals,
         )
+        hp_fmt = f"_{_safe(hyper_param_str)}" if hyper_param_str else ""
         filename = (
-            f"{_safe(problem_name)}_{_safe(algorithm_name)}_{timestamp}"
+            f"{_safe(problem_name)}_{_safe(algorithm_name)}{hp_fmt}_{timestamp}"
             f".{self.extension}"
         )
         return d / filename

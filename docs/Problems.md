@@ -224,7 +224,7 @@ The constrained problems also expose a JIT-compiled `objective_function_aux(para
 | `sensitivity_loss` | scalar | The unpenalised sensitivity loss. |
 | `penalty` | scalar | The summed penalty contribution. |
 | `is_feasible` | scalar bool | `True` iff every per-group power is at or below its threshold. This is a physical check, independent of the active `power_penalty_fn` preset, so it stays meaningful even when the penalty is disabled with `zero_penalty`. |
-| `violations` | `(n_constraints, n_freq)` | Per-constraint penalty values. |
+| `violations` | `(n_constraints,)` | Per-constraint penalty values. |
 | `power_values` | dict with `hard`, `soft`, `detector` leaves | Raw per-group power arrays. |
 
 Because `aux` is a JAX pytree, `objective_function_aux` vmapps cleanly: a batched call adds a leading batch dim to every leaf, including the `power_values` sub-arrays.
