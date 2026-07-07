@@ -3,6 +3,12 @@
 
 # Differometor Benchmark
 
+[![image](https://img.shields.io/pypi/v/dfbench.svg)](https://pypi.python.org/pypi/dfbench)
+[![image](https://img.shields.io/pypi/l/dfbench)](https://pypi.python.org/pypi/dfbench)
+[![image](https://img.shields.io/pypi/pyversions/dfbench.svg)](https://pypi.python.org/pypi/dfbench)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Tests](https://img.shields.io/github/actions/workflow/status/artificial-scientist-lab/Differometor-Benchmark/tests.yaml?branch=main&label=tests&logo=github)](https://github.com/artificial-scientist-lab/Differometor-Benchmark/actions/workflows/tests.yaml)
+
 A benchmarking framework for optimization algorithms on gravitational-wave detector design problems, built on top of the [Differometor](https://github.com/artificial-scientist-lab/Differometor) simulator.
 
 > **For detailed documentation, see the [Wiki](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki).**
