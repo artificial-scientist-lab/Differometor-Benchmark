@@ -232,7 +232,9 @@ class TestCheckpointManager:
         path = manager.save(state)
         assert path.exists()
         assert path.is_absolute()
-        assert str(path).startswith(str(tmp_path.resolve()))  # backend joined its root onto the key
+        assert str(path).startswith(
+            str(tmp_path.resolve())
+        )  # backend joined its root onto the key
         assert manager.last_checkpoint_eval == state.eval_count
 
         loaded = manager.load(path)

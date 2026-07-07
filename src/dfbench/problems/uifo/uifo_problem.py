@@ -237,7 +237,9 @@ class UIFOProblem(OpticalSetupProblem):
         # --- Validate topology specification (exactly one path) ---
         has_seed = topology_seed is not None
         has_string = topology is not None
-        has_dicts = centers is not None or boundaries is not None  # Handled by ValueError below
+        has_dicts = (
+            centers is not None or boundaries is not None
+        )  # Handled by ValueError below
 
         n_specified = sum([has_seed, has_string, has_dicts])
         if n_specified == 0:
