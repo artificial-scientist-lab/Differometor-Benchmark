@@ -86,6 +86,20 @@ def _has_sensitivity(problem: Any) -> bool:
     )
 
 
+def _to_json_list(arr: np.ndarray) -> list:
+    """Convert an object-dtype history array to a JSON-serialisable list.
+
+    Each element may be a JAX scalar, JAX array, numpy scalar, numpy array,
+    or None.  ``np.asarray(arr, dtype=object).tolist()`` alone preserves the
+    original objects, which ``json.dump`` cannot serialise, so each element
+    is explicitly converted via ``np.asarray(x).tolist()``.
+    """
+    a = np.asarray(arr, dtype=object)
+    if a.size == 0:
+        return []
+    return [np.asarray(x).tolist() if x is not None else None for x in a.tolist()]
+
+
 class RunDataExporter:
     """Write human-readable JSON + PNG summaries for a :class:`RunState`.
 
@@ -145,7 +159,7 @@ class RunDataExporter:
         best_params = (
             np.asarray(state.best_params) if state.best_params.size > 0 else None
         )
-        losses = np.asarray(state.loss_history, dtype=object).tolist()
+        losses = _to_json_list(state.loss_history)
 
         if print_summary:
             print(f"Parameters of the best solution: {best_params}")
