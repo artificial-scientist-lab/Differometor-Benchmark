@@ -1,6 +1,3 @@
-> [!IMPORTANT]
-> **BETA RELEASE:** This repository is currently in beta. The official competition will start on **July ~7**.
-
 # Differometor Benchmark
 
 [![image](https://img.shields.io/pypi/v/dfbench.svg)](https://pypi.python.org/pypi/dfbench)
