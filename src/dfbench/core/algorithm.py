@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from enum import Enum
+import random
 import secrets
 
 import jax
@@ -194,6 +195,7 @@ class OptimizationAlgorithm(ABC):
             random_seed = secrets.randbits(32)
         self._random_seed = random_seed
         obj.set_seed(random_seed)
+        random.seed(random_seed)
         np.random.seed(random_seed)
         key = jax.random.PRNGKey(random_seed)
         print(f"Random seed: {random_seed}")
