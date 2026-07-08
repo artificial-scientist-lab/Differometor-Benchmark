@@ -1,4 +1,4 @@
-"""qNEI — Noisy Expected Improvement via BoTorch.
+"""qNEI: Noisy Expected Improvement via BoTorch.
 
 Uses ``qLogNoisyExpectedImprovement`` (the numerically stable log variant)
 which accounts for observation noise in the acquisition function, making it

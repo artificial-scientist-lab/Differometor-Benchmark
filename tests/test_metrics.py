@@ -1,6 +1,6 @@
-"""Section 8 — Benchmark metrics known-answer tests.
+"""Section 8: Benchmark metrics known-answer tests.
 
-Tests 8.1–8.27.
+Tests 8.1-8.27.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from dfbench.benchmark.metrics import (
 
 
 # ======================================================================
-# Per-run functions (8.1–8.8)
+# Per-run functions (8.1-8.8)
 # ======================================================================
 
 
@@ -99,7 +99,7 @@ class TestRunAuc:
     def test_known_trapezoid(self):
         """8.5 Trapezoidal integration on simple data.
 
-        losses = [2, 4], times = [0, 2] → area = (2+4)/2 * 2 = 6.0
+        losses = [2, 4], times = [0, 2] -> area = (2+4)/2 * 2 = 6.0
         """
         losses = jnp.array([2.0, 4.0])
         times = jnp.array([0.0, 2.0])
@@ -108,8 +108,8 @@ class TestRunAuc:
     def test_with_floor(self):
         """8.6 Losses clamped to max(0, loss - floor).
 
-        losses = [5, 3, 1], floor = 2 → clamped = [3, 1, 0]
-        times = [0, 1, 2] → area = trapz([3,1,0], [0,1,2]) = (3+1)/2*1 + (1+0)/2*1 = 2.5
+        losses = [5, 3, 1], floor = 2 -> clamped = [3, 1, 0]
+        times = [0, 1, 2] -> area = trapz([3,1,0], [0,1,2]) = (3+1)/2*1 + (1+0)/2*1 = 2.5
         """
         losses = jnp.array([5.0, 3.0, 1.0])
         times = jnp.array([0.0, 1.0, 2.0])
@@ -121,7 +121,7 @@ class TestRunAuc:
         losses = jnp.array([1.0, 0.5, 0.1])
         times = jnp.array([0.0, 1.0, 2.0])
         result = run_auc(losses, times, baseline_loss=5.0, max_time=2.0)
-        assert result > 0  # Better than random → positive
+        assert result > 0  # Better than random -> positive
 
     def test_empty(self):
         """8.8 Empty arrays return 0.0."""
@@ -129,7 +129,7 @@ class TestRunAuc:
 
 
 # ======================================================================
-# Aggregation functions (8.9–8.14)
+# Aggregation functions (8.9-8.14)
 # ======================================================================
 
 
@@ -190,7 +190,7 @@ class TestAggMeanStdFiltered:
 
 
 # ======================================================================
-# Multi-run functions (8.15–8.22)
+# Multi-run functions (8.15-8.22)
 # ======================================================================
 
 
@@ -202,11 +202,11 @@ class TestMultiDiversityOverall:
         assert mean == 0.0 and std == 0.0
 
     def test_known_geometry(self):
-        """8.16 4 corners of unit square → known mean distance.
+        """8.16 4 corners of unit square -> known mean distance.
 
         Corners: (0,0), (1,0), (0,1), (1,1). Without normalization:
         6 pairwise distances: 4×1.0 + 2×sqrt(2) ≈ 6.828
-        Divided by sqrt(2) for normalization → mean ≈ 0.805
+        Divided by sqrt(2) for normalization -> mean ≈ 0.805
         """
         params = jnp.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
         mean, std = multi_solution_diversity_overall(params)
@@ -231,7 +231,7 @@ class TestMultiDiversityNN:
         """8.19 Known geometry: equidistant points on a line."""
         params = jnp.array([[0.0], [1.0], [2.0], [3.0]])
         mean, std = multi_solution_diversity_nn(params)
-        # NN distance for each is 1.0, normalized by sqrt(1)=1 → mean=1.0
+        # NN distance for each is 1.0, normalized by sqrt(1)=1 -> mean=1.0
         assert mean == pytest.approx(1.0, abs=1e-5)
 
 
@@ -240,7 +240,7 @@ class TestMultiAucTopK:
         """8.20 Top-k selects best (lowest min loss) runs."""
         min_losses = [5.0, 1.0, 3.0, 2.0, 4.0]
         aucs = [50.0, 10.0, 30.0, 20.0, 40.0]
-        # k_fraction=0.2 → top 1 run (index 1, loss=1.0, auc=10.0)
+        # k_fraction=0.2 -> top 1 run (index 1, loss=1.0, auc=10.0)
         mean, std = multi_auc_top_k(min_losses, aucs, k_fraction=0.2)
         assert mean == pytest.approx(10.0)
 
@@ -252,14 +252,14 @@ class TestMultiAucTopK:
 
 class TestPerformanceProfile:
     def test_all_below(self):
-        """8.21 All losses below threshold → success_rate=1.0."""
+        """8.21 All losses below threshold -> success_rate=1.0."""
         thresholds = jnp.array([0.5, 1.0, 2.0])
         losses = [0.1, 0.2, 0.3]  # All below any threshold
         _, rates, _ = compute_performance_profile(losses, thresholds)
         np.testing.assert_allclose(np.array(rates), np.ones(3), atol=1e-6)
 
     def test_all_above(self):
-        """8.21b All losses above threshold → success_rate=0.0."""
+        """8.21b All losses above threshold -> success_rate=0.0."""
         thresholds = jnp.array([0.01, 0.05])
         losses = [1.0, 2.0, 3.0]
         _, rates, _ = compute_performance_profile(losses, thresholds)
@@ -273,7 +273,7 @@ class TestPerformanceProfile:
 
 
 # ======================================================================
-# Time-based slicing (8.23–8.27)
+# Time-based slicing (8.23-8.27)
 # ======================================================================
 
 

@@ -1,4 +1,4 @@
-"""LINCOA — LINearly Constrained Optimization Algorithm (via PDFO).
+"""LINCOA: LINearly Constrained Optimization Algorithm (via PDFO).
 
 LINCOA is a derivative-free trust-region method by M. J. D. Powell that
 handles *bound constraints* and *linear inequality constraints* natively.
@@ -7,7 +7,7 @@ When the problem exposes only box bounds (the common case in this benchmark),
 LINCOA automatically uses them.  If the problem also exposes linear
 constraints via ``problem.linear_constraints`` (returning a dict with keys
 ``A_ub``, ``b_ub`` for ``A_ub @ x <= b_ub``), those are forwarded to the
-solver as well.  Problems without any constraints are also supported —
+solver as well.  Problems without any constraints are also supported -
 LINCOA will behave like a bounded NEWUOA.
 
 Defaults are conservative and benchmark-oriented: bounded physical space,
@@ -16,7 +16,7 @@ one restart, ``rhobeg`` derived from the bound range.
 Reference:
     Powell, M. J. D. (2015). On fast trust region methods for quadratic
     models with linear constraints. *Mathematical Programming Computation*,
-    7(3), 237–267.
+    7(3), 237-267.
 """
 
 from __future__ import annotations

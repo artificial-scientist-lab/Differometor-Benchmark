@@ -18,7 +18,7 @@
 
 ---
 
-## `EvoxES` — Multi-Algorithm Wrapper (on `main`)
+## `EvoxES`: Multi-Algorithm Wrapper (on `main`)
 
 `EvoxES` is a single class that wraps **12 distinct EvoX evolution strategies** selectable via its `variant` parameter.
 Each variant is a separate algorithm from the EvoX library.
@@ -38,7 +38,7 @@ Each variant is a separate algorithm from the EvoX library.
 | `GuidedES` | Guided Evolution Strategy | ES |
 | `ESMC` | Evolution Strategy with Monte Carlo | ES |
 
-## `EvoxPSO` — Multi-Algorithm Wrapper (on `main`)
+## `EvoxPSO`: Multi-Algorithm Wrapper (on `main`)
 
 `EvoxPSO` is a single class that wraps **7 distinct EvoX PSO variants** selectable via its `variant` parameter.
 
@@ -52,10 +52,10 @@ Each variant is a separate algorithm from the EvoX library.
 | `SLPSOGS` | Social Learning PSO with Gaussian Sampling |
 | `SLPSOUS` | Social Learning PSO with Uniform Sampling |
 
-## `EvosaxES` — Multi-Algorithm Wrapper (on `algorithm/evo-algorithms`)
+## `EvosaxES`: Multi-Algorithm Wrapper (on `algorithm/evo-algorithms`)
 
 `EvosaxES` is a separate evosax-backed wrapper (pure JAX, JIT-friendly) that wraps **14 variants**.
-Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
+Coexists with `EvoxES` but uses a different backend; class names use `evosax_` prefix.
 
 | Variant | Full Name | Type |
 |---------|-----------|------|
@@ -129,7 +129,7 @@ Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
 |-----------|-----------|--------|--------|-------|
 | SGLD | `SGLDJAX` | Branch | `algorithm/jax-algorithms` | Stochastic Gradient Langevin Dynamics |
 | ASAM | `ASAMJAX` | Branch | `algorithm/jax-algorithms` | Adaptive Sharpness-Aware Minimization |
-| Adam→L-BFGS Switch | `AdamToLBFGSJAX` | Branch | `algorithm/jax-algorithms` | Hybrid warm-start strategy |
+| Adam->L-BFGS Switch | `AdamToLBFGSJAX` | Branch | `algorithm/jax-algorithms` | Hybrid warm-start strategy |
 | Entropy-SGD | `EntropySGDJAX` | Branch | `algorithm/jax-algorithms` | |
 | SGHMC | `SGHMCJAX` | Branch | `algorithm/jax-algorithms` | Stochastic Gradient Hamiltonian MC |
 | ARC | `ARCJAX` | Branch | `algorithm/jax-algorithms` | Adaptive Regularization with Cubics |

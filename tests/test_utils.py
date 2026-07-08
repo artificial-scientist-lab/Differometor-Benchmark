@@ -1,6 +1,6 @@
-"""Section 1 — Utilities (dfbench.core.utils).
+"""Section 1: Utilities (dfbench.core.utils).
 
-Tests 1.1–1.6: t2j, j2t, inverse_sigmoid_bounding.
+Tests 1.1-1.6: t2j, j2t, inverse_sigmoid_bounding.
 """
 
 import jax
@@ -13,7 +13,7 @@ from dfbench.core.utils import t2j, j2t, inverse_sigmoid_bounding
 
 
 class TestT2J:
-    """1.1 t2j: torch → JAX round-trip."""
+    """1.1 t2j: torch -> JAX round-trip."""
 
     def test_preserves_values_and_shape(self):
         t = torch.tensor([1.0, 2.0, 3.0])
@@ -29,7 +29,7 @@ class TestT2J:
 
 
 class TestJ2T:
-    """1.2–1.3 j2t: JAX → torch round-trip, writable tensor."""
+    """1.2-1.3 j2t: JAX -> torch round-trip, writable tensor."""
 
     def test_preserves_values_and_shape(self):
         j = jnp.array([1.0, 2.0, 3.0])
@@ -61,7 +61,7 @@ class TestRoundTrips:
 
 
 class TestInverseSigmoidBounding:
-    """1.5–1.6 inverse_sigmoid_bounding."""
+    """1.5-1.6 inverse_sigmoid_bounding."""
 
     @pytest.fixture
     def bounds(self):

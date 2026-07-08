@@ -12,8 +12,8 @@ from dfbench import t2j, j2t
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `t2j(tensor)` | `torch.Tensor → jax.Array` | Detach → CPU → NumPy → JAX |
-| `j2t(arr)` | `jax.Array → torch.Tensor` | JAX → NumPy (writable copy) → PyTorch |
+| `t2j(tensor)` | `torch.Tensor -> jax.Array` | Detach -> CPU -> NumPy -> JAX |
+| `j2t(arr)` | `jax.Array -> torch.Tensor` | JAX -> NumPy (writable copy) -> PyTorch |
 
 **Why these exist:**
 EvoX and BoTorch operate on PyTorch tensors; Differometor and the `Objective` use JAX arrays. Every algorithm that wraps a PyTorch library needs to convert back and forth. The conversion goes through NumPy because JAX's `dlpack` interop with PyTorch is unreliable for zero-copy transfers on some platforms.
@@ -22,7 +22,7 @@ EvoX and BoTorch operate on PyTorch tensors; Differometor and the `Objective` us
 `jax.numpy.array` values are immutable. `torch.from_numpy()` on a read-only array emits a warning. Creating a NumPy copy via `np.array(arr)` avoids this.
 
 **Overhead:**
-Negligible for the array sizes in this project (tens to hundreds of floats). A population of 100 × 25-parameter vectors copies ~20 KB — sub-microsecond.
+Negligible for the array sizes in this project (tens to hundreds of floats). A population of 100 × 25-parameter vectors copies ~20 KB, sub-microsecond.
 
 ---
 
@@ -72,7 +72,7 @@ create_parser(
 Generates an `argparse.ArgumentParser` from a dictionary of parameter names and their default values.
 
 **Behaviour:**
-- Keys become CLI flags: `pop_size` → `--pop-size`
+- Keys become CLI flags: `pop_size` -> `--pop-size`
 - Types are inferred from defaults: `int`, `float`, `str`
 - Booleans become store-true / store-false flags
 
@@ -96,7 +96,7 @@ Batch scripts on HPC clusters pass hyperparameters as CLI arguments. This utilit
 ## Environment Initialization: `_init_env`
 
 ```python
-# Imported automatically by dfbench/__init__.py — users never import this directly.
+# Imported automatically by dfbench/__init__.py: users never import this directly.
 ```
 
 This module runs **at import time** before any other dfbench code. It performs a single action:
@@ -106,7 +106,7 @@ if "MPLCONFIGDIR" not in os.environ:
     os.environ["MPLCONFIGDIR"] = tempfile.mkdtemp(prefix="mpl_config_")
 ```
 
-**Why:** On shared HPC filesystems, the default matplotlib config directory (`~/.config/matplotlib`) may not be writable — or multiple jobs may race to write there simultaneously. Redirecting to a temporary directory avoids `PermissionError` and race conditions.
+**Why:** On shared HPC filesystems, the default matplotlib config directory (`~/.config/matplotlib`) may not be writable, or multiple jobs may race to write there simultaneously. Redirecting to a temporary directory avoids `PermissionError` and race conditions.
 
 **Why it must come first:** The `MPLCONFIGDIR` environment variable must be set *before* `matplotlib` is imported anywhere, including transitively via dependencies. Since `_init_env.py` is the first import in `dfbench/__init__.py`, it runs before anything else.
 

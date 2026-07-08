@@ -33,7 +33,7 @@ The problem-reconstruction contract
 # Initialize environment variables first
 import dfbench.core._init_env  # noqa: F401
 
-# Protocols — part of the submitter-facing surface
+# Protocols: part of the submitter-facing surface
 from dfbench.core.problem import ContinuousProblem
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 
@@ -41,7 +41,7 @@ from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
 from dfbench.core.config import create_parser
 from dfbench.core.utils import t2j, j2t
 
-# Objective — the single class a submitter drives
+# Objective: the single class a submitter drives
 from dfbench.core.objective import Objective
 
 __all__ = [

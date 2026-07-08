@@ -127,7 +127,7 @@ class OptaxAlgorithm(OptimizationAlgorithm):
 
         Args:
             objective: Pre-configured Objective.
-            init_params: Starting point.  ``None`` → random unbounded.
+            init_params: Starting point.  ``None`` -> random unbounded.
             random_seed: Seed for reproducibility.
             patience: Early-stop after this many evals without improvement.
             learning_rate: Passed to ``_make_optimizer``.

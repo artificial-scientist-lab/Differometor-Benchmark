@@ -41,7 +41,7 @@ def standardize_data(X_train, X_query=None):
 
 @partial(jax.jit, static_argnames=("k",))
 def knn_predict(X_train, y_train, X_query, k=10):
-    """Batched kNN regression in pure JAX - runs entirely on GPU.
+    """Batched kNN regression in pure JAX; runs entirely on GPU.
 
     Uses brute-force distance computation with inverse distance weighting.
     Optimized for cases where training set fits in memory.
@@ -73,7 +73,7 @@ def knn_predict(X_train, y_train, X_query, k=10):
 
 
 def knn_predict_batched(X_train, y_train, X_query, k=10, batch_size=50_000):
-    """Memory-safe batched kNN - stays in JAX, no copies.
+    """Memory-safe batched kNN; stays in JAX, no copies.
 
     For large query sets (M > 100k), process in chunks to avoid OOM.
 
@@ -213,7 +213,7 @@ class ReSTIR(OptimizationAlgorithm):
             X_train_scaled, mean, std = standardize_data(knn_reference_points)
             y_train = knn_reference_losses
 
-            # Always draw exactly n_total_samples candidates → fixed query shape → no JAX retrace
+            # Always draw exactly n_total_samples candidates -> fixed query shape -> no JAX retrace
             drawn_samples = obj.random_params_bounded(n_samples=n_total_samples)
             X_query_scaled = (drawn_samples - mean) / std
 

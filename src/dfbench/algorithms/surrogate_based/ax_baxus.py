@@ -1,4 +1,4 @@
-"""BAxUS — Bayesian Optimization in Adaptively Expanding Subspaces via Ax.
+"""BAxUS: Bayesian Optimization in Adaptively Expanding Subspaces via Ax.
 
 BAxUS iteratively expands a low-dimensional subspace embedding, starting from
 a small dimensionality and growing it only when needed, combining the benefits

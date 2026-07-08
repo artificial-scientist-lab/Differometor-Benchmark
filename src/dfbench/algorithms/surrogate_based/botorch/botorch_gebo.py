@@ -1,4 +1,4 @@
-"""GEBO — Gradient-Enhanced Bayesian Optimization via BoTorch.
+"""GEBO: Gradient-Enhanced Bayesian Optimization via BoTorch.
 
 Incorporates gradient observations into the GP surrogate to improve
 sample efficiency. Each evaluation provides both a function value *and* a
@@ -159,7 +159,7 @@ class GEBO(OptimizationAlgorithm):
             "options": {"maxiter": 200, "batch_limit": 32},
         }
 
-        # JIT warmup — use value_and_grad for this algo
+        # JIT warmup: use value_and_grad for this algo
         obj.warmup_value_and_grad()
         obj.start_logging()
 

@@ -38,5 +38,5 @@ for name, optimizer, extra_kwargs in configs:
         **extra_kwargs,
     )
 
-    print(f"\n{name} — Best loss: {obj.best_loss:.6f}  |  Evals: {obj.eval_count}")
+    print(f"\n{name} | Best loss: {obj.best_loss:.6f}  |  Evals: {obj.eval_count}")
     obj.save_run_data(name, hyper_param_str="standard")

@@ -1,6 +1,6 @@
-"""Section 9 — Benchmark orchestration smoke tests with mock algorithm/problem.
+"""Section 9: Benchmark orchestration smoke tests with mock algorithm/problem.
 
-Tests 9.1–9.14.
+Tests 9.1-9.14.
 """
 
 from __future__ import annotations
@@ -137,7 +137,7 @@ class TestRunDataFromObjective:
 
 
 # ======================================================================
-# Benchmark.run() smoke tests (9.5–9.8)
+# Benchmark.run() smoke tests (9.5-9.8)
 # ======================================================================
 
 
@@ -201,7 +201,7 @@ class TestBenchmarkRun:
 
 
 # ======================================================================
-# Save / Load (9.9–9.12)
+# Save / Load (9.9-9.12)
 # ======================================================================
 
 

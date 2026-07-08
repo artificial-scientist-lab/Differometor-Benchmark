@@ -80,7 +80,7 @@ def build_configs(*, quick: bool = False):
                 "n_initial": n_init,
                 "lbfgs_patience": 200,
             },
-            name="TuRBO→L-BFGS",
+            name="TuRBO->L-BFGS",
         ),
     ]
 

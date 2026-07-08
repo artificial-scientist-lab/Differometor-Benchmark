@@ -18,7 +18,7 @@ from dfbench.core.objective import Objective
 from dfbench.algorithms.evolutionary.jax_es import JAXOnePlusOneES, JAXMuLambdaES
 
 # ---------------------------------------------------------------------------
-# Optional imports — skip tests if backend unavailable
+# Optional imports: skip tests if backend unavailable
 # ---------------------------------------------------------------------------
 
 pycma_available = True
@@ -120,7 +120,7 @@ class TestPyCMAAlgorithms:
 
 
 # ---------------------------------------------------------------------------
-# Section D — cmaes-specific tests
+# Section D: cmaes-specific tests
 # ---------------------------------------------------------------------------
 
 
@@ -149,7 +149,7 @@ class TestCMAESSepCMA:
 
 
 # ---------------------------------------------------------------------------
-# Section E — evosax-specific tests
+# Section E: evosax-specific tests
 # ---------------------------------------------------------------------------
 
 
@@ -179,7 +179,7 @@ class TestEvosaxAlgorithms:
 
 
 # ---------------------------------------------------------------------------
-# Section F — native JAX ES tests (no optional deps, always run)
+# Section F: native JAX ES tests (no optional deps, always run)
 # ---------------------------------------------------------------------------
 
 
@@ -207,7 +207,7 @@ class TestJAXOnePlusOneES:
         """sigma_min=1e3 (very large) should stop immediately after warmup."""
         obj = Objective(mock_problem, max_evals=10_000, max_time=60)
         JAXOnePlusOneES().optimize(obj, random_seed=33, sigma0=1e-11, sigma_min=1e-10)
-        # sigma drops below sigma_min immediately → very few evals
+        # sigma drops below sigma_min immediately -> very few evals
         assert obj.eval_count < 20
 
     def test_max_iterations_cap(self, mock_problem):

@@ -1,4 +1,4 @@
-"""TuRBO→L-BFGS — Trust-region BO followed by local gradient refinement.
+"""TuRBO->L: BFGS: Trust-region BO followed by local gradient refinement.
 
 Runs a TuRBO phase (local trust-region Bayesian Optimization) to locate a
 promising basin, then hands off the best incumbent to the Optax L-BFGS
@@ -40,12 +40,12 @@ from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
 
 
 class TuRBOLBFGS(OptimizationAlgorithm):
-    """TuRBO→L-BFGS: trust-region BO + local gradient refinement.
+    """TuRBO->L-BFGS: trust-region BO + local gradient refinement.
 
-    Phase 1 — **TuRBO**: runs local trust-region BO in bounded parameter space
+    Phase 1 : **TuRBO**: runs local trust-region BO in bounded parameter space
     to find a promising region.
 
-    Phase 2 — **L-BFGS** (via Optax): takes the best incumbent from Phase 1,
+    Phase 2 : **L-BFGS** (via Optax): takes the best incumbent from Phase 1,
     maps it to unbounded (sigmoid) space internally, and runs L-BFGS for rapid
     local convergence. Results are logged back via ``log_evaluation`` using
     bounded params so the Objective stays in bounded mode throughout.
@@ -92,7 +92,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         lbfgs_patience: int = 200,
         **kwargs,
     ) -> None:
-        """Run TuRBO→L-BFGS.
+        """Run TuRBO->L-BFGS.
 
         Args:
             objective: Objective wrapper (mutated in place).
@@ -214,7 +214,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
 
         best_bounded = jnp.asarray(obj.best_params_bounded)
 
-        # Map best bounded → unbounded
+        # Map best bounded -> unbounded
         bounds_jax = jnp.asarray(problem.bounds)
         params = inverse_sigmoid_bounding(best_bounded, bounds_jax)
 

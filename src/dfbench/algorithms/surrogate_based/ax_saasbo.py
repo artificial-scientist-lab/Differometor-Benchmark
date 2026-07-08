@@ -1,4 +1,4 @@
-"""SAASBO — Sparse Axis-Aligned Subspace BO via Ax/BoTorch.
+"""SAASBO: Sparse Axis-Aligned Subspace BO via Ax/BoTorch.
 
 Uses fully Bayesian GP inference with a sparsity-inducing half-Cauchy prior on
 lengthscales, making it effective in high-dimensional spaces where only a few

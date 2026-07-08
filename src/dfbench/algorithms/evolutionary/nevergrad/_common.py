@@ -1,8 +1,8 @@
 """Shared helpers for Nevergrad-based algorithm wrappers.
 
 The Nevergrad ask/tell loop expects ``optimizer.tell(candidate, finite_loss)``.
-When the underlying Objective returns NaN or Inf — which is by design for
-some Differometor problem geometries — we apply an escalating perturbation
+When the underlying Objective returns NaN or Inf (which is by design for
+some Differometor problem geometries), we apply an escalating perturbation
 to the candidate and re-evaluate until a finite loss is obtained.
 
 The schedule mirrors the Optax loop: start at 1e-10 and double each miss,

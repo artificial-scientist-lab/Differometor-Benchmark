@@ -1,6 +1,6 @@
-"""Section 6 — OptimizationAlgorithm ABC and AlgorithmType enum.
+"""Section 6: OptimizationAlgorithm ABC and AlgorithmType enum.
 
-Tests 6.1–6.6.
+Tests 6.1-6.6.
 """
 
 from __future__ import annotations

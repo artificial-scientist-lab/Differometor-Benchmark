@@ -7,7 +7,7 @@ Organized into two sub-packages:
 Flat modules in this package provide custom-loop algorithms
 (:mod:`adam_gd`, :mod:`lbfgs_gd`, :mod:`sa_gd`, :mod:`na_adam_gd`,
 :mod:`optax_lbfgs`) and a hybrid / variance-reduced JAX batch
-(:mod:`custom_jax`: SGLD, ASAM, GD→L-BFGS hand-off, etc.).
+(:mod:`custom_jax`: SGLD, ASAM, GD->L-BFGS hand-off, etc.).
 """
 
 from dfbench.algorithms.gradient_based.scipy import (  # noqa: F401

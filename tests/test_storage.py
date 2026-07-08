@@ -113,7 +113,7 @@ class TestSerializers:
         assert out.best_params.size == 0
 
     def test_legacy_missing_keys(self):
-        # A minimal NPZ without metadata/version — must still load.
+        # A minimal NPZ without metadata/version; must still load.
         import io
 
         buf = io.BytesIO()
@@ -464,7 +464,7 @@ class TestValidateRunState:
 
     def test_A2_ndarray_histories_are_allowed(self):
         """NumPy collapses uniform-shape object arrays to N-D numeric
-        arrays (e.g. five (2,) gradients → shape (5, 2)). The contract is
+        arrays (e.g. five (2,) gradients -> shape (5, 2)). The contract is
         "first axis is the time axis", not strictly 1-D, so this is legal."""
         s = _mutate(
             _make_state(),
@@ -615,7 +615,7 @@ class TestValidateRunState:
         assert r.ok, [str(e) for e in r.errors]
 
     def test_B2_best_loss_drift_is_the_headline_check(self):
-        """best_loss=0.05 but nanmin(loss_history)=0.1 → must be caught."""
+        """best_loss=0.05 but nanmin(loss_history)=0.1 -> must be caught."""
         s = _mutate(_make_state(eval_count=5), best_loss=0.05)
         r = validate_run_state(s)
         assert not r.ok
@@ -721,7 +721,7 @@ class TestCheckpointManagerValidation:
 
     def test_load_rejects_tampered_artifact(self, tmp_path):
         """Save a valid state with validation off, mutate the bytes,
-        reload with validation on → must reject."""
+        reload with validation on -> must reject."""
         manager = self._manager(tmp_path, validate_on_save=False)
         valid = _make_state()
         path = manager.save(valid)

@@ -1,11 +1,11 @@
-"""Nevergrad NGOpt — automatic algorithm-selection baseline.
+"""Nevergrad NGOpt: automatic algorithm-selection baseline.
 
 NGOpt is Nevergrad's built-in meta-optimizer that automatically selects and
 configures an internal algorithm based on the budget, dimensionality, and
 other problem characteristics. It serves as a strong library-default baseline
 without manual algorithm tuning.
 
-Operates in **bounded physical space** — bounds are forwarded to the Nevergrad
+Operates in **bounded physical space**; bounds are forwarded to the Nevergrad
 parametrization. Unbounded mode is not supported.
 """
 

@@ -35,7 +35,7 @@ This page targets competition organizers: the people running scoring, maintainin
 Objective
     │
     ▼
-CheckpointManager          ← the only facade Objective talks to
+CheckpointManager          <- the only facade Objective talks to
     │
     ├── CheckpointSerializer   (how: NPZ or JSON)
     ├── StorageBackend         (where: local FS, memory, S3, ...)
@@ -52,7 +52,7 @@ CheckpointManager          ← the only facade Objective talks to
 | Layer | Responsibility | Protocol / Class |
 |-------|----------------|------------------|
 | **Data contract** | What a run looks like in memory | `RunState`, `RunMetadata` |
-| **Serializer** | Encode/decode `RunState` ↔ bytes | `CheckpointSerializer` |
+| **Serializer** | Encode/decode `RunState` <-> bytes | `CheckpointSerializer` |
 | **Backend** | Where bytes physically go | `StorageBackend` |
 | **Resolver** | Build structured paths | `RunPathResolver` |
 | **Exporter** | Human-readable JSON + PNG view | `RunDataExporter` |

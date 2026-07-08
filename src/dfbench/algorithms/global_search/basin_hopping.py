@@ -57,7 +57,7 @@ class BasinHopping(OptimizationAlgorithm):
 
         Args:
             local_method: SciPy method string for the local minimiser.
-                Gradient-aware methods (``L-BFGS-B``, ``trust-constr``, …) use
+                Gradient-aware methods (``L-BFGS-B``, ``trust-constr``, ...) use
                 ``value_and_grad``; derivative-free methods use ``value`` only.
         """
         self.local_method = local_method

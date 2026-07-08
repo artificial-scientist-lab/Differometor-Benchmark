@@ -1,4 +1,4 @@
-"""Section 4 (full) — Full problem tests requiring Differometor.
+"""Section 4 (full): Full problem tests requiring Differometor.
 
 These are marked @slow and must be run via srun on the cluster.
 """
@@ -15,7 +15,7 @@ pytestmark = pytest.mark.slow
 
 
 # ======================================================================
-# VoyagerProblem (4.1–4.9)
+# VoyagerProblem (4.1-4.9)
 # ======================================================================
 
 
@@ -93,7 +93,7 @@ class TestVoyagerProblem:
 
 
 # ======================================================================
-# ConstrainedVoyagerProblem (4.12–4.15)
+# ConstrainedVoyagerProblem (4.12-4.15)
 # ======================================================================
 
 
@@ -142,7 +142,7 @@ class TestConstrainedVoyagerProblem:
 
 
 # ======================================================================
-# UIFOProblem (4.16–4.20)
+# UIFOProblem (4.16-4.20)
 # ======================================================================
 
 
@@ -164,7 +164,7 @@ class TestUIFOProblem:
         assert jnp.all(b[0] < b[1])
 
     def test_different_topology_seeds(self):
-        """4.18 Different topology_seed → different n_params or bounds."""
+        """4.18 Different topology_seed -> different n_params or bounds."""
         from dfbench.problems import UIFOProblem
 
         p1 = UIFOProblem(size=3, topology_seed=42)
@@ -175,7 +175,7 @@ class TestUIFOProblem:
         assert different
 
     def test_same_topology_seeds(self):
-        """4.19 Same topology_seed → identical n_params and bounds."""
+        """4.19 Same topology_seed -> identical n_params and bounds."""
         from dfbench.problems import UIFOProblem
 
         p1 = UIFOProblem(size=3, topology_seed=42)

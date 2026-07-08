@@ -54,7 +54,7 @@ def sophia(
         b1: Decay rate for the first moment.
         b2: Decay rate for the Hessian diagonal EMA.
         eps: Small constant for numerical stability.
-        gamma: Clipping threshold — updates are clipped to [-1/gamma, 1/gamma].
+        gamma: Clipping threshold. Updates are clipped to [-1/gamma, 1/gamma].
         weight_decay: Decoupled weight decay coefficient.
     """
 
@@ -125,7 +125,7 @@ class OptaxSophia(OptaxAlgorithm):
         grad_clip_norm=1.0,
         **kwargs,
     ) -> None:
-        """Sophia loop — defaults to learning_rate=1e-3."""
+        """Sophia loop: defaults to learning_rate=1e-3."""
         super().optimize(
             objective,
             init_params=init_params,

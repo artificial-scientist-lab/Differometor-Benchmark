@@ -2,8 +2,8 @@
 
 The cross-algorithm baseline (smoke run, bounds, monotonic time, etc.)
 lives in ``tests/test_algorithms_uniform.py``. This module is for tests
-that exercise *one* algorithm's internals — helpers, knobs, validation
-errors — and that do not generalise.
+that exercise *one* algorithm's internals (helpers, knobs, validation
+errors) and that do not generalise.
 
 When you add a new algorithm, put its algorithm-specific tests here.
 One class per algorithm, named after the algorithm.

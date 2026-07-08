@@ -58,7 +58,7 @@ class OptaxSAM(OptaxAlgorithm):
         grad_clip_norm=1.0,
         **kwargs,
     ):
-        """SAM loop — two gradient evaluations per logical step."""
+        """SAM loop: two gradient evaluations per logical step."""
         obj = objective
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 

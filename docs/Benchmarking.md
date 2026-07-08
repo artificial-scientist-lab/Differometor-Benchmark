@@ -37,7 +37,7 @@ benchmark.print_summary(results)
 
 Rather than reporting a single final number, the benchmark evaluates **every metric at multiple time slices**. This produces curves showing how each metric evolves over wall-clock time, enabling fair comparison between algorithms with very different per-iteration costs.
 
-Given `max_time=300` and `n_time_samples=100`, metrics are computed at `[3, 6, 9, …, 300]` seconds. At each time point $t$, a run's history is sliced to only include evaluations with `elapsed_time ≤ t`, and metrics are computed on that prefix.
+Given `max_time=300` and `n_time_samples=100`, metrics are computed at `[3, 6, 9, ..., 300]` seconds. At each time point $t$, a run's history is sliced to only include evaluations with `elapsed_time ≤ t`, and metrics are computed on that prefix.
 
 ### Why wall-clock time?
 
@@ -45,7 +45,7 @@ Iteration count is a poor comparison axis: one Adam iteration (1 eval) takes ~12
 
 ### Success threshold
 
-A run is "successful" when it achieves a loss below `success_loss`. This is a problem-specific value chosen by the user — it defines what counts as a "good enough" solution for a given physics problem.
+A run is "successful" when it achieves a loss below `success_loss`. This is a problem-specific value chosen by the user; it defines what counts as a "good enough" solution for a given physics problem.
 
 ---
 
@@ -84,7 +84,7 @@ Benchmark(
 
 | Parameter | Default | Notes |
 |-----------|---------|-------|
-| `n_runs` | 100 | More runs → more reliable statistics, but linear time cost |
+| `n_runs` | 100 | More runs -> more reliable statistics, but linear time cost |
 | `max_time` | 300 | Seconds. All algorithms get the same wall-clock budget |
 | `n_time_samples` | 100 | Points to sample in `[max_time/n, max_time]` |
 | `random_baseline_loss` | `None` | Expected loss of random guess. If set, AUC metrics are normalized |
@@ -107,7 +107,7 @@ results = benchmark.run(
 |-----------|-------------|
 | `save_csv` | Write all time-sampled metrics to a CSV file in `./data/benchmark_results/` |
 | `save_run_data` | Save raw `RunData` (per-evaluation losses, times, params) to NPZ files |
-| `load_from` | Path to a previously saved run data directory — *skips running*, re-evaluates metrics only |
+| `load_from` | Path to a previously saved run data directory (*skips running*, re-evaluates metrics only) |
 | `output_dir` | Base directory for run data NPZ files |
 
 ---
@@ -115,28 +115,28 @@ results = benchmark.run(
 ## Data Flow
 
 ```
-AlgorithmConfig[]                                  ← user defines
+AlgorithmConfig[]                                  <- user defines
        │
        ▼
    Benchmark.run()
        │
-       ├── _collect_all_run_data()                 ← runs algorithms
+       ├── _collect_all_run_data()                 <- runs algorithms
        │       │
-       │       └── _collect_algorithm_runs()       ← n_runs × optimize()
+       │       └── _collect_algorithm_runs()       <- n_runs × optimize()
        │               │
-       │               └── RunData.from_objective() ← extracts arrays
+       │               └── RunData.from_objective() <- extracts arrays
        │
-       ├── _evaluate_algorithm()                   ← computes metrics at each time slice
+       ├── _evaluate_algorithm()                   <- computes metrics at each time slice
        │       │
        │       ├── slice_history_at_time()
        │       ├── run_min_loss(), run_has_success(), run_auc(), ...
        │       ├── agg_mean_std(), agg_fraction_true(), ...
        │       └── multi_solution_diversity_*(), compute_performance_profile()
        │
-       └── BenchmarkResult[]                       ← returned
+       └── BenchmarkResult[]                       <- returned
                │
-               ├── print_summary()                 ← console table
-               └── _save_results_to_csv()          ← CSV file
+               ├── print_summary()                 <- console table
+               └── _save_results_to_csv()          <- CSV file
 ```
 
 ---
@@ -284,7 +284,7 @@ Values shown are from the **final** time sample (i.e., at `max_time`).
 
 ### Why not use iteration count as the x-axis?
 
-Different algorithms have vastly different per-iteration costs. A BO iteration includes fitting a GP and optimizing an acquisition function; an Adam iteration is a single forward+backward pass. Comparing at "iteration 1000" is meaningless — but comparing at "t = 60 s" is fair.
+Different algorithms have vastly different per-iteration costs. A BO iteration includes fitting a GP and optimizing an acquisition function; an Adam iteration is a single forward+backward pass. Comparing at "iteration 1000" is meaningless, but comparing at "t = 60 s" is fair.
 
 ### Why save raw run data?
 

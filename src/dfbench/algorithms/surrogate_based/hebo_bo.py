@@ -1,4 +1,4 @@
-"""HEBO — Heteroscedastic Evolutionary Bayesian Optimization.
+"""HEBO: Heteroscedastic Evolutionary Bayesian Optimization.
 
 Uses the ``hebo`` package which won the NeurIPS 2020 BBO challenge. HEBO
 employs a heteroscedastic GP, input warping, and a multi-objective
@@ -31,7 +31,7 @@ except ImportError:
 
 
 class HEBO(OptimizationAlgorithm):
-    """HEBO — Heteroscedastic Evolutionary Bayesian Optimization.
+    """HEBO: Heteroscedastic Evolutionary Bayesian Optimization.
 
     Wraps the ``hebo`` package to work with the ``Objective`` protocol.
     HEBO internally uses a heteroscedastic GP with input warping and a

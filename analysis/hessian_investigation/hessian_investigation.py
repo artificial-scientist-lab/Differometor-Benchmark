@@ -157,7 +157,7 @@ for idx in range(n_params):
         )
 
 if not negative_params:
-    print("  NONE — no single-parameter perturbation achieves loss < 0")
+    print("  NONE: no single-parameter perturbation achieves loss < 0")
 
 print("All parameters sorted by minimum achievable loss:")
 print("-" * 80)
@@ -738,7 +738,7 @@ def projected_newton_line_search(
         # Check if Newton direction is a descent direction
         directional_deriv = float(g_free @ d_free)
         if directional_deriv > 0:
-            # Newton direction is ascending — use negative gradient instead
+            # Newton direction is ascending; use negative gradient instead
             print("Newton is ascending, switching to negative gradient direction")
             d_free = -g_free
             directional_deriv = float(g_free @ d_free)
@@ -810,7 +810,7 @@ ax.plot(plot_losses, linewidth=0.8)
 ax.axhline(y=0, color="r", linestyle="--", alpha=0.5)
 ax.set_xlabel("Function evaluation (finite only)")
 ax.set_ylabel("Loss")
-ax.set_title(f"Newton — final loss: {float(obj_fn(newton_best_params)):.6e}")
+ax.set_title(f"Newton | final loss: {float(obj_fn(newton_best_params)):.6e}")
 plt.tight_layout()
 plt.show()
 

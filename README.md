@@ -51,7 +51,7 @@ obj.plot_loss()
 obj.save_run_to_file("my_run.npz")
 ```
 
-**A loss below 0 means your solution beats the real Voyager detector's sensitivity.** (On `VoyagerProblem` without physical constraints — you might be burning mirrors.)
+**A loss below 0 means your solution beats the real Voyager detector's sensitivity.** (On `VoyagerProblem` without physical constraints, you might be burning mirrors.)
 
 ### Evaluation Methods
 
@@ -73,8 +73,8 @@ The problems are JAX-based and differentiable up to second order. Use whichever 
 ```python
 from dfbench import t2j, j2t
 
-params_jax = t2j(params_torch)       # Torch → JAX
-losses_torch = j2t(obj.vmap_value(params_jax))  # JAX → Torch
+params_jax = t2j(params_torch)       # Torch -> JAX
+losses_torch = j2t(obj.vmap_value(params_jax))  # JAX -> Torch
 ```
 
 This adds negligible overhead compared to the objective function itself.
@@ -142,8 +142,8 @@ OptimizationAlgorithm.optimize()
          │
          ▼
    ┌───────────┐      records losses, params, grads, timestamps
-   │ Objective │ ──►  enforces time / eval budgets
-   └─────┬─────┘      bounded ↔ unbounded sigmoid transform
+   │ Objective │ ──>  enforces time / eval budgets
+   └─────┬─────┘      bounded <-> unbounded sigmoid transform
          │
          ▼
   ContinuousProblem        (VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem, UIFOProblem)
@@ -166,15 +166,15 @@ src/dfbench/
 │   ├── problem.py        # ContinuousProblem ABC + ProblemSpec
 │   ├── algorithm.py       # OptimizationAlgorithm ABC + AlgorithmType enum
 │   ├── objective.py       # Objective wrapper (central piece)
-│   └── utils.py           # torch↔jax conversion, inverse sigmoid
+│   └── utils.py           # torch<->jax conversion, inverse sigmoid
 ├── algorithms/
 │   ├── derivative_free/   # OMADS, PDFO/Py-BOBYQA, NelderMead, Powell
 │   ├── global_search/     # RandomSearch, SciPy BasinHopping, DualAnnealing
 │   ├── evolutionary/      # EvoxPSO, EvoxES, Nevergrad, CMA family
 │   ├── gradient_based/
 │   │   ├── optax/         # 34 Optax-based optimizers (OptaxAdam, OptaxLAMB, ...)
-│   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
-│   │   ├── custom_jax.py  # Native-JAX custom/hybrid batch (SGLD, ASAM, GD→L-BFGS, …)
+│   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, ...)
+│   │   ├── custom_jax.py  # Native-JAX custom/hybrid batch (SGLD, ASAM, GD->L-BFGS, ...)
 │   │   └── *.py           # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, NAAdamGD, OptaxLBFGS)
 │   ├── surrogate_based/
 │   │   ├── botorch/       # BotorchBO, BotorchTuRBO, BotorchqNEI, BotorchqKG,
@@ -285,7 +285,7 @@ The interface is designed to make this as simple as possible. You write the opti
 
 1. Subclass `OptimizationAlgorithm`
 2. Declare `algorithm_str` and `algorithm_type`
-3. Implement `optimize(objective, ...) → None`
+3. Implement `optimize(objective, ...) -> None`
 4. Use `Objective` for all function evaluations
 5. The `Objective` is mutated in place, thereby no return is needed
 

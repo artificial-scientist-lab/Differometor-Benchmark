@@ -1,4 +1,4 @@
-"""REMBO — Random EMbedding Bayesian Optimization via BoTorch.
+"""REMBO: Random EMbedding Bayesian Optimization via BoTorch.
 
 Projects the ambient space into a low-dimensional random subspace, runs
 standard GP-BO there, and projects candidates back. The key idea is that
@@ -73,7 +73,7 @@ class REMBO(OptimizationAlgorithm):
     ) -> torch.Tensor:
         """Project from embedding space to normalised ambient [0,1]^D.
 
-        Z: (n, d_e), A: (D, d_e) → X: (n, D)
+        Z: (n, d_e), A: (D, d_e) -> X: (n, D)
         Uses sigmoid to map unbounded projection outputs into [0, 1].
         """
         raw = Z @ A.T  # (n, D)
@@ -139,7 +139,7 @@ class REMBO(OptimizationAlgorithm):
         # Initial Sobol in embedding space
         sobol = torch.quasirandom.SobolEngine(d_e, scramble=True, seed=random_seed)
         Z_train = sobol.draw(n_initial).to(self.device, self.dtype)
-        Z_train = Z_train * 2 * emb_radius - emb_radius  # map [0,1]→[-r,r]
+        Z_train = Z_train * 2 * emb_radius - emb_radius  # map [0,1]->[-r,r]
 
         X_train = self._project_up(Z_train, A)
 

@@ -1,4 +1,4 @@
-"""UOBYQA — Unconstrained Optimization BY Quadratic Approximation (via PDFO).
+"""UOBYQA: Unconstrained Optimization BY Quadratic Approximation (via PDFO).
 
 UOBYQA is a derivative-free trust-region method by M. J. D. Powell that
 builds a full quadratic interpolation model of the objective.  It is designed
@@ -8,14 +8,14 @@ Because UOBYQA does **not** support bound constraints natively, this wrapper
 operates in bounded space by clipping evaluations to the problem bounds.
 If a point proposed by the solver lies outside bounds it is projected back;
 the objective value at the clipped point is returned.  This is a pragmatic
-approach — for strictly bounded problems prefer NEWUOA or BOBYQA.
+approach. For strictly bounded problems prefer NEWUOA or BOBYQA.
 
 Defaults are conservative and benchmark-oriented: one restart, ``rhobeg``
 derived from the bound range, ``maxfev`` deferred to the Objective budget.
 
 Reference:
     Powell, M. J. D. (2002). UOBYQA: unconstrained optimization by quadratic
-    approximation. *Mathematical Programming*, 92(3), 555–582.
+    approximation. *Mathematical Programming*, 92(3), 555-582.
 """
 
 from __future__ import annotations

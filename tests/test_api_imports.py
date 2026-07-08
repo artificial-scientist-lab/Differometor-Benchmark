@@ -1,6 +1,6 @@
-"""Section 12 — Package-level import smoke tests.
+"""Section 12: Package-level import smoke tests.
 
-Tests 12.1–12.5: verify that all public API symbols are importable.
+Tests 12.1-12.5: verify that all public API symbols are importable.
 """
 
 
@@ -59,7 +59,7 @@ class TestCoreImports:
     def test_import_benchmark(self):
         from dfbench.benchmark import Benchmark, AlgorithmConfig  # noqa: F401
 
-    # 12.6 — submitter/organizer namespace split
+    # 12.6: submitter/organizer namespace split
     def test_storage_symbols_not_in_top_level(self):
         """Organizer-only storage symbols must not leak into the submitter
         namespace ``dfbench.<name>``. They remain importable from

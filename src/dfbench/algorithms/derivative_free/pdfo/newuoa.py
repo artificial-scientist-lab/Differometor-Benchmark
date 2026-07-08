@@ -1,4 +1,4 @@
-"""NEWUOA — NEW Unconstrained Optimization Algorithm (via PDFO).
+"""NEWUOA: NEW Unconstrained Optimization Algorithm (via PDFO).
 
 NEWUOA is a derivative-free trust-region method by M. J. D. Powell.  It
 builds a quadratic interpolation model using *fewer* interpolation points
@@ -15,7 +15,7 @@ Defaults are conservative and benchmark-oriented.
 Reference:
     Powell, M. J. D. (2006). The NEWUOA software for unconstrained
     optimization without derivatives. *Large-Scale Nonlinear Optimization*,
-    Springer, 255–297.
+    Springer, 255-297.
 """
 
 from __future__ import annotations

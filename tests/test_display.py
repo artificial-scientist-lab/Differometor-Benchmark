@@ -1,6 +1,6 @@
-"""Section 10 — Display helper functions.
+"""Section 10: Display helper functions.
 
-Tests 10.1–10.7.
+Tests 10.1-10.7.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from dfbench.core.objective import Objective
 
 
 # ======================================================================
-# _bar (10.1–10.2)
+# _bar (10.1-10.2)
 # ======================================================================
 
 
@@ -68,7 +68,7 @@ class TestFmtTime:
         assert "h" in result
 
     def test_negative(self):
-        """10.3d Negative → '0s'."""
+        """10.3d Negative -> '0s'."""
         assert _fmt_time(-5) == "0s"
 
 
@@ -79,23 +79,23 @@ class TestFmtTime:
 
 class TestFmtLoss:
     def test_none(self):
-        """10.4 None → '—'."""
-        assert _fmt_loss(None) == "—"
+        """10.4 None -> '-'."""
+        assert _fmt_loss(None) == "-"
 
     def test_nan(self):
-        """10.4b NaN → 'NaN'."""
+        """10.4b NaN -> 'NaN'."""
         assert _fmt_loss(float("nan")) == "NaN"
 
     def test_inf(self):
-        """10.4c inf → '∞'."""
+        """10.4c inf -> '∞'."""
         assert _fmt_loss(float("inf")) == "∞"
 
     def test_neg_inf(self):
-        """10.4d -inf → '-∞'."""
+        """10.4d -inf -> '-∞'."""
         assert _fmt_loss(float("-inf")) == "-∞"
 
     def test_small_float(self):
-        """10.4e Small floats → scientific notation."""
+        """10.4e Small floats -> scientific notation."""
         result = _fmt_loss(0.00123)
         assert "e" in result
 
@@ -122,7 +122,7 @@ class TestSparkline:
         assert len(result) == 5
 
     def test_all_nan(self):
-        """10.5c All-NaN → dots."""
+        """10.5c All-NaN -> dots."""
         result = _sparkline([float("nan"), float("nan")], width=2)
         assert "·" in result
 
@@ -133,7 +133,7 @@ class TestSparkline:
 
 
 # ======================================================================
-# LiveDisplay & LogDisplay (10.6–10.7)
+# LiveDisplay & LogDisplay (10.6-10.7)
 # ======================================================================
 
 

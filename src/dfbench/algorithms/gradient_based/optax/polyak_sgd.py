@@ -50,7 +50,7 @@ class OptaxPolyakSGD(OptaxAlgorithm):
         grad_clip_norm=1.0,
         **kwargs,
     ):
-        """Polyak SGD loop — passes loss to ``optimizer.update``."""
+        """Polyak SGD loop: passes loss to ``optimizer.update``."""
         obj = objective
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 

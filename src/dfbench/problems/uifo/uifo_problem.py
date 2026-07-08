@@ -17,9 +17,9 @@ from ..base_problem import DEFAULT_SIGNAL_FLOOR, OpticalSetupProblem, register_p
 # ---------------------------------------------------------------------------
 # Topology string encoding
 # ---------------------------------------------------------------------------
-# Interior cells: 2 component types × 4 orientations = 8 options -> A–H
-#   A–D = beamsplitter     (left, right, top, bottom)
-#   E–H = directional_beamsplitter (left, right, top, bottom)
+# Interior cells: 2 component types × 4 orientations = 8 options -> A-H
+#   A-D = beamsplitter     (left, right, top, bottom)
+#   E-H = directional_beamsplitter (left, right, top, bottom)
 #
 # Boundary cells: 4 component types -> L, S, D, H
 #   L = laser, S = squeezer, D = detector, H = balanced_homodyne
@@ -191,8 +191,8 @@ class UIFOProblem(OpticalSetupProblem):
 
     The topology string uses single-character codes:
 
-    - **Interior cells** (beamsplitters): A–D = beamsplitter (left/right/top/bottom),
-      E–H = directional_beamsplitter (left/right/top/bottom)
+    - **Interior cells** (beamsplitters): A-D = beamsplitter (left/right/top/bottom),
+      E-H = directional_beamsplitter (left/right/top/bottom)
     - **Boundary cells**: L = laser, S = squeezer, D = detector, H = balanced_homodyne
     - Format: ``"<interior_chars>-<boundary_chars>"`` in row-major order.
     """
@@ -246,7 +246,7 @@ class UIFOProblem(OpticalSetupProblem):
 
         n_specified = sum([has_seed, has_string, has_dicts])
         if n_specified == 0:
-            # No topology specified — generate a truly random one
+            # No topology specified; generate a truly random one
             topology_seed = int(np.random.randint(0, 2**31))
             has_seed = True
         elif n_specified > 1:

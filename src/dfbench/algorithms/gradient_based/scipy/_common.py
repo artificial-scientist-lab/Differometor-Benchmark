@@ -379,9 +379,9 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
                 self._last_result = None
                 return
 
-            # Budget not yet exhausted — restart with alternating strategy:
-            #   even restarts → perturb best-known point (exploit basin)
-            #   odd restarts  → fresh random point (explore new basin)
+            # Budget not yet exhausted; restart with alternating strategy:
+            #   even restarts -> perturb best-known point (exploit basin)
+            #   odd restarts  -> fresh random point (explore new basin)
             if not obj.budget_exceeded:
                 restart_count += 1
                 if restart_count % 2 == 0:

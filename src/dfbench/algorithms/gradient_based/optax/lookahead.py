@@ -16,7 +16,7 @@ class OptaxLookahead(OptaxAlgorithm):
 
     Wraps a fast inner optimizer with slow-weight averaging
     (Zhang et al., "Lookahead Optimizer: k steps forward, 1 step back", 2019).
-    This is *not* a standalone optimizer — it wraps a user-configurable
+    This is *not* a standalone optimizer; it wraps a user-configurable
     base Optax optimizer (default: Adam).
     Operates in unbounded (sigmoid-transformed) space by default.
 
@@ -64,7 +64,7 @@ class OptaxLookahead(OptaxAlgorithm):
         grad_clip_norm=1.0,
         **kwargs,
     ):
-        """Lookahead loop — uses LookaheadParams wrapper for init."""
+        """Lookahead loop: uses LookaheadParams wrapper for init."""
         obj = objective
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 

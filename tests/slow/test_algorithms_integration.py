@@ -2,7 +2,7 @@
 
 For every algorithm in the uniform registry we run a short optimisation
 on ``VoyagerProblem`` and check it produces a finite loss. This catches
-problems that the mock quadratic cannot — JAX-vmap incompatibilities,
+problems that the mock quadratic cannot (JAX-vmap incompatibilities),
 JIT recompilation issues, gradient explosions on real landscapes, etc.
 
 These tests are slow and require GPU/Differometor;

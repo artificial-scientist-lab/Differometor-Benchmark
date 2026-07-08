@@ -1,4 +1,4 @@
-"""qKG — Knowledge Gradient acquisition via BoTorch.
+"""qKG: Knowledge Gradient acquisition via BoTorch.
 
 Knowledge Gradient maximises the expected *increase in value of the best
 posterior mean* after observing a new point, providing a one-step Bayes-optimal

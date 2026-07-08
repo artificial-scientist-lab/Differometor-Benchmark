@@ -30,7 +30,7 @@ from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
 
 # ---------------------------------------------------------------------------
-# OMADS compatibility shim — fix attribute name mismatch in samplersLib
+# OMADS compatibility shim: fix attribute name mismatch in samplersLib
 # ---------------------------------------------------------------------------
 
 _OMADS_IMPORT_ERROR: str | None = None
@@ -115,7 +115,7 @@ def _run_omads(
         init = obj.random_params_bounded()
         baseline = np.array(init, dtype=np.float64).tolist()
 
-    # OMADS budget — set generously; Objective budget is the real limiter.
+    # OMADS budget: set generously; Objective budget is the real limiter.
     omads_budget = obj.max_evals if obj.max_evals is not None else 1_000_000
 
     # --- blackbox callable ---------------------------------------------------
