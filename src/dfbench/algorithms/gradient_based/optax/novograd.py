@@ -1,10 +1,10 @@
 """NovoGrad optimizer (Optax)."""
 
-import optax
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
     build_optimizer,
+    optax,
 )
 
 

@@ -9,7 +9,12 @@ from __future__ import annotations
 import warnings
 
 import numpy as np
-import torch
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from botorch.exceptions.errors import ModelFittingError
 from botorch.exceptions.warnings import OptimizationWarning
 from botorch.fit import fit_gpytorch_mll

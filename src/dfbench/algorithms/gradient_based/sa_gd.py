@@ -5,7 +5,12 @@ Simulated annealing gradient descent based on https://arxiv.org/abs/2107.07558
 import math
 
 import jax
-import optax
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for this algorithm. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType

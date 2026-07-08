@@ -12,11 +12,11 @@ Optimizer for Language Model Pre-training", 2023.
 from __future__ import annotations
 
 import jax.numpy as jnp
-import optax
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
     build_optimizer,
+    optax,
 )
 from dfbench.core.objective import Objective
 

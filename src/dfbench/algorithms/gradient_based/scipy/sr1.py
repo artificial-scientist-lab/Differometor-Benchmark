@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from scipy.optimize import SR1 as ScipySR1
+try:
+    from scipy.optimize import SR1 as ScipySR1
+except ImportError as exc:
+    raise ImportError(
+        "scipy is required for this algorithm. Install with:  uv add 'dfbench[scipy]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.algorithms.gradient_based.scipy._common import (

@@ -13,7 +13,12 @@ of high-quality solutions, making optimization more efficient in high dimensions
 
 import jax.numpy as jnp
 import numpy as np
-import torch
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset

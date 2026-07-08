@@ -9,9 +9,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
-from scipy.optimize import BFGS as ScipyBFGS
-from scipy.optimize import Bounds
-from scipy.optimize import minimize
+try:
+    from scipy.optimize import BFGS as ScipyBFGS
+    from scipy.optimize import Bounds
+    from scipy.optimize import minimize
+except ImportError as exc:
+    raise ImportError(
+        "scipy is required for SciPy* algorithms. Install with:  uv add 'dfbench[scipy]'"
+    ) from exc
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective

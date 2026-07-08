@@ -18,8 +18,18 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
-import torch
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for this algorithm. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm

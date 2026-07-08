@@ -1,12 +1,12 @@
 """PolyakSGD optimizer (Optax)."""
 
 import jax
-import optax
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
     _is_nonfinite,
     _MAX_NAN_STREAK,
+    optax,
 )
 
 

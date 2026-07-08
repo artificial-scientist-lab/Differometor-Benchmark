@@ -1,13 +1,12 @@
 """SAM (Sharpness-Aware Minimization) optimizer (Optax contrib)."""
 
 import jax
-import optax
-import optax.contrib
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
     _is_nonfinite,
     _MAX_NAN_STREAK,
+    optax,
 )
 from dfbench.core.objective import Objective
 

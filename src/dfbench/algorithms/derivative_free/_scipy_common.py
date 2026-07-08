@@ -8,7 +8,12 @@ from __future__ import annotations
 
 import numpy as np
 import jax.numpy as jnp
-from scipy.optimize import Bounds
+try:
+    from scipy.optimize import Bounds
+except ImportError as exc:
+    raise ImportError(
+        "scipy is required for this algorithm. Install with:  uv add 'dfbench[scipy]'"
+    ) from exc
 
 from dfbench.core.objective import Objective
 
