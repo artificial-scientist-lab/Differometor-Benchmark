@@ -131,7 +131,7 @@ class Objective:
     +------------------------------------+---------------------------------------------------+
     | ``n_params``                       | Number of optimisable parameters.                 |
     +------------------------------------+---------------------------------------------------+
-    | ``problem``                        | The wrapped ``ContinuousProblem``.                |
+    | ``problem_name``                   | Display name of the wrapped problem.              |
     +------------------------------------+---------------------------------------------------+
     | ``eval_count``                     | Total evaluations so far.                         |
     +------------------------------------+---------------------------------------------------+
@@ -786,14 +786,14 @@ class Objective:
     def n_params(self) -> int:
         """Number of parameters in the optimization problem."""
         if self._bounds is not None:
-            return self.problem.n_params
+            return self._problem.n_params
         else:
             raise ValueError("Cannot determine n_params for unbounded objective.")
 
     @property
-    def problem(self) -> ContinuousProblem:
-        """The underlying optimization problem."""
-        return self._problem
+    def problem_name(self) -> str:
+        """Display name of the wrapped problem (falls back to 'problem')."""
+        return getattr(self._problem, "name", "problem")
 
     @property
     def penalty_fn(self) -> Callable | None:

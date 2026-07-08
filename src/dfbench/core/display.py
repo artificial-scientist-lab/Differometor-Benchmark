@@ -255,7 +255,7 @@ class LiveDisplay:
 
         # ── Stat gathering ────────────────────────────────────────
         algorithm = obj.algorithm_str or "unknown"
-        problem = obj.problem.name if hasattr(obj.problem, "name") else "problem"
+        problem = obj.problem_name
         n_params = obj.n_params if obj.bounds is not None else "?"
         eval_count = obj.eval_count
         max_evals = obj.max_evals

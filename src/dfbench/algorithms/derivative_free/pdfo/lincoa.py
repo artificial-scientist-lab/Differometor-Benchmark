@@ -1,14 +1,8 @@
 """LINCOA: LINearly Constrained Optimization Algorithm (via PDFO).
 
 LINCOA is a derivative-free trust-region method by M. J. D. Powell that
-handles *bound constraints* and *linear inequality constraints* natively.
-
-When the problem exposes only box bounds (the common case in this benchmark),
-LINCOA automatically uses them.  If the problem also exposes linear
-constraints via ``problem.linear_constraints`` (returning a dict with keys
-``A_ub``, ``b_ub`` for ``A_ub @ x <= b_ub``), those are forwarded to the
-solver as well.  Problems without any constraints are also supported -
-LINCOA will behave like a bounded NEWUOA.
+handles *bound constraints* natively.  Problems without any constraints are
+also supported - LINCOA will behave like a bounded NEWUOA.
 
 Defaults are conservative and benchmark-oriented: bounded physical space,
 one restart, ``rhobeg`` derived from the bound range.
@@ -76,7 +70,7 @@ class PDFOLINCOA(OptimizationAlgorithm):
             raise ImportError(
                 "PDFO is required for LINCOA.  Install with: uv add 'dfbench[dfo]'"
             ) from exc
-        from scipy.optimize import LinearConstraint, Bounds  # noqa: E402
+        from scipy.optimize import Bounds  # noqa: E402
 
         obj = objective
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -92,15 +86,9 @@ class PDFOLINCOA(OptimizationAlgorithm):
         fun = dfo_objective_wrapper(obj)
         bounds = Bounds(lb=lower, ub=upper)
 
-        # Build constraint list: always include bounds; add linear if available.
+        # This batch only supports box bounds; problems with linear
+        # constraint metadata are not handled here.
         constraints: list = []
-        problem = obj.problem
-        if hasattr(problem, "linear_constraints"):
-            lc = problem.linear_constraints  # type: ignore[attr-defined]
-            if lc is not None:
-                A_ub = np.asarray(lc["A_ub"], dtype=np.float64)
-                b_ub = np.asarray(lc["b_ub"], dtype=np.float64)
-                constraints.append(LinearConstraint(A_ub, ub=b_ub))
 
         # JIT warmup
         obj.warmup_value()

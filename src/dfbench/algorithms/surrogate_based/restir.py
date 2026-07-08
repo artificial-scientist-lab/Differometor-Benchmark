@@ -183,7 +183,6 @@ class ReSTIR(OptimizationAlgorithm):
         """
         # 1. Setup
         obj = objective
-        problem = obj.problem
 
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
@@ -337,7 +336,7 @@ class ReSTIR(OptimizationAlgorithm):
 
             # Batched Adam GD refinement on all selected candidates
             if n_final_candidates > 0 and gd_steps > 0:
-                lower, upper = problem.bounds
+                lower, upper = obj.bounds
                 gd_samples = selected_samples
                 gd_optimizer = optax.adam(gd_learning_rate)
                 gd_opt_state = gd_optimizer.init(gd_samples)

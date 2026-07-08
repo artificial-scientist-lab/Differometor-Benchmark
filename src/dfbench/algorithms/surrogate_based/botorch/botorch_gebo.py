@@ -149,13 +149,12 @@ class GEBO(OptimizationAlgorithm):
             **bo_kwargs: Extra kwargs for acquisition optimisation.
         """
         obj = objective
-        problem = obj.problem
-        D = problem.n_params
+        D = obj.n_params
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        bounds = get_problem_bounds_torch(problem, self.device, self.dtype)
+        bounds = get_problem_bounds_torch(obj.bounds, self.device, self.dtype)
         u_bounds = unit_bounds_torch(D, self.device, self.dtype)
 
         acqf_opts = {
@@ -210,8 +209,8 @@ class GEBO(OptimizationAlgorithm):
             for _ in range(grad_refine_steps):
                 x_unnorm = unnormalize(x_refine.unsqueeze(0), bounds).squeeze(0)
                 x_jax = t2j(x_unnorm)
-                # Use the problem's objective gradient directly (no Objective call)
-                grad_fn = jax.grad(problem.objective_function)
+                # Use the objective gradient directly (no Objective logging call)
+                grad_fn = jax.grad(obj.value_function(unbounded=False))
                 g_jax = grad_fn(x_jax)
                 g_t = torch.from_numpy(np.array(g_jax)).to(self.device, self.dtype)
                 # Gradient descent step in normalised space (negate because we negate Y)

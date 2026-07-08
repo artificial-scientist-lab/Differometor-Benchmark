@@ -95,27 +95,16 @@ class SciPyObjectiveAdapter:
         """Return SciPy bounds in physical space when requested."""
         if not self.config.use_bounds:
             return None
-        problem_bounds = np.asarray(self.obj.problem.bounds, dtype=float)
+        problem_bounds = np.asarray(self.obj.bounds, dtype=float)
         return Bounds(problem_bounds[0], problem_bounds[1], keep_feasible=True)
 
     @property
     def constraints(self) -> tuple:
-        """Return supported SciPy constraints or fail loudly."""
-        problem = self.obj.problem
-        for attr_name in (
-            "scipy_constraints",
-            "constraints",
-            "linear_constraints",
-            "nonlinear_constraints",
-        ):
-            if not hasattr(problem, attr_name):
-                continue
-            value = getattr(problem, attr_name)
-            if value not in (None, (), [], {}):
-                raise NotImplementedError(
-                    "Problem exposes constraint metadata via "
-                    f"'{attr_name}', but this batch only supports box constraints."
-                )
+        """Return supported SciPy constraints.
+
+        This batch only supports box bounds; problems with constraint
+        metadata are not handled here.
+        """
         return ()
 
     def warmup(self) -> None:

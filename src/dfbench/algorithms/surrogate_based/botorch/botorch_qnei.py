@@ -96,13 +96,12 @@ class BotorchQNEI(OptimizationAlgorithm):
             **bo_kwargs: Forwarded to ``optimize_acqf``.
         """
         obj = objective
-        problem = obj.problem
-        dim = problem.n_params
+        dim = obj.n_params
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        bounds = get_problem_bounds_torch(problem, self.device, self.dtype)
+        bounds = get_problem_bounds_torch(obj.bounds, self.device, self.dtype)
         u_bounds = unit_bounds_torch(dim, self.device, self.dtype)
 
         acqf_opts = {

@@ -68,7 +68,7 @@ class EvoxES(OptimizationAlgorithm):
         _variant (str): ES variant name (e.g., "CMAES", "OpenES").
 
     Note:
-        This algorithm uses `problem.objective_function` with the problem's bounds.
+        This algorithm uses the objective function with the problem's bounds.
         The population searches directly in the bounded parameter space.
 
     Example:
@@ -146,17 +146,11 @@ class EvoxES(OptimizationAlgorithm):
             **es_kwargs: Variant-specific keyword arguments passed to the EvoX algorithm.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        # Get bounds from problem
-        if not hasattr(problem, "bounds"):
-            raise ValueError(
-                f"Problem {type(problem).__name__} must have a 'bounds' attribute."
-            )
-        problem_bounds = problem.bounds
+        problem_bounds = obj.bounds
         lb_np = np.asarray(problem_bounds[0])
         ub_np = np.asarray(problem_bounds[1])
 
@@ -210,7 +204,7 @@ class EvoxES(OptimizationAlgorithm):
 
         def get_center_init():
             return torch.from_numpy(
-                np.random.uniform(lb_np, ub_np, size=problem.n_params)
+                np.random.uniform(lb_np, ub_np, size=obj.n_params)
             ).float()
 
         # Initialize based on variant-specific requirements
@@ -241,7 +235,7 @@ class EvoxES(OptimizationAlgorithm):
             if "init_mean" not in es_kwargs:
                 es_kwargs["init_mean"] = get_center_init()
             if "init_covar" not in es_kwargs:
-                es_kwargs["init_covar"] = torch.eye(problem.n_params).float() * (
+                es_kwargs["init_covar"] = torch.eye(obj.n_params).float() * (
                     default_sigma**2
                 )
             algorithm = AlgorithmClass(pop_size=pop_size, **es_kwargs)
@@ -250,9 +244,7 @@ class EvoxES(OptimizationAlgorithm):
             if "init_mean" not in es_kwargs:
                 es_kwargs["init_mean"] = get_center_init()
             if "init_std" not in es_kwargs:
-                es_kwargs["init_std"] = (
-                    torch.ones(problem.n_params).float() * default_sigma
-                )
+                es_kwargs["init_std"] = torch.ones(obj.n_params).float() * default_sigma
             algorithm = AlgorithmClass(pop_size=pop_size, **es_kwargs)
 
         elif self._variant == "DES":

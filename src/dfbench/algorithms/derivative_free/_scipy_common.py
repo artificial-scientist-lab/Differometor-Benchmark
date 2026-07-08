@@ -36,15 +36,15 @@ _NAN_PENALTY = 1e30
 
 def scipy_bounds(obj: Objective) -> Bounds:
     """Convert problem bounds to :class:`scipy.optimize.Bounds`."""
-    lb = np.asarray(obj.problem.bounds[0], dtype=np.float64)
-    ub = np.asarray(obj.problem.bounds[1], dtype=np.float64)
+    lb = np.asarray(obj.bounds[0], dtype=np.float64)
+    ub = np.asarray(obj.bounds[1], dtype=np.float64)
     return Bounds(lb, ub)
 
 
 def scipy_bounds_list(obj: Objective) -> list[tuple[float, float]]:
     """Return bounds as ``[(lb0, ub0), ...]`` (format used by *dual_annealing*)."""
-    lb = np.asarray(obj.problem.bounds[0], dtype=np.float64)
-    ub = np.asarray(obj.problem.bounds[1], dtype=np.float64)
+    lb = np.asarray(obj.bounds[0], dtype=np.float64)
+    ub = np.asarray(obj.bounds[1], dtype=np.float64)
     return list(zip(lb.tolist(), ub.tolist()))
 
 

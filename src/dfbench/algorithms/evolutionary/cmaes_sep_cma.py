@@ -106,14 +106,13 @@ class CMAESSepCMA(OptimizationAlgorithm):
                 disables stagnation stopping.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         width = ub_np - lb_np
-        n = problem.n_params
+        n = obj.n_params
 
         # The cmaes package has no per-coordinate sigma.  On problems where
         # bound widths span orders of magnitude (e.g. Voyager), running the

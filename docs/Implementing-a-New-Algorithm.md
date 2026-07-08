@@ -98,7 +98,6 @@ class MyAlgorithm(OptimizationAlgorithm):
         """
         # ─── 1. Setup references ───
         obj = objective
-        problem = obj.problem
 
         # Sets unbounded mode, algorithm_str, seeds np/JAX, returns resolved seed + JAX key
         random_seed, key = self.prepare(
@@ -179,13 +178,18 @@ The base class `OptimizationAlgorithm.optimize()` contains a commented blueprint
 
 ```python
 obj = objective
-problem = obj.problem
 random_seed, key = self.prepare(
     obj,
     unbounded=False,
     random_seed=random_seed,
 )
 ```
+
+The problem instance wrapped by the `Objective` is private. Use the public
+Objective API directly: `obj.bounds` for the `(2, n_params)` bounds,
+`obj.n_params` for the dimension, `obj.problem_name` for the display name,
+`obj.value_function(unbounded=False)` for the raw bounded objective, and
+`obj.penalty_fn` / `obj.power_thresholds` for the penalty contract.
 
 `prepare()` is called as `prepare(obj, unbounded, random_seed, algorithm_str=None, **kwargs)`. It sets `obj.unbounded`, `obj.algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. If `random_seed=None` is passed, a seed is generated via system entropy. You can also configure the Objective manually instead of calling `prepare()`.
 

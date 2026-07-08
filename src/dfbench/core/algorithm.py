@@ -102,7 +102,6 @@ class OptimizationAlgorithm(ABC):
         """
         # 1. Setup references
         obj = objective
-        problem = obj.problem  # noqa: F841, just for clarity and convention in the algorithm code
 
         # 2. Setup objective and resolve/apply random seed
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)

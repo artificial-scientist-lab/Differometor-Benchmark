@@ -30,15 +30,15 @@ class TestConstruction:
         assert obj.params_history == []
         assert obj.time_steps == []
 
-    def test_bounds_property(self, seeded_obj):
+    def test_bounds_property(self, seeded_obj, mock_problem):
         """5.2 bounds matches problem bounds."""
         np.testing.assert_array_equal(
-            np.array(seeded_obj.bounds), np.array(seeded_obj.problem.bounds)
+            np.array(seeded_obj.bounds), np.array(mock_problem.bounds)
         )
 
-    def test_n_params(self, seeded_obj):
+    def test_n_params(self, seeded_obj, mock_problem):
         """5.3 n_params matches problem."""
-        assert seeded_obj.n_params == seeded_obj.problem.n_params
+        assert seeded_obj.n_params == mock_problem.n_params
 
     def test_initial_state(self, mock_problem):
         """5.4 eval_count==0, best_loss is None, budget_exceeded is False."""
@@ -185,11 +185,11 @@ class TestEvaluation:
         np.testing.assert_allclose(np.array(g_vg), np.array(g), atol=1e-6)
 
     def test_hessian_matches_problem_hessian(self):
-        """hessian() matches jax.hessian(problem.objective_function)."""
+        """hessian() matches jax.hessian of the bounded objective function."""
         h_obj = self.obj.hessian(self.params)
         self.obj.reset()
         self.obj.start_logging()
-        expected = jax.hessian(self.obj.problem.objective_function)(self.params)
+        expected = jax.hessian(self.obj.value_function(unbounded=False))(self.params)
         np.testing.assert_allclose(np.array(h_obj), np.array(expected), atol=1e-6)
 
     def test_value_grad_and_hessian_matches_separate_calls(self):
@@ -314,7 +314,7 @@ class TestHistoryTracking:
     def test_best_params_corresponds(self):
         """5.28 best_params corresponds to best_loss evaluation."""
         # Evaluate best_params; should produce best_loss
-        loss_at_best = self.obj.problem.objective_function(self.obj.best_params)
+        loss_at_best = self.obj.value_function(unbounded=False)(self.obj.best_params)
         assert float(loss_at_best) == pytest.approx(float(self.obj.best_loss), abs=1e-6)
 
     def test_improvement_count(self):

@@ -46,7 +46,7 @@ class TestRandomParamsUnbounded:
     def test_sigmoid_round_trip(self, seeded_obj):
         """5.9 sigmoid_bounding recovers in-bounds points."""
         samples = seeded_obj.random_params_unbounded(n_samples=100)
-        bounds = seeded_obj.problem.bounds
+        bounds = seeded_obj.bounds
         bounded = jax.vmap(lambda x: sigmoid_bounding(x, bounds))(samples)
         lower, upper = bounds[0], bounds[1]
         assert jnp.all(bounded >= lower - 1e-6)

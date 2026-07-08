@@ -135,7 +135,6 @@ class TestSetPenaltyFn:
         obj = Objective(problem)
         obj.set_penalty_fn(relu_penalty)
         assert obj.penalty_fn is relu_penalty
-        assert obj.problem.power_penalty_fn is relu_penalty
 
     def test_set_penalty_fn_after_start_logging_raises(self, problem):
         obj = Objective(problem)

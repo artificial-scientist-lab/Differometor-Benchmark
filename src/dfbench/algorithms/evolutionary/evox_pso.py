@@ -41,7 +41,7 @@ class EvoxPSO(OptimizationAlgorithm):
         _variant (str): PSO variant name (uppercase, e.g., "PSO", "CLPSO").
 
     Note:
-        This algorithm uses `problem.objective_function` with the problem's bounds.
+        This algorithm uses the objective function with the problem's bounds.
         The swarm searches directly in the bounded parameter space.
 
     Example:
@@ -114,17 +114,11 @@ class EvoxPSO(OptimizationAlgorithm):
             **pso_kwargs: Variant-specific keyword arguments passed to the EvoX algorithm.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        # Get bounds from problem
-        if not hasattr(problem, "bounds"):
-            raise ValueError(
-                f"Problem {type(problem).__name__} must have a 'bounds' attribute."
-            )
-        problem_bounds = problem.bounds
+        problem_bounds = obj.bounds
         lb = j2t(problem_bounds[0])
         ub = j2t(problem_bounds[1])
 

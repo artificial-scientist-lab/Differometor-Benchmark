@@ -87,7 +87,6 @@ class BasinHopping(OptimizationAlgorithm):
                 of the bound range per dimension).
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
@@ -120,8 +119,8 @@ class BasinHopping(OptimizationAlgorithm):
             minimizer_kwargs["bounds"] = scipy_bounds(obj)
 
         # ── Bounded step-taker ────────────────────────────────────────
-        lb = np.asarray(problem.bounds[0], dtype=np.float64)
-        ub = np.asarray(problem.bounds[1], dtype=np.float64)
+        lb = np.asarray(obj.bounds[0], dtype=np.float64)
+        ub = np.asarray(obj.bounds[1], dtype=np.float64)
         take_step = BoundedStep(stepsize, lb, ub)
 
         x0 = np.asarray(params, dtype=np.float64)

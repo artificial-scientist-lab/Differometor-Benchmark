@@ -64,17 +64,13 @@ class NevergradOnePlusOne(OptimizationAlgorithm):
             n_restarts: Number of independent restarts. Budget is split evenly.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        if not hasattr(problem, "bounds"):
-            raise ValueError("OnePlusOne requires a bounded problem (problem.bounds).")
-
-        bounds = problem.bounds
+        bounds = obj.bounds
         lb = np.asarray(bounds[0], dtype=np.float64)
         ub = np.asarray(bounds[1], dtype=np.float64)
-        n_params = int(problem.n_params)
+        n_params = int(obj.n_params)
 
         # Budget per restart
         budget_per_restart = max_iterations // n_restarts if max_iterations else None

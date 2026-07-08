@@ -5,14 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] - 2026-07-08
 
 ### Added
 - Slow tests to evaluate and calculate gradients at all property bounds of all Problem classes
 - Set seed for python's random in `dfbench.core.algorithm.py`
+- `obj.problem_name`
 
 ### Changed
 - Documentation updated to reflect the combined `RunDataExporter` output directory (`{algo}_{hyper_param_str}`) and the `dfbench[extra]` groups referenced by `ImportError` messages. "Required packages" notes in `Algorithms.md` now point to the extras (`dfbench[evolution]`, `dfbench[dfo]`, `dfbench[bo]`, `dfbench[smac]`) instead of bare package names. `Installation.md` documents that HEBO is part of the `bo`/`all` extras and that optional backends import lazily.
+- Removed `problem` as a property from Objective
+
 ### Fixed
 - Prevent optimization algorithms from hitting the physical bounds of the `reflectivity` property which creates a perfectly transmissive mirror (lower bound 0) or a perfectly reflective mirror (upper bound 1). Added a tiny `eps=1e-12` instead.
 - Update `AX_SAASBO` to be compatible with latest the Ax package

@@ -72,12 +72,11 @@ class HEBO(OptimizationAlgorithm):
             **hebo_kwargs: Forwarded to HEBO optimizer.
         """
         obj = objective
-        problem = obj.problem
-        dim = problem.n_params
+        dim = obj.n_params
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb = np.asarray(problem.bounds[0])
-        ub = np.asarray(problem.bounds[1])
+        lb = np.asarray(obj.bounds[0])
+        ub = np.asarray(obj.bounds[1])
 
         # Build HEBO design space
         params_spec = [

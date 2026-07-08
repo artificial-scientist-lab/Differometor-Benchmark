@@ -198,15 +198,14 @@ class EvosaxMAES(OptimizationAlgorithm):
             max_iterations: Maximum CMA generations.  ``None`` = unlimited.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         lb_jnp = jnp.asarray(lb_np)
         ub_jnp = jnp.asarray(ub_np)
-        n = problem.n_params
+        n = obj.n_params
 
         sigma = float(sigma0 if sigma0 is not None else np.mean(0.3 * (ub_np - lb_np)))
 
@@ -307,15 +306,14 @@ class EvosaxLMMAES(OptimizationAlgorithm):
             max_iterations: Maximum generations.  ``None`` = unlimited.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         lb_jnp = jnp.asarray(lb_np)
         ub_jnp = jnp.asarray(ub_np)
-        n = problem.n_params
+        n = obj.n_params
 
         sigma = float(sigma0 if sigma0 is not None else np.mean(0.3 * (ub_np - lb_np)))
 

@@ -73,17 +73,13 @@ class NevergradTBPSA(OptimizationAlgorithm):
                 counts against the Objective budget. Set >1 for noisy problems.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        if not hasattr(problem, "bounds"):
-            raise ValueError("TBPSA requires a bounded problem (problem.bounds).")
-
-        bounds = problem.bounds
+        bounds = obj.bounds
         lb = np.asarray(bounds[0], dtype=np.float64)
         ub = np.asarray(bounds[1], dtype=np.float64)
-        n_params = int(problem.n_params)
+        n_params = int(obj.n_params)
 
         budget_per_restart = max_iterations // n_restarts if max_iterations else None
 

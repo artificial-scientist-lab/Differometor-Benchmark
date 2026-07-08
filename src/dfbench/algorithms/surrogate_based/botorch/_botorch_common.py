@@ -42,10 +42,10 @@ _NAN_PERTURB_BASE = 1e-10
 _MAX_NAN_STREAK = 20
 
 
-def get_problem_bounds_torch(problem, device=DEVICE, dtype=DTYPE):
+def get_problem_bounds_torch(bounds, device=DEVICE, dtype=DTYPE):
     """Return problem bounds as a (2, d) torch tensor."""
-    lb = np.asarray(problem.bounds[0])
-    ub = np.asarray(problem.bounds[1])
+    lb = np.asarray(bounds[0])
+    ub = np.asarray(bounds[1])
     return torch.tensor(np.stack([lb, ub]), device=device, dtype=dtype)
 
 

@@ -326,12 +326,11 @@ class VAESampling(OptimizationAlgorithm):
             raise ValueError("top_k must be a fraction in (0, 1].")
 
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        input_dim = problem.n_params
+        input_dim = obj.n_params
         latent_dim = input_dim // latent_dim_factor + 1
 
         # Create VAE

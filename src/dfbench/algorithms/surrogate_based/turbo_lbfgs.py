@@ -120,8 +120,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
             **kwargs: Additional TuRBO kwargs.
         """
         obj = objective
-        problem = obj.problem
-        dim = problem.n_params
+        dim = obj.n_params
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
@@ -133,7 +132,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         # Phase 1: TuRBO
         # ════════════════════════════════════════════════════════════════
 
-        bounds_torch = get_problem_bounds_torch(problem, self.device, self.dtype)
+        bounds_torch = get_problem_bounds_torch(obj.bounds, self.device, self.dtype)
 
         turbo_engine = BotorchTuRBO()
         turbo_engine.device = self.device
@@ -226,7 +225,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         best_bounded = jnp.asarray(obj.best_params_bounded)
 
         # Map best bounded -> unbounded
-        bounds_jax = jnp.asarray(problem.bounds)
+        bounds_jax = jnp.asarray(obj.bounds)
         params = inverse_sigmoid_bounding(best_bounded, bounds_jax)
 
         # Build JIT-compiled L-BFGS step using an unlogged value function

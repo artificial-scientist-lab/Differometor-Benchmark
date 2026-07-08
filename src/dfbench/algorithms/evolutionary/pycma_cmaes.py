@@ -208,14 +208,13 @@ class PyCMACMAES(OptimizationAlgorithm):
                 means unlimited (budget and convergence govern stopping).
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         width = ub_np - lb_np
-        n = problem.n_params
+        n = obj.n_params
 
         # Build the initial mean in unit-cube coordinates.
         if init_params is None:
@@ -304,14 +303,13 @@ class PyCMAActiveCMAES(OptimizationAlgorithm):
             max_iterations: Maximum CMA generations.  ``None`` = unlimited.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         width = ub_np - lb_np
-        n = problem.n_params
+        n = obj.n_params
 
         # Build the initial mean in unit-cube coordinates.
         if init_params is None:
@@ -406,14 +404,13 @@ class PyCMAIPOP(OptimizationAlgorithm):
                 (independent of the overall budget).  ``None`` = unlimited.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         width = ub_np - lb_np
-        n = problem.n_params
+        n = obj.n_params
 
         base_pop = pop_size or _default_pop_size(n)
         # sigma is a dimensionless fraction of the unit cube.
@@ -521,14 +518,13 @@ class PyCMABIPOP(OptimizationAlgorithm):
                 ``None`` = unlimited.
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         width = ub_np - lb_np
-        n = problem.n_params
+        n = obj.n_params
 
         base_pop = pop_size or _default_pop_size(n)
         # sigma is a dimensionless fraction of the unit cube.

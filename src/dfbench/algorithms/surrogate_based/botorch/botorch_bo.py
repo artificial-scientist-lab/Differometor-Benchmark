@@ -35,8 +35,8 @@ class BotorchBO(OptimizationAlgorithm):
         dtype (torch.dtype): PyTorch dtype for tensors (float64 for numerical stability).
 
     Note:
-        This algorithm searches in the bounded parameter space using `problem.objective_function`.
-        Bounds are always taken from `problem.bounds`.
+        This algorithm searches in the bounded parameter space using the objective function.
+        Bounds are always taken from `obj.bounds`.
 
     Example:
         >>> problem = VoyagerProblem()
@@ -96,14 +96,13 @@ class BotorchBO(OptimizationAlgorithm):
             raise ValueError("acquisition_batch_size must be at least 1.")
 
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
         # Get bounds from problem
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
 
         problem_bounds_torch = torch.tensor(
             np.array([lb_np, ub_np]), device=self.device, dtype=self.dtype
@@ -111,8 +110,8 @@ class BotorchBO(OptimizationAlgorithm):
 
         unit_bounds = torch.stack(
             [
-                torch.zeros(problem.n_params, dtype=self.dtype, device=self.device),
-                torch.ones(problem.n_params, dtype=self.dtype, device=self.device),
+                torch.zeros(obj.n_params, dtype=self.dtype, device=self.device),
+                torch.ones(obj.n_params, dtype=self.dtype, device=self.device),
             ],
             dim=0,
         )
@@ -124,7 +123,7 @@ class BotorchBO(OptimizationAlgorithm):
 
         # Create initial design
         train_X = create_initial_design(
-            dimensions=problem.n_params,
+            dimensions=obj.n_params,
             n_initial=n_initial,
             random_seed=random_seed,
             sampler="sobol",

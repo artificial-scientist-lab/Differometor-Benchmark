@@ -102,11 +102,10 @@ def _run_omads(
     """
     _check_omads_available()
 
-    problem = obj.problem
-    bounds = problem.bounds  # (2, n_params)
+    bounds = obj.bounds  # (2, n_params)
     lower = np.array(bounds[0], dtype=np.float64)
     upper = np.array(bounds[1], dtype=np.float64)
-    n_params = problem.n_params
+    n_params = obj.n_params
 
     # Starting point: use best_params if available, else random bounded point
     if obj.best_params is not None:

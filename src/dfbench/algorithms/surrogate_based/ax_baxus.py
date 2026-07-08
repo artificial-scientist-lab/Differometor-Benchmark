@@ -133,14 +133,13 @@ class BAxUS(OptimizationAlgorithm):
             **bo_kwargs: Extra kwargs for acquisition optimisation.
         """
         obj = objective
-        problem = obj.problem
-        D = problem.n_params
+        D = obj.n_params
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
         rng = torch.Generator(device="cpu").manual_seed(random_seed)
 
-        bounds = get_problem_bounds_torch(problem, self.device, self.dtype)
+        bounds = get_problem_bounds_torch(obj.bounds, self.device, self.dtype)
 
         if d_init is None:
             d_init = min(5, D)

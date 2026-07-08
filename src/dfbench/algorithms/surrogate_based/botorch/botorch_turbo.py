@@ -249,19 +249,18 @@ class BotorchTuRBO(OptimizationAlgorithm):
             raise ValueError("acquisition_batch_size must be at least 1.")
 
         obj = objective
-        problem = obj.problem
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        dim = problem.n_params
+        dim = obj.n_params
 
         if n_initial is None:
             n_initial = 2 * dim
 
         # Get bounds from problem
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
 
         problem_bounds_torch = torch.tensor(
             np.array([lb_np, ub_np]), device=self.device, dtype=self.dtype
@@ -283,7 +282,7 @@ class BotorchTuRBO(OptimizationAlgorithm):
             """Run a single TuRBO instance until restart is triggered or budget exhausted."""
 
             train_X = create_initial_design(
-                dimensions=problem.n_params,
+                dimensions=obj.n_params,
                 n_initial=n_initial,
                 random_seed=random_seed,
             ).to(device=self.device, dtype=self.dtype)

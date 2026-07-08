@@ -126,13 +126,12 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
                 means unlimited (budget governs stopping).
         """
         obj = objective
-        problem = obj.problem
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb = jnp.asarray(problem.bounds[0])
-        ub = jnp.asarray(problem.bounds[1])
-        n = problem.n_params
+        lb = jnp.asarray(obj.bounds[0])
+        ub = jnp.asarray(obj.bounds[1])
+        n = obj.n_params
 
         if init_params is None:
             rng, init_rng = jax.random.split(rng)
@@ -279,13 +278,12 @@ class JAXMuLambdaES(OptimizationAlgorithm):
             raise ValueError(f"(μ,λ)-ES requires mu < lam, got mu={mu}, lam={lam}.")
 
         obj = objective
-        problem = obj.problem
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb = jnp.asarray(problem.bounds[0])
-        ub = jnp.asarray(problem.bounds[1])
-        n = problem.n_params
+        lb = jnp.asarray(obj.bounds[0])
+        ub = jnp.asarray(obj.bounds[1])
+        n = obj.n_params
 
         if init_params is None:
             rng, init_rng = jax.random.split(rng)

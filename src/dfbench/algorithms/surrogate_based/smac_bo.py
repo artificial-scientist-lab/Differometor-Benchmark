@@ -74,12 +74,11 @@ class SMAC(OptimizationAlgorithm):
             **smac_kwargs: Forwarded to SMAC Scenario.
         """
         obj = objective
-        problem = obj.problem
-        dim = problem.n_params
+        dim = obj.n_params
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb = np.asarray(problem.bounds[0])
-        ub = np.asarray(problem.bounds[1])
+        lb = np.asarray(obj.bounds[0])
+        ub = np.asarray(obj.bounds[1])
 
         # Build ConfigSpace
         cs = ConfigurationSpace(seed=random_seed)

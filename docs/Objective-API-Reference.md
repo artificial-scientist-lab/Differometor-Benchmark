@@ -447,7 +447,7 @@ bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
 |----------|------|-------------|
 | `bounds` | `Array[2, n_params]` | Lower and upper parameter bounds (or $\pm\infty$ when unbounded). |
 | `n_params` | `int` | Number of optimizable parameters. |
-| `problem` | `ContinuousProblem` | The wrapped problem instance. |
+| `problem_name` | `str` | Display name of the wrapped problem. |
 | `penalty_fn` | `Callable \| None` | The wrapped problem's penalty function, or `None` if the problem does not expose one. Update it via `set_penalty_fn(fn)`. |
 | `power_thresholds` | `dict[str, float] \| None` | Per-group power thresholds (`hard`, `soft`, `detector`) for problems that opt into the penalty contract, or `None`. Constants; do not change across evaluations. |
 
