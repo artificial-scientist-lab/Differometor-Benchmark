@@ -1,6 +1,5 @@
 """SignSGD and Signum optimizers (Optax)."""
 
-
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
     build_optimizer,

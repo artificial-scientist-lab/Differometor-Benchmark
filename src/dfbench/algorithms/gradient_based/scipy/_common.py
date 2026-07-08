@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
+
 try:
     from scipy.optimize import BFGS as ScipyBFGS
     from scipy.optimize import Bounds

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 import jax.numpy as jnp
+
 try:
     from scipy.optimize import Bounds
 except ImportError as exc:

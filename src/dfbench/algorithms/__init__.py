@@ -126,7 +126,11 @@ try:
     from dfbench.algorithms.gradient_based.optax.rmsprop import OptaxRMSProp
     from dfbench.algorithms.gradient_based.optax.rprop import OptaxRProp
     from dfbench.algorithms.gradient_based.optax.radam import OptaxRAdam
-    from dfbench.algorithms.gradient_based.optax.sgd import OptaxSGD, OptaxSGDM, OptaxNAG
+    from dfbench.algorithms.gradient_based.optax.sgd import (
+        OptaxSGD,
+        OptaxSGDM,
+        OptaxNAG,
+    )
     from dfbench.algorithms.gradient_based.optax.noisy_sgd import OptaxNoisySGD
     from dfbench.algorithms.gradient_based.optax.polyak_sgd import OptaxPolyakSGD
     from dfbench.algorithms.gradient_based.optax.sam import OptaxSAM

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import jax
 import numpy as np
+
 try:
     import torch
 except ImportError as exc:

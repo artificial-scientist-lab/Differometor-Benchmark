@@ -13,6 +13,7 @@ of high-quality solutions, making optimization more efficient in high dimensions
 
 import jax.numpy as jnp
 import numpy as np
+
 try:
     import torch
 except ImportError as exc:

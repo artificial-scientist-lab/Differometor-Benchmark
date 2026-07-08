@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 from jaxtyping import Array, Float
+
 try:
     from scipy.optimize import basinhopping
 except ImportError as exc:

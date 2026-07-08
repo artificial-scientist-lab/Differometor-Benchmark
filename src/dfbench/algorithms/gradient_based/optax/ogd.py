@@ -1,6 +1,5 @@
 """OGD (Optimistic Gradient Descent) optimizer (Optax)."""
 
-
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
     build_optimizer,

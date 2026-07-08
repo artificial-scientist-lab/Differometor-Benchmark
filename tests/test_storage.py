@@ -33,8 +33,13 @@ from dfbench.core.storage.serializers import CheckpointSerializer
 def _make_state(eval_count: int = 5) -> RunState:
     return RunState(
         loss_history=np.array(
-            [jnp.asarray(1.0), jnp.asarray(0.5), jnp.asarray(0.3),
-             jnp.asarray(0.2), jnp.asarray(0.1)][:eval_count],
+            [
+                jnp.asarray(1.0),
+                jnp.asarray(0.5),
+                jnp.asarray(0.3),
+                jnp.asarray(0.2),
+                jnp.asarray(0.1),
+            ][:eval_count],
             dtype=object,
         ),
         grad_history=np.array(

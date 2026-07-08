@@ -5,6 +5,7 @@ Implementation of a kNN-surrogate based optimization algorithm using JAX.
 
 import jax
 import jax.numpy as jnp
+
 try:
     import optax
 except ImportError as exc:

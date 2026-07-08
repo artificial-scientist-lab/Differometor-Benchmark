@@ -1,5 +1,6 @@
 import jax
 import jax.numpy as jnp
+
 try:
     import optax
 except ImportError as exc:

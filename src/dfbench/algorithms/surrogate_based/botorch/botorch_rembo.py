@@ -18,6 +18,7 @@ Operates in **bounded** parameter space.
 from __future__ import annotations
 
 import numpy as np
+
 try:
     import torch
 except ImportError as exc:

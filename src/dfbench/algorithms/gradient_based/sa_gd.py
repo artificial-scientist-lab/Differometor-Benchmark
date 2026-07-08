@@ -5,6 +5,7 @@ Simulated annealing gradient descent based on https://arxiv.org/abs/2107.07558
 import math
 
 import jax
+
 try:
     import optax
 except ImportError as exc:

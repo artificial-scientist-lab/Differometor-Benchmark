@@ -1,6 +1,7 @@
 """State-of-the-art Bayesian Optimization using BoTorch with batch acquisition."""
 
 import numpy as np
+
 try:
     import torch
 except ImportError as exc:
