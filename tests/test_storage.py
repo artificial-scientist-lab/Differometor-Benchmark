@@ -321,7 +321,7 @@ class TestRunDataExporter:
         exporter = RunDataExporter(root=str(tmp_path))
         state = _make_state()
         out_dir = exporter.export(state, problem=None, print_summary=False)
-        params_files = list(out_dir.glob("*_parameters.json"))
+        params_files = list(out_dir.glob("*_parameters*.json"))
         assert len(params_files) == 1
         content = json.loads(params_files[0].read_text())
         assert content == [0.0, 0.0]
@@ -331,7 +331,7 @@ class TestRunDataExporter:
         exporter = RunDataExporter(root=str(tmp_path))
         state = _make_state()
         out_dir = exporter.export(state, problem=None, print_summary=False)
-        losses_files = list(out_dir.glob("*_losses.json"))
+        losses_files = list(out_dir.glob("*_losses*.json"))
         assert len(losses_files) == 1
         content = json.loads(losses_files[0].read_text())
         assert content == [1.0, 0.5, 0.3, 0.2, 0.1]

@@ -125,9 +125,13 @@ class RunDataExporter:
         hyper_param_str: str | None = None,
     ) -> Path:
         """Return (and create) the output directory for a run."""
-        d = self.root / Path(problem_name).name / Path(algorithm_name).name
-        if hyper_param_str:
-            d = d / hyper_param_str.strip("_")
+        d = self.root / Path(problem_name).name
+        algo = algorithm_name.strip("_") if algorithm_name else ""
+        hp = hyper_param_str.strip("_") if hyper_param_str else ""
+        if algo and hp:
+            d = d / f"{algo}_{hp}"
+        elif algo:
+            d = d / algo
         d.mkdir(parents=True, exist_ok=True)
         return d
 
@@ -155,6 +159,8 @@ class RunDataExporter:
             getattr(problem, "name", None) or state.metadata.problem_name or "problem"
         )
         algorithm_name = state.metadata.algorithm_name or "unknown"
+        if not hyper_param_str:
+            hyper_param_str = state.metadata.hyper_param_str or ""
 
         best_params = (
             np.asarray(state.best_params) if state.best_params.size > 0 else None
