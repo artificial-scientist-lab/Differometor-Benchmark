@@ -60,8 +60,7 @@ class BotorchqKG(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for BotorchqKG. Install with: "
-                "uv pip install botorch"
+                "BoTorch is required for BotorchqKG. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE

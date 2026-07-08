@@ -10,7 +10,7 @@ They are suited for rugged-landscape local exploration, not global
 black-box optimization.
 
 Requires:
-    OMADS >= 2408.0 (``pip install OMADS``)
+    OMADS >= 2408.0 (``uv add 'dfbench[dfo]'``)
 
 Note:
     OMADS has a known attribute-name mismatch with recent ``samplersLib``
@@ -61,7 +61,7 @@ def _check_omads_available() -> None:
         raise ImportError(
             f"OMADS is required for MADS/OrthoMADS algorithms but could not be "
             f"imported: {_OMADS_IMPORT_ERROR}\n"
-            f"Install with: pip install OMADS"
+            f"Install with: uv add 'dfbench[dfo]'"
         )
 
 

@@ -49,7 +49,7 @@ class HEBO(OptimizationAlgorithm):
 
     def __init__(self) -> None:
         if not _HEBO_AVAILABLE:
-            raise ImportError("HEBO is required. Install with: uv pip install HEBO")
+            raise ImportError("HEBO is required. Install with: uv add 'dfbench[bo]'")
 
     def optimize(
         self,

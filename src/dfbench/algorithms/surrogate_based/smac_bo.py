@@ -48,7 +48,7 @@ class SMAC(OptimizationAlgorithm):
 
     def __init__(self) -> None:
         if not _SMAC_AVAILABLE:
-            raise ImportError("SMAC3 is required. Install with: uv pip install smac")
+            raise ImportError("SMAC3 is required. Install with: uv add 'dfbench[smac]'")
 
     def optimize(
         self,

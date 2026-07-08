@@ -76,7 +76,7 @@ class PDFONEWUOA(OptimizationAlgorithm):
             import pdfo
         except ImportError as exc:
             raise ImportError(
-                "PDFO is required for NEWUOA.  Install with: pip install pdfo"
+                "PDFO is required for NEWUOA.  Install with: uv add 'dfbench[dfo]'"
             ) from exc
 
         obj = objective

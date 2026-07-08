@@ -56,8 +56,7 @@ class AxSAASBO(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _AX_AVAILABLE:
             raise ImportError(
-                "Ax is required for AxSAASBO. Install with: "
-                "uv pip install 'ax-platform[botorch]'"
+                "Ax is required for AxSAASBO. Install with: uv add 'dfbench[bo]'"
             )
 
     def optimize(

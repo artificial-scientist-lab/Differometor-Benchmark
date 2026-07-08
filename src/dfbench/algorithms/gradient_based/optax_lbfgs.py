@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
-import optax
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for OptaxLBFGS. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType

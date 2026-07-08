@@ -21,7 +21,7 @@ try:
     import nevergrad as ng
 except ImportError as exc:
     raise ImportError(
-        "Nevergrad is required for NGOpt. Install with: uv add nevergrad"
+        "Nevergrad is required for NGOpt. Install with: uv add 'dfbench[evolution]'"
     ) from exc
 
 

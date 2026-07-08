@@ -97,7 +97,7 @@ class PyBOBYQA(OptimizationAlgorithm):
             import pybobyqa
         except ImportError as exc:
             raise ImportError(
-                "Py-BOBYQA is required.  Install with: pip install Py-BOBYQA"
+                "Py-BOBYQA is required.  Install with: uv add 'dfbench[dfo]'"
             ) from exc
 
         obj = objective

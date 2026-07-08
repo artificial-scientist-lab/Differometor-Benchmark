@@ -71,7 +71,7 @@ class PDFOUOBYQA(OptimizationAlgorithm):
             import pdfo
         except ImportError as exc:
             raise ImportError(
-                "PDFO is required for UOBYQA.  Install with: pip install pdfo"
+                "PDFO is required for UOBYQA.  Install with: uv add 'dfbench[dfo]'"
             ) from exc
 
         obj = objective

@@ -74,7 +74,7 @@ class PDFOLINCOA(OptimizationAlgorithm):
             import pdfo
         except ImportError as exc:
             raise ImportError(
-                "PDFO is required for LINCOA.  Install with: pip install pdfo"
+                "PDFO is required for LINCOA.  Install with: uv add 'dfbench[dfo]'"
             ) from exc
         from scipy.optimize import LinearConstraint, Bounds  # noqa: E402
 

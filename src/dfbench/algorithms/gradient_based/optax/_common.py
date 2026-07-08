@@ -12,7 +12,13 @@ override ``optimize`` but still reuse the helpers.
 from __future__ import annotations
 
 import jax
-import optax
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for Optax* algorithms. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 

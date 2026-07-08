@@ -33,7 +33,7 @@ distinct ``algorithm_str`` values so runs can be compared in benchmarks.
 
 Requires
 --------
-    evosax >= 0.2  (``uv add evosax``)
+    evosax >= 0.2  (``uv add 'dfbench[evolution]'``)
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ try:
     from evosax.algorithms import MA_ES, LM_MA_ES
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "evosax is required for Evosax* algorithms. Install it with:  uv add evosax"
+        "evosax is required for Evosax* algorithms. Install it with:  uv add 'dfbench[evolution]'"
     ) from exc
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType

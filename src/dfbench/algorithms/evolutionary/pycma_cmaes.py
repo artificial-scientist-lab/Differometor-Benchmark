@@ -17,7 +17,7 @@ Objective has been configured in unbounded mode prior to this call.
 
 Requires
 --------
-    pycma >= 3.3  (``uv add cma``)
+    pycma >= 3.3  (``uv add 'dfbench[evolution]'``)
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ try:
     import cma
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "pycma is required for PyCMA* algorithms. Install it with:  uv add cma"
+        "pycma is required for PyCMA* algorithms. Install it with:  uv add 'dfbench[evolution]'"
     ) from exc
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
