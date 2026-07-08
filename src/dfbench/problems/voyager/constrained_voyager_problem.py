@@ -27,7 +27,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
 
     def __init__(
         self,
-        n_frequencies: int = 100,
+        n_frequencies: int = 50,
         power_penalty_fn=None,
         bounds_overrides: dict[str, tuple[float, float]] | None = None,
         signal_floor: float = DEFAULT_SIGNAL_FLOOR,

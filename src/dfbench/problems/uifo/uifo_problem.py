@@ -202,7 +202,7 @@ class UIFOProblem(OpticalSetupProblem):
     def __init__(
         self,
         size: int = 3,
-        n_frequencies: int = 100,
+        n_frequencies: int = 50,
         topology_seed: int | None = None,
         topology: str | None = None,
         centers: dict[str, tuple[str, str]] | None = None,
@@ -214,8 +214,8 @@ class UIFOProblem(OpticalSetupProblem):
         """Initialize the UIFO optimization problem.
 
         Args:
-            size: Grid size (e.g., 3 for 3×3, 5 for 5×5). Defaults to 3.
-            n_frequencies: Number of frequency points. Defaults to 100.
+            size: Grid size (e.g., 3 for 3x3, 5 for 5x5). Defaults to 3.
+            n_frequencies: Number of frequency points. Defaults to 50.
             topology_seed: Seed for random topology generation. Defaults to ``None``.
                 Pass ``None`` (with no ``topology`` or ``centers``/``boundaries``)
                 to generate a random topology.  Mutually exclusive

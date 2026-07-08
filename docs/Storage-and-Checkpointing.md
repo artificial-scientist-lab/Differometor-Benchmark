@@ -109,7 +109,7 @@ If the wrapped problem implements the reconstructive `to_spec()` contract (see [
 The embedded value is the JSON-safe dict produced by `ProblemSpec.to_dict()`:
 
 ```json
-{"type": "VoyagerProblem", "version": 1, "params": {"n_frequencies": 100, ...}}
+{"type": "VoyagerProblem", "version": 1, "params": {"n_frequencies": 50, ...}}
 ```
 
 Reconstruction is a two-step process that crosses the storage/problem layer boundary on purpose:

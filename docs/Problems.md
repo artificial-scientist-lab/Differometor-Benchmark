@@ -66,12 +66,12 @@ Extends `ContinuousProblem` with optics-specific functionality shared by all Dif
 | Difficulty | Moderate — loss < 0 achievable without physical constraints |
 
 ```python
-problem = VoyagerProblem(n_frequencies=100)
+problem = VoyagerProblem(n_frequencies=50)
 ```
 
 ```python
 problem = VoyagerProblem(
-   n_frequencies=100,
+   n_frequencies=50,
    bounds_overrides={"tuning": (0, 45)},
    signal_floor=1e-20,
 )
@@ -125,7 +125,7 @@ problem = VoyagerTuningProblem(n_frequencies=100)
 
 ```python
 problem = VoyagerTuningProblem(
-   n_frequencies=100,
+   n_frequencies=50,
    bounds_overrides={"tuning": (0, 45)},
    signal_floor=1e-20,
 )
@@ -165,7 +165,7 @@ All optimized parameters are mirror tuning angles in degrees:
 | Difficulty | Hard — loss < 0 is very difficult to achieve |
 
 ```python
-problem = ConstrainedVoyagerProblem(n_frequencies=100, signal_floor=1e-20)
+problem = ConstrainedVoyagerProblem(n_frequencies=50, signal_floor=1e-20)
 ```
 
 #### Differences from `VoyagerProblem`
@@ -246,7 +246,7 @@ The `Objective` wraps this with `value_aux`, `value_and_grad_aux`, `vmap_value_a
 
 ```python
 # From a topology seed (random topology, deterministic from seed)
-problem = UIFOProblem(size=3, n_frequencies=100, topology_seed=42)
+problem = UIFOProblem(size=3, n_frequencies=50, topology_seed=42)
 
 # From a compact topology string
 problem = UIFOProblem(size=3, topology="AECGCCHEG-SLLSSHLLLLS")
@@ -262,7 +262,7 @@ problem = UIFOProblem(
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `size` | `3` | Grid dimensions (3 = 3×3). Larger grids have more components and parameters. |
-| `n_frequencies` | `100` | Frequency points for sensitivity calculation. |
+| `n_frequencies` | `50` | Frequency points for sensitivity calculation. |
 | `topology_seed` | `42` | Seed for random topology generation. Set to `None` (with no other topology args) to generate a truly random topology. The seed is always printed to the console. Mutually exclusive with `topology` and `centers`/`boundaries`. |
 | `topology` | `None` | Compact topology string (see below). Mutually exclusive with `topology_seed`. |
 | `centers` | `None` | Interior cell dict. Must be paired with `boundaries`. Mutually exclusive with `topology_seed` and `topology`. |
@@ -323,11 +323,11 @@ from dfbench.core.problem import ProblemSpec, build_problem_from_spec
 
 # A spec captured from a live problem
 ps = problem.to_problem_spec()
-# ProblemSpec(type="VoyagerProblem", params={"n_frequencies": 100, ...}, version=1)
+# ProblemSpec(type="VoyagerProblem", params={"n_frequencies": 50, ...}, version=1)
 
 # JSON-safe dict for embedding in checkpoint metadata
 spec_dict = ps.to_dict()
-# {"type": "VoyagerProblem", "version": 1, "params": {"n_frequencies": 100, ...}}
+# {"type": "VoyagerProblem", "version": 1, "params": {"n_frequencies": 50, ...}}
 
 # Rebuild an equivalent problem later, in any process
 problem2 = build_problem_from_spec(ps)
