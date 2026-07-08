@@ -18,7 +18,7 @@ the Objective for extra safety.
 
 Requires
 --------
-    cmaes >= 0.10  (``uv add cmaes``)
+    cmaes >= 0.10  (``uv add 'dfbench[evolution]'``)
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ try:
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
         "The 'cmaes' package is required for CMAESSepCMA. "
-        "Install it with:  uv add cmaes"
+        "Install it with:  uv add 'dfbench[evolution]'"
     ) from exc
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType

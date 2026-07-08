@@ -2,8 +2,8 @@
 
 Provides:
 
-* :class:`JAXOnePlusOneES`  – (1+1)-ES with the one-fifth success rule.
-* :class:`JAXMuLambdaES`   – (μ,λ)-ES with truncation selection and
+* :class:`JAXOnePlusOneES`  : (1+1)-ES with the one-fifth success rule.
+* :class:`JAXMuLambdaES`   : (μ,λ)-ES with truncation selection and
   cumulative step-size accumulation.
 
 Both algorithms are implemented from scratch in pure JAX/NumPy and have **no
@@ -25,7 +25,7 @@ Algorithm notes
     to form the new mean.  Step size is adapted via a cumulative success-rate
     estimate.
 
-Both algorithms use **no covariance adaptation** — they are classical ES, not
+Both algorithms use **no covariance adaptation**; they are classical ES, not
 CMA.  For covariance-adapting variants see ``pycma_cmaes.py`` or
 ``evosax_es.py``.
 
@@ -59,11 +59,11 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
     A classic single-parent, single-offspring ES.  At each step:
 
     1. Sample offspring ``y = clip(x + σ·z,  lb, ub)``  where ``z ~ N(0, I)``.
-    2. Evaluate ``f(y)``; if ``f(y) ≤ f(x)`` accept: ``x ← y``.
+    2. Evaluate ``f(y)``; if ``f(y) ≤ f(x)`` accept: ``x <- y``.
     3. Every ``success_window`` steps, adapt σ::
 
-           if p_success > 0.20:  σ ← σ · exp(1/n)
-           if p_success < 0.20:  σ ← σ · exp(-1/(5n))
+           if p_success > 0.20:  σ <- σ · exp(1/n)
+           if p_success < 0.20:  σ <- σ · exp(-1/(5n))
 
     The initial σ defaults to ``0.3 × mean(ub − lb)``.
 
@@ -148,7 +148,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
         sigma = float(sigma0 if sigma0 is not None else 0.3)
         window = success_window if success_window is not None else max(10, 10 * n)
 
-        # JIT warmup — single-point evaluation
+        # JIT warmup: single-point evaluation
         obj.warmup_value()
         obj.start_logging()
 
@@ -199,16 +199,16 @@ class JAXMuLambdaES(OptimizationAlgorithm):
 
     1.  λ offspring: ``y_i = clip(mean + σ·z_i,  lb, ub)``  for ``z_i ~ N(0, I)``.
     2.  Evaluate all offspring via ``obj.vmap_value``.
-    3.  Select the best μ by fitness (truncation, **comma** semantics — parents
+    3.  Select the best μ by fitness (truncation, **comma** semantics; parents
         are *not* retained).
-    4.  New mean ``← weighted average of the μ best offspring``
+    4.  New mean ``<- weighted average of the μ best offspring``
         (uniform weights by default).
     5.  Step size σ adapted via a cumulative success-rate estimate based on
         generational improvement::
 
-            improved ← 1 if mean_loss(selected_μ) < prev_mean_loss else 0
-            p_succ   ← (1 − cₛ) · p_succ + cₛ · improved
-            σ        ← σ · exp((p_succ − target_succ) / d_σ)
+            improved <- 1 if mean_loss(selected_μ) < prev_mean_loss else 0
+            p_succ   <- (1 − cₛ) · p_succ + cₛ · improved
+            σ        <- σ · exp((p_succ − target_succ) / d_σ)
 
         where ``target_succ = μ / λ`` and ``cₛ = 1/n``, ``d_σ = 1``.
 

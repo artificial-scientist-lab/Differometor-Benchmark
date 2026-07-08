@@ -157,7 +157,7 @@ class NpzCheckpointSerializer:
                     return d[key]
                 return _empty_object_array()
 
-            # Rebuild eval_type_counts dict — single source of truth is the
+            # Rebuild eval_type_counts dict; single source of truth is the
             # JSON-encoded "eval_type_counts" field.  For legacy files that
             # predate this field, fall back to rebuilding from
             # eval_type_history.
@@ -336,7 +336,7 @@ class RunCollectionSerializer(Protocol):
     Used by :class:`~dfbench.benchmark.benchmark.Benchmark` to persist all
     runs for one algorithm configuration as a single self-describing
     artifact. The collection carries the algorithm name, hyperparameters,
-    and one :class:`RunState` per run — each encoded by a per-run
+    and one :class:`RunState` per run, each encoded by a per-run
     :class:`CheckpointSerializer`.
     """
 

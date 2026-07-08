@@ -9,9 +9,15 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
-from scipy.optimize import BFGS as ScipyBFGS
-from scipy.optimize import Bounds
-from scipy.optimize import minimize
+
+try:
+    from scipy.optimize import BFGS as ScipyBFGS
+    from scipy.optimize import Bounds
+    from scipy.optimize import minimize
+except ImportError as exc:
+    raise ImportError(
+        "scipy is required for SciPy* algorithms. Install with:  uv add 'dfbench[scipy]'"
+    ) from exc
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
@@ -379,9 +385,9 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
                 self._last_result = None
                 return
 
-            # Budget not yet exhausted — restart with alternating strategy:
-            #   even restarts → perturb best-known point (exploit basin)
-            #   odd restarts  → fresh random point (explore new basin)
+            # Budget not yet exhausted; restart with alternating strategy:
+            #   even restarts -> perturb best-known point (exploit basin)
+            #   odd restarts  -> fresh random point (explore new basin)
             if not obj.budget_exceeded:
                 restart_count += 1
                 if restart_count % 2 == 0:

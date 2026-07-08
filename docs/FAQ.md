@@ -8,9 +8,9 @@
 
 1. **Learning rate too high.** Differometor loss landscapes are steep. Start with `lr=0.01` or lower.
 2. **Box constraints causing zero gradients.** If parameters hit bound edges frequently, gradients become zero. Consider using `unbounded=True` so sigmoid bounding provides smooth gradients everywhere.
-3. **Using `obj.grad()` instead of `obj.value_and_grad()`.** `grad()` does **not** log a loss — use `value_and_grad()` to get both.
+3. **Using `obj.grad()` instead of `obj.value_and_grad()`.** `grad()` does **not** log a loss: use `value_and_grad()` to get both.
 
-### Bounded vs. unbounded — which do I use?
+### Bounded vs. unbounded: which do I use?
 
 | Algorithm type | Typical choice | Why |
 |----------------|----------------|-----|
@@ -28,10 +28,10 @@
 ```python
 from dfbench import inverse_sigmoid_bounding
 
-# bounded → unbounded
+# bounded -> unbounded
 unbounded_params = inverse_sigmoid_bounding(bounded_params, problem.bounds)
 
-# unbounded → bounded is done automatically during evaluation when obj.unbounded=True
+# unbounded -> bounded is done automatically during evaluation when obj.unbounded=True
 ```
 
 ### My algorithm uses PyTorch
@@ -39,9 +39,9 @@ unbounded_params = inverse_sigmoid_bounding(bounded_params, problem.bounds)
 ```python
 from dfbench import t2j, j2t
 
-params_jax = t2j(params_torch)       # PyTorch → JAX
+params_jax = t2j(params_torch)       # PyTorch -> JAX
 losses = obj.vmap_value(params_jax)
-losses_torch = j2t(losses)            # JAX → PyTorch
+losses_torch = j2t(losses)            # JAX -> PyTorch
 ```
 
 The conversion goes through NumPy and adds negligible overhead.

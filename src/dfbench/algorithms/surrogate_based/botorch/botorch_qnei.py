@@ -1,4 +1,4 @@
-"""qNEI — Noisy Expected Improvement via BoTorch.
+"""qNEI: Noisy Expected Improvement via BoTorch.
 
 Uses ``qLogNoisyExpectedImprovement`` (the numerically stable log variant)
 which accounts for observation noise in the acquisition function, making it
@@ -14,7 +14,13 @@ Operates in **bounded** parameter space.
 from __future__ import annotations
 
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -40,7 +46,7 @@ except ImportError:
     _BOTORCH_AVAILABLE = False
 
 
-class BotorchqNEI(OptimizationAlgorithm):
+class BotorchQNEI(OptimizationAlgorithm):
     """Noisy Expected Improvement BO via BoTorch.
 
     Wraps ``qLogNoisyExpectedImprovement`` which conditions on the training data
@@ -60,8 +66,7 @@ class BotorchqNEI(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for BotorchqNEI. Install with: "
-                "uv pip install botorch"
+                "BoTorch is required for BotorchQNEI. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE

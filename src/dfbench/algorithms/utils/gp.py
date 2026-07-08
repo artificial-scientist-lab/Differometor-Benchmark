@@ -1,7 +1,12 @@
 from __future__ import annotations
 from typing import Any, Mapping
 
-import torch
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 import numpy as np
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_mll

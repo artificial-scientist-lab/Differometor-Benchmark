@@ -1,6 +1,6 @@
 """Shared utilities for SciPy-based derivative-free optimizers.
 
-Provides numpy↔JAX wrappers, bounds conversion, and budget-aware
+Provides numpy<->JAX wrappers, bounds conversion, and budget-aware
 callbacks so individual algorithm modules stay DRY.
 """
 
@@ -8,7 +8,13 @@ from __future__ import annotations
 
 import numpy as np
 import jax.numpy as jnp
-from scipy.optimize import Bounds
+
+try:
+    from scipy.optimize import Bounds
+except ImportError as exc:
+    raise ImportError(
+        "scipy is required for this algorithm. Install with:  uv add 'dfbench[scipy]'"
+    ) from exc
 
 from dfbench.core.objective import Objective
 
@@ -36,7 +42,7 @@ def scipy_bounds(obj: Objective) -> Bounds:
 
 
 def scipy_bounds_list(obj: Objective) -> list[tuple[float, float]]:
-    """Return bounds as ``[(lb0, ub0), …]`` (format used by *dual_annealing*)."""
+    """Return bounds as ``[(lb0, ub0), ...]`` (format used by *dual_annealing*)."""
     lb = np.asarray(obj.problem.bounds[0], dtype=np.float64)
     ub = np.asarray(obj.problem.bounds[1], dtype=np.float64)
     return list(zip(lb.tolist(), ub.tolist()))
@@ -66,7 +72,7 @@ def make_scipy_fun(obj: Objective):
 
 
 def make_scipy_fun_and_grad(obj: Objective):
-    """Return a wrapper calling ``obj.value_and_grad()`` → ``(float, ndarray)``.
+    """Return a wrapper calling ``obj.value_and_grad()`` -> ``(float, ndarray)``.
 
     Intended for use with ``jac=True`` in :func:`scipy.optimize.minimize` so
     that value and gradient are obtained in a single Objective call, avoiding

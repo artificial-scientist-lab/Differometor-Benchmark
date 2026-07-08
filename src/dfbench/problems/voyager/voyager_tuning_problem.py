@@ -29,7 +29,7 @@ class VoyagerTuningProblem(OpticalSetupProblem):
 
     def __init__(
         self,
-        n_frequencies: int = 100,
+        n_frequencies: int = 50,
         bounds_overrides: dict[str, tuple[float, float]] | None = None,
         signal_floor: float = DEFAULT_SIGNAL_FLOOR,
     ):
@@ -37,7 +37,7 @@ class VoyagerTuningProblem(OpticalSetupProblem):
 
         Args:
             n_frequencies (int): Number of frequency points for sensitivity calculation.
-                Defaults to 100.
+                Defaults to 50.
             bounds_overrides: Optional property-level bound overrides.
                 Example: {"tuning": (0, 45)}.
                 Overrides must narrow default bounds.

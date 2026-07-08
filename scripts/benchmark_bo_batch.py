@@ -22,7 +22,7 @@ from dfbench.problems import VoyagerProblem
 from dfbench.benchmark import Benchmark, AlgorithmConfig
 
 # ── Always-available BoTorch algorithms ──────────────────────────────
-from dfbench.algorithms.surrogate_based.botorch.botorch_qnei import BotorchqNEI
+from dfbench.algorithms.surrogate_based.botorch.botorch_qnei import BotorchQNEI
 from dfbench.algorithms.surrogate_based.botorch.botorch_qkg import BotorchqKG
 from dfbench.algorithms.surrogate_based.botorch.botorch_rembo import REMBO
 from dfbench.algorithms.surrogate_based.botorch.botorch_gebo import GEBO
@@ -39,7 +39,7 @@ def build_configs(*, quick: bool = False):
 
     configs = [
         AlgorithmConfig(
-            BotorchqNEI(),
+            BotorchQNEI(),
             {"n_initial": n_init, "batch_size": 1, "max_iterations": bo_iters},
             name="qNEI",
         ),
@@ -80,7 +80,7 @@ def build_configs(*, quick: bool = False):
                 "n_initial": n_init,
                 "lbfgs_patience": 200,
             },
-            name="TuRBO→L-BFGS",
+            name="TuRBO->L-BFGS",
         ),
     ]
 

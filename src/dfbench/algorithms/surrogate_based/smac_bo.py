@@ -1,4 +1,4 @@
-"""SMAC — Sequential Model-based Algorithm Configuration via SMAC3.
+"""SMAC: Sequential Model-based Algorithm Configuration via SMAC3.
 
 SMAC3 combines random forests as surrogate models with aggressive racing for
 early termination and is the de-facto standard for algorithm configuration and
@@ -30,7 +30,7 @@ except ImportError:
 
 
 class SMAC(OptimizationAlgorithm):
-    """SMAC — Sequential Model-based Algorithm Configuration.
+    """SMAC: Sequential Model-based Algorithm Configuration.
 
     Wraps SMAC3's ``HyperparameterOptimizationFacade`` with a random-forest
     surrogate to work with the ``Objective`` protocol. SMAC handles bounded
@@ -48,7 +48,7 @@ class SMAC(OptimizationAlgorithm):
 
     def __init__(self) -> None:
         if not _SMAC_AVAILABLE:
-            raise ImportError("SMAC3 is required. Install with: uv pip install smac")
+            raise ImportError("SMAC3 is required. Install with: uv add 'dfbench[smac]'")
 
     def optimize(
         self,
@@ -127,5 +127,5 @@ class SMAC(OptimizationAlgorithm):
             overwrite=True,
         )
 
-        # Run SMAC optimisation loop — it controls its own budget internally
+        # Run SMAC optimisation loop; it controls its own budget internally
         smac.optimize()

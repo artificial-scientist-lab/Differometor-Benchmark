@@ -48,7 +48,7 @@ def run_benchmark(combined_dir: Path, success_loss: float, n_time_samples: int):
 
     problem = RandomUIFOProblem()
 
-    # Dummy config — not used when loading, but Benchmark requires it
+    # Dummy config (not used when loading, but Benchmark requires it)
     from dfbench.algorithms import AdamGD
 
     dummy_configs = [AlgorithmConfig(AdamGD(), {}, name="dummy")]

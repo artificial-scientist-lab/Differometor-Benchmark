@@ -1,5 +1,5 @@
 ================================================================================
-                        dfbench — Test Behaviour Catalogue
+                        dfbench: Test Behaviour Catalogue
 ================================================================================
 
 This file lists every behaviour that automated tests should verify to guarantee
@@ -9,9 +9,9 @@ fundamental (pure functions, no side effects) to integration-level (requires
 setting up full objects).
 
 Priorities:
-  [P0]  Must never break — gate CI.
-  [P1]  Important invariants — run in CI; a failure is a bug.
-  [P2]  Nice to have / slow tests — nightly or manual.
+  [P0]  Must never break: gate CI.
+  [P1]  Important invariants: run in CI; a failure is a bug.
+  [P2]  Nice to have / slow tests: nightly or manual.
 
 NOTE: Tests that require Differometor/GPU simulation (problem initialization,
 actual loss evaluation) must run via SLURM (srun). Tests that only use mocks or
@@ -26,18 +26,18 @@ Recommended file layout under tests/:
 
   tests/
     conftest.py                   # shared fixtures (mock problem, seeded obj)
-    test_api_imports.py           # Section 12 — import smoke tests
-    test_utils.py                 # Section 1 — t2j/j2t/inverse_sigmoid
-    test_config.py                # Section 2 — create_parser
-    test_problem_protocol.py      # Section 3 — abstract base
-    test_problems_smoke.py        # Section 4 — init/loss/grad (slow marker)
-    test_problem_bounds_overrides.py  # Sections 4.10–4.11, 4.15, 4.20–4.23
+    test_api_imports.py           # Section 12: import smoke tests
+    test_utils.py                 # Section 1: t2j/j2t/inverse_sigmoid
+    test_config.py                # Section 2: create_parser
+    test_problem_protocol.py      # Section 3: abstract base
+    test_problems_smoke.py        # Section 4: init/loss/grad (slow marker)
+    test_problem_bounds_overrides.py  # Sections 4.10-4.11, 4.15, 4.20-4.23
     test_objective_randomness.py  # Section 5 seed & sampling items
     test_objective_invariants.py  # Section 5 all other items
     test_algorithm_protocol.py    # Section 6
     test_algorithms_unit.py       # Section 7 cheap unit tests (mock problem)
-    test_metrics.py               # Section 8 — full metrics coverage
-    test_benchmark_smoke.py       # Section 9 — orchestration with mock
+    test_metrics.py               # Section 8: full metrics coverage
+    test_benchmark_smoke.py       # Section 9: orchestration with mock
     test_display.py               # Section 10
     slow/
       test_problems_full.py       # Section 4 full physics (needs srun)
@@ -45,9 +45,9 @@ Recommended file layout under tests/:
       test_benchmark_full.py      # Section 13 (needs srun)
 
 Pytest markers (define in pyproject.toml / pytest.ini):
-  @pytest.mark.slow   — anything that calls Differometor simulation or runs
+  @pytest.mark.slow   : anything that calls Differometor simulation or runs
                         a real optimizer for >5 s; requires srun on the cluster.
-  @pytest.mark.gpu    — tests that assert GPU-specific behaviour or require
+  @pytest.mark.gpu    : tests that assert GPU-specific behaviour or require
                         a CUDA device; must not block CPU-only CI.
 
 Default push suite: everything NOT marked slow or gpu.
@@ -58,8 +58,8 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 1. UTILITIES  (dfbench.core.utils)
 ================================================================================
 
-1.1  [P0] t2j: torch tensor → JAX array round-trip preserves values and shape.
-1.2  [P0] j2t: JAX array → torch tensor round-trip preserves values and shape.
+1.1  [P0] t2j: torch tensor -> JAX array round-trip preserves values and shape.
+1.2  [P0] j2t: JAX array -> torch tensor round-trip preserves values and shape.
 1.3  [P0] j2t produces a writable tensor (np copy, no read-only warning).
 1.4  [P0] t2j ∘ j2t and j2t ∘ t2j are identity (within float tolerance).
 1.5  [P0] inverse_sigmoid_bounding is the exact inverse of
@@ -73,7 +73,7 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 2. CONFIG  (dfbench.core.config)
 ================================================================================
 
-2.1  [P0] create_parser generates correct argument names (snake_case →
+2.1  [P0] create_parser generates correct argument names (snake_case ->
           --kebab-case).
 2.2  [P0] Integer, float, and string defaults produce the correct argparse
           types.
@@ -93,7 +93,7 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 
 ================================================================================
 4. PROBLEMS  (dfbench.problems)
-   These tests require Differometor → run via SLURM.
+   These tests require Differometor -> run via SLURM.
 ================================================================================
 
 --- VoyagerProblem ---
@@ -113,8 +113,8 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 4.7  [P0] jax.grad(Objective unbounded value)(unbounded_midpoint) returns a
           finite array of shape (n_params,).
 4.8  [P1] objective_function evaluated at the target setup parameters gives
-          loss ≈ 0 (by construction — sanity check).
-4.8b [P2] CONSISTENCY POINTS — decision note: testing at arbitrary random
+          loss ≈ 0 (by construction, sanity check).
+4.8b [P2] CONSISTENCY POINTS: decision note: testing at arbitrary random
           parameter vectors is fragile (loss depends on random seed and
           Differometor internals that may change).  The only safe fixed point
           is the known target configuration (4.8 above).  For regression
@@ -132,21 +132,21 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 --- ConstrainedVoyagerProblem ---
 
 4.12 [P0] ConstrainedVoyagerProblem initializes without error.
-4.13 [P0] Same shape / finite-loss checks as 4.2–4.7.
+4.13 [P0] Same shape / finite-loss checks as 4.2-4.7.
 4.14 [P1] Switching power_penalty_fn (squashed_relu, relu, zero) changes loss
           for the same params with high power values.
-4.15 [P1] bounds_overrides works identically to VoyagerProblem (4.10–4.11).
+4.15 [P1] bounds_overrides works identically to VoyagerProblem (4.10-4.11).
 
 --- RandomUIFOProblem ---
 
 4.16 [P0] RandomUIFOProblem(size=3, topology_seed=42) initializes without
           error.
-4.17 [P0] Same shape / finite-loss checks as 4.2–4.7.
+4.17 [P0] Same shape / finite-loss checks as 4.2-4.7.
 4.18 [P1] Two instances with different topology_seed produce different
           n_params / different bounds.
 4.19 [P1] Two instances with the same topology_seed produce identical n_params
           and identical bounds.
-4.20 [P1] bounds_overrides works identically (4.10–4.11).
+4.20 [P1] bounds_overrides works identically (4.10-4.11).
 
 --- Base problem helpers (OpticalSetupProblem) ---
 
@@ -187,13 +187,13 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
   RANDOMNESS TESTING PRACTICES (how to write these tests correctly):
   - Always call obj.set_seed(<fixed_int>) at the start of every test that
     involves random sampling; never rely on module-level state.
-  - Never use np.random or Python random directly inside tests — only use
+  - Never use np.random or Python random directly inside tests; only use
     the Objective's set_seed + random_params_* methods so that the seeding
     path being tested matches production code.
   - For property-based tests (bounds, non-NaN), sample n=100 points with a
     fixed seed and assert the property holds for all of them.
   - For reproducibility tests (5.10), compare two independent Objective
-    instances both seeded identically — do not reuse the same instance, as
+    instances both seeded identically; do not reuse the same instance, as
     that would only verify the key-splitting mechanism, not the seed setter.
   - Tests that rely on two consecutive samples being *different* (5.11)
     should assert they are not all-equal, not that they differ element-wise
@@ -287,8 +287,8 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 5.36 [P1] eval budget with batches: a batch that would exceed max_evals is
           still counted in eval_count but not logged to histories.
 5.37 [P0] evals_left returns correct remaining count.
-5.38 [P0] evals_progress_fraction returns 0 → 1 as evals increase.
-5.39 [P0] time_progress_fraction returns 0 → 1 as time elapses.
+5.38 [P0] evals_progress_fraction returns 0 -> 1 as evals increase.
+5.39 [P0] time_progress_fraction returns 0 -> 1 as time elapses.
 
 --- Bounded / unbounded mode ---
 
@@ -370,7 +370,7 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 ================================================================================
 7. ALGORITHMS  (dfbench.algorithms.*)
    Use a lightweight mock problem (e.g., sphere function) to keep tests fast.
-   Full integration with Differometor problems → SLURM.
+   Full integration with Differometor problems -> SLURM.
 ================================================================================
 
 --- Common checks for every algorithm class ---
@@ -426,7 +426,7 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 7.28 [P0] algorithm_type is AlgorithmType.GENERATIVE.
 7.29 [P1] ResNetVAE forward pass returns (recon, mu, logvar) with correct
           shapes.
-7.30 [P1] vae_loss_function returns (total_loss, recon_loss, kld) — all
+7.30 [P1] vae_loss_function returns (total_loss, recon_loss, kld); all
           finite tensors.
 7.31 [P1] train_vae does not crash on a small synthetic dataset and loss
           decreases.
@@ -446,7 +446,7 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
   KNOWN-ANSWER PRINCIPLE: every metric function must have at least one test
   with hand-computed expected output on a small array (≤ 5 elements) so that
   correctness can be verified by inspection.  Property-only tests ("result is
-  in [0,1]") are insufficient on their own — include one concrete in=out pair.
+  in [0,1]") are insufficient on their own; include one concrete in=out pair.
 
 --- Per-run functions ---
 
@@ -484,8 +484,8 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
           distances.
 8.20 [P0] multi_auc_top_k: correct top-k selection logic; k_fraction=0.1
           picks at least 1.
-8.21 [P1] compute_performance_profile: all losses below threshold →
-          success_rate=1.0; all above → 0.0.
+8.21 [P1] compute_performance_profile: all losses below threshold ->
+          success_rate=1.0; all above -> 0.0.
 8.22 [P1] compute_performance_profile: normalized_auc is in [0, 1].
 
 --- Time-based slicing ---
@@ -578,7 +578,7 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 
 
 ================================================================================
-13. END-TO-END / INTEGRATION  (slow — SLURM only)
+13. END-TO-END / INTEGRATION  (slow: SLURM only)
 ================================================================================
 
 13.1  [P2] For each algorithm: optimize on VoyagerProblem with small budget
@@ -594,7 +594,7 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 
 ================================================================================
   Total items:  ~120 test behaviours
-  P0 (critical): ~65    — fast, mock-based, CI-gated
-  P1 (important): ~45   — CI, may need small fixtures
-  P2 (extended):  ~10   — nightly / SLURM
+  P0 (critical): ~65    (fast, mock-based, CI-gated)
+  P1 (important): ~45   (CI, may need small fixtures)
+  P2 (extended):  ~10   (nightly / SLURM)
 ================================================================================

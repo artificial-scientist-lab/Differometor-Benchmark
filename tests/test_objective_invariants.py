@@ -1,7 +1,7 @@
-"""Section 5 (invariants) — Objective construction, evaluation, history,
+"""Section 5 (invariants): Objective construction, evaluation, history,
 budget, bounded/unbounded, reduced history, checkpointing, reset, summary.
 
-Tests 5.1–5.4, 5.13–5.59 (excluding randomness tests in test_objective_randomness).
+Tests 5.1-5.4, 5.13-5.59 (excluding randomness tests in test_objective_randomness).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from dfbench.core.objective import Objective
 
 
 # ======================================================================
-# Construction & properties  (5.1–5.4)
+# Construction & properties  (5.1-5.4)
 # ======================================================================
 
 
@@ -114,7 +114,7 @@ class TestWarmup:
 
 
 # ======================================================================
-# Evaluation: value, grad, value_and_grad  (5.13–5.18)
+# Evaluation: value, grad, value_and_grad  (5.13-5.18)
 # ======================================================================
 
 
@@ -213,7 +213,7 @@ class TestEvaluation:
 
 
 # ======================================================================
-# Batched evaluation  (5.19–5.22)
+# Batched evaluation  (5.19-5.22)
 # ======================================================================
 
 
@@ -273,7 +273,7 @@ class TestBatchedEvaluation:
 
 
 # ======================================================================
-# History tracking  (5.23–5.30)
+# History tracking  (5.23-5.30)
 # ======================================================================
 
 
@@ -313,7 +313,7 @@ class TestHistoryTracking:
 
     def test_best_params_corresponds(self):
         """5.28 best_params corresponds to best_loss evaluation."""
-        # Evaluate best_params — should produce best_loss
+        # Evaluate best_params; should produce best_loss
         loss_at_best = self.obj.problem.objective_function(self.obj.best_params)
         assert float(loss_at_best) == pytest.approx(float(self.obj.best_loss), abs=1e-6)
 
@@ -344,7 +344,7 @@ class TestHistoryTracking:
 
 
 # ======================================================================
-# Budget enforcement  (5.31–5.39)
+# Budget enforcement  (5.31-5.39)
 # ======================================================================
 
 
@@ -366,7 +366,7 @@ class TestBudgetEnforcement:
         for _ in range(3):
             obj.value(obj.random_params_bounded())
         history_len = len(obj.loss_history)
-        # One more call — should not be logged
+        # One more call; should not be logged
         obj.value(obj.random_params_bounded())
         assert len(obj.loss_history) == history_len
 
@@ -401,7 +401,7 @@ class TestBudgetEnforcement:
         obj.start_logging()
         obj.value(obj.random_params_bounded())  # count=1
         batch = obj.random_params_bounded(n_samples=5)
-        obj.vmap_value(batch)  # 5 evals, only 2 left → exceeds
+        obj.vmap_value(batch)  # 5 evals, only 2 left -> exceeds
         # eval_count should still increase
         assert obj.eval_count > 3
         # But loss_history should only have the first valid entries
@@ -416,7 +416,7 @@ class TestBudgetEnforcement:
         assert obj.evals_left == 9
 
     def test_evals_progress_fraction(self, mock_problem):
-        """5.38 evals_progress_fraction 0→1."""
+        """5.38 evals_progress_fraction 0->1."""
         obj = Objective(mock_problem, max_evals=4)
         assert obj.evals_progress_fraction == 0.0
         obj.set_seed(42)
@@ -425,7 +425,7 @@ class TestBudgetEnforcement:
         assert obj.evals_progress_fraction == pytest.approx(0.25)
 
     def test_time_progress_fraction(self, mock_problem):
-        """5.39 time_progress_fraction 0→1."""
+        """5.39 time_progress_fraction 0->1."""
         obj = Objective(mock_problem, max_time=1.0)
         assert obj.time_progress_fraction == 0.0
         obj.start_logging()
@@ -435,13 +435,13 @@ class TestBudgetEnforcement:
 
 
 # ======================================================================
-# Bounded / unbounded mode  (5.40–5.43)
+# Bounded / unbounded mode  (5.40-5.43)
 # ======================================================================
 
 
 class TestBoundedUnbounded:
     def test_bounded_uses_objective_function(self, mock_problem):
-        """5.40 unbounded=False → uses objective_function."""
+        """5.40 unbounded=False -> uses objective_function."""
         obj = Objective(mock_problem, unbounded=False)
         obj.set_seed(42)
         obj.start_logging()
@@ -490,13 +490,13 @@ class TestBoundedUnbounded:
 
 
 # ======================================================================
-# Reduced history properties  (5.44–5.47)
+# Reduced history properties  (5.44-5.47)
 # ======================================================================
 
 
 class TestReducedHistory:
     def test_loss_history_reduced_scalar(self, seeded_obj):
-        """5.44 Scalar entries → identical to loss_history."""
+        """5.44 Scalar entries -> identical to loss_history."""
         seeded_obj.start_logging()
         for _ in range(3):
             seeded_obj.value(seeded_obj.random_params_bounded())
@@ -506,7 +506,7 @@ class TestReducedHistory:
             np.testing.assert_allclose(r, float(o), atol=1e-6)
 
     def test_loss_history_reduced_batched(self, mock_problem):
-        """5.44 Batched entries → returns nanmin."""
+        """5.44 Batched entries -> returns nanmin."""
         obj = Objective(mock_problem, save=["batched_loss"])
         obj.set_seed(42)
         obj.start_logging()
@@ -517,7 +517,7 @@ class TestReducedHistory:
         assert isinstance(reduced[0], float)
 
     def test_params_history_reduced(self, seeded_obj):
-        """5.45 Scalar entries → identical."""
+        """5.45 Scalar entries -> identical."""
         seeded_obj.start_logging()
         for _ in range(3):
             seeded_obj.value_and_grad(seeded_obj.random_params_bounded())
@@ -567,7 +567,7 @@ class TestReducedHistory:
 
 
 # ======================================================================
-# Eval type tracking  (5.48–5.49)
+# Eval type tracking  (5.48-5.49)
 # ======================================================================
 
 
@@ -616,7 +616,7 @@ class TestEvalTypeTracking:
 
 
 # ======================================================================
-# log_evaluation  (5.50–5.51)
+# log_evaluation  (5.50-5.51)
 # ======================================================================
 
 
@@ -679,7 +679,7 @@ class TestReset:
 
 
 # ======================================================================
-# Checkpointing  (5.53–5.57)
+# Checkpointing  (5.53-5.57)
 # ======================================================================
 
 
@@ -762,7 +762,7 @@ class TestCheckpointing:
 
 class TestStorageConfig:
     """The Objective exposes checkpoint_format / checkpoint_dir as the
-    user-facing storage knobs — no imports required for the common cases."""
+    user-facing storage knobs; no imports required for the common cases."""
 
     def test_defaults(self, mock_problem):
         obj = Objective(mock_problem)

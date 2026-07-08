@@ -270,7 +270,7 @@ class SaveConfig:
 
     @classmethod
     def from_dict(cls, d: dict) -> "SaveConfig":
-        """Reconstruct from a :meth:`to_dict` dict (missing keys → defaults).
+        """Reconstruct from a :meth:`to_dict` dict (missing keys -> defaults).
 
         Also accepts legacy plurals (``batched_losses`` etc.) for backward
         compatibility with checkpoints written by earlier versions.

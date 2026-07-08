@@ -119,9 +119,9 @@ parser.add_argument(
     "-a",
     "--algo",
     required=True,
-    help=f"Algorithm index (0–{len(ALGORITHMS) - 1}), or 'list' to print the table.",
+    help=f"Algorithm index (0-{len(ALGORITHMS) - 1}), or 'list' to print the table.",
 )
-parser.add_argument("-s", "--seed", type=int, default=0, help="Run seed (0–24).")
+parser.add_argument("-s", "--seed", type=int, default=0, help="Run seed (0-24).")
 args = parser.parse_args()
 
 if args.algo == "list":
@@ -133,7 +133,7 @@ if args.algo == "list":
 
 algo_idx = int(args.algo)
 if algo_idx < 0 or algo_idx >= len(ALGORITHMS):
-    print(f"Error: --algo must be 0–{len(ALGORITHMS) - 1}, got {algo_idx}")
+    print(f"Error: --algo must be 0-{len(ALGORITHMS) - 1}, got {algo_idx}")
     sys.exit(1)
 
 seed = args.seed

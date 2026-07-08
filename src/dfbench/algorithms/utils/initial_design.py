@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-import torch
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from typing import Literal
 
 

@@ -1,4 +1,4 @@
-"""Py-BOBYQA — Bound Optimization BY Quadratic Approximation.
+"""Py: BOBYQA: Bound Optimization BY Quadratic Approximation.
 
 Py-BOBYQA is a flexible Python implementation of Powell's BOBYQA algorithm
 with modern enhancements for noisy objectives, automatic restarts, and
@@ -11,7 +11,7 @@ because BOBYQA handles box bounds natively and efficiently.
 Key features exposed:
   - ``rhobeg`` / ``rhoend``: trust-region radii (initial / final).
   - ``seek_global_minimum``: enables automatic soft restarts within the
-    evaluation budget — useful for multi-modal landscapes.
+    evaluation budget, useful for multi-modal landscapes.
   - ``objfun_has_noise``: enables the noisy-objective variant that uses
     regression models instead of interpolation, appropriate when the
     problem evaluation has stochastic components.
@@ -25,7 +25,7 @@ Reference:
     Cartis, C., Fiala, J., Marber, B., & Roberts, L. (2019).
     Improving the flexibility and robustness of model-based
     derivative-free optimization solvers. *ACM Transactions on
-    Mathematical Software (TOMS)*, 45(3), 1–41.
+    Mathematical Software (TOMS)*, 45(3), 1-41.
 """
 
 from __future__ import annotations
@@ -97,14 +97,14 @@ class PyBOBYQA(OptimizationAlgorithm):
             import pybobyqa
         except ImportError as exc:
             raise ImportError(
-                "Py-BOBYQA is required.  Install with: pip install Py-BOBYQA"
+                "Py-BOBYQA is required.  Install with: uv add 'dfbench[dfo]'"
             ) from exc
 
         obj = objective
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         lower, upper = solver_bounds_np(obj)
-        npt = self.npt  # None → Py-BOBYQA default (2n+1)
+        npt = self.npt  # None -> Py-BOBYQA default (2n+1)
 
         fun = dfo_objective_wrapper(obj)
 

@@ -1,10 +1,16 @@
 import jax
 import jax.numpy as jnp
-import torch
 from typing import Literal, get_args
-from evox.algorithms import PSO, CLPSO, CSO, DMSPSOEL, FSPSO, SLPSOGS, SLPSOUS
-from evox.core import Problem as EvoxProblem
-from evox.workflows import EvalMonitor, StdWorkflow
+
+try:
+    import torch
+    from evox.algorithms import PSO, CLPSO, CSO, DMSPSOEL, FSPSO, SLPSOGS, SLPSOUS
+    from evox.core import Problem as EvoxProblem
+    from evox.workflows import EvalMonitor, StdWorkflow
+except ImportError as exc:
+    raise ImportError(
+        "evox and torch are required for EvoxPSO. Install with:  uv add 'dfbench[evolution]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench import (

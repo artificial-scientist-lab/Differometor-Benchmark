@@ -35,7 +35,7 @@ This page targets competition organizers: the people running scoring, maintainin
 Objective
     │
     ▼
-CheckpointManager          ← the only facade Objective talks to
+CheckpointManager          <- the only facade Objective talks to
     │
     ├── CheckpointSerializer   (how: NPZ or JSON)
     ├── StorageBackend         (where: local FS, memory, S3, ...)
@@ -52,7 +52,7 @@ CheckpointManager          ← the only facade Objective talks to
 | Layer | Responsibility | Protocol / Class |
 |-------|----------------|------------------|
 | **Data contract** | What a run looks like in memory | `RunState`, `RunMetadata` |
-| **Serializer** | Encode/decode `RunState` ↔ bytes | `CheckpointSerializer` |
+| **Serializer** | Encode/decode `RunState` <-> bytes | `CheckpointSerializer` |
 | **Backend** | Where bytes physically go | `StorageBackend` |
 | **Resolver** | Build structured paths | `RunPathResolver` |
 | **Exporter** | Human-readable JSON + PNG view | `RunDataExporter` |
@@ -109,7 +109,7 @@ If the wrapped problem implements the reconstructive `to_spec()` contract (see [
 The embedded value is the JSON-safe dict produced by `ProblemSpec.to_dict()`:
 
 ```json
-{"type": "VoyagerProblem", "version": 1, "params": {"n_frequencies": 100, ...}}
+{"type": "VoyagerProblem", "version": 1, "params": {"n_frequencies": 50, ...}}
 ```
 
 Reconstruction is a two-step process that crosses the storage/problem layer boundary on purpose:
@@ -241,7 +241,22 @@ exporter = RunDataExporter(root="./data/problem_output")
 out_dir = exporter.export(state, problem=problem, hyper_param_str="lr0.1")
 ```
 
-Files written to `{root}/{problem_name}/{algorithm_name}/{hyper_param_str}/`:
+Each artifact is independently optional. Pass the corresponding `write_*` flag as `False` to skip that file:
+
+```python
+# Only the loss-curve PNG, no JSON or sensitivity plot:
+out_dir = exporter.export(
+    state, problem=problem, hyper_param_str="lr0.1",
+    write_parameters_json=False,
+    write_losses_json=False,
+    write_losses_png=True,
+    write_sensitivity_png=False,
+)
+```
+
+The output directory is still created and returned regardless of which artifacts are written. The `write_sensitivity_png` flag is an additional gate on top of the existing optical-problem condition; passing `True` does not force a sensitivity plot on a non-optical problem.
+
+Files written to `{root}/{problem_name}/{algorithm_name}_{hyper_param_str}/` (collapsing to just `{algorithm_name}` when there is no hyperparameter string):
 
 | File | Content |
 |------|---------|

@@ -1,4 +1,4 @@
-"""BAxUS — Bayesian Optimization in Adaptively Expanding Subspaces via Ax.
+"""BAxUS: Bayesian Optimization in Adaptively Expanding Subspaces via Ax.
 
 BAxUS iteratively expands a low-dimensional subspace embedding, starting from
 a small dimensionality and growing it only when needed, combining the benefits
@@ -18,7 +18,13 @@ Operates in **bounded** parameter space.
 from __future__ import annotations
 
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -64,7 +70,7 @@ class BAxUS(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for BAxUS. Install with: uv pip install botorch"
+                "BoTorch is required for BAxUS. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE

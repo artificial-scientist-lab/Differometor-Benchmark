@@ -100,7 +100,7 @@ def _fmt_time(seconds: float) -> str:
 def _fmt_loss(n: int | float | None) -> str:
     """Format a loss value: scientific notation for small values, else fixed."""
     if n is None:
-        return "—"
+        return "-"
     if isinstance(n, float):
         if n != n:  # NaN
             return "NaN"
@@ -330,13 +330,13 @@ class LiveDisplay:
         # ── Title ─────────────────────────────────────────────────
         title = f" {algorithm} × {problem} ({n_params} params) "
         if final:
-            title = f" {algorithm} × {problem} — DONE "
+            title = f" {algorithm} × {problem} | DONE "
         fill = "─" * max(0, inner - 1 - len(title))
         lines: list[str] = [f"┌─{title}{fill}┐"]
 
         # ── Progress bars ─────────────────────────────────────────
         # Reserve chars: " Time   [" (8) + "] pct  elapsed / max  ETA XXs" (~38)
-        # → bar occupies the rest
+        # -> bar occupies the rest
         bar_width = max(10, tw - 54)
 
         if max_time is not None:
@@ -378,8 +378,8 @@ class LiveDisplay:
         )
 
         avg_batch = (eval_count / log_calls) if log_calls > 0 else None
-        eps_str = f"{evals_per_sec:,.1f}" if evals_per_sec > 0 else "—"
-        batch_str = f"{avg_batch:.1f}" if avg_batch is not None else "—"
+        eps_str = f"{evals_per_sec:,.1f}" if evals_per_sec > 0 else "-"
+        batch_str = f"{avg_batch:.1f}" if avg_batch is not None else "-"
         lines.append(_row2("Evals/sec", eps_str, "Avg Batch", batch_str))
 
         lines.append(

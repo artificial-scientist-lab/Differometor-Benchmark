@@ -6,7 +6,7 @@ perturbs it with Gaussian noise, accepting the perturbation only if it improves
 the objective. It is one of the simplest derivative-free baselines and serves
 as a sanity-check control for rugged landscapes.
 
-Operates in **bounded physical space** — bounds are passed to the Nevergrad
+Operates in **bounded physical space**; bounds are passed to the Nevergrad
 parametrization directly. Unbounded mode is not supported.
 """
 
@@ -22,7 +22,7 @@ try:
     import nevergrad as ng
 except ImportError as exc:
     raise ImportError(
-        "Nevergrad is required for OnePlusOne. Install with: uv add nevergrad"
+        "Nevergrad is required for OnePlusOne. Install with: uv add 'dfbench[evolution]'"
     ) from exc
 
 

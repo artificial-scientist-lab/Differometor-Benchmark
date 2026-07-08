@@ -1,11 +1,11 @@
-"""Nevergrad TBPSA — noise-robust baseline.
+"""Nevergrad TBPSA: noise-robust baseline.
 
 TBPSA (Test-Based Population-Size Adaptation) is a population-based
 derivative-free optimizer from Nevergrad designed for noisy objectives.
 It dynamically adapts its population size and is a good control for
 landscapes with evaluation noise.
 
-Operates in **bounded physical space** — bounds are passed to Nevergrad
+Operates in **bounded physical space**; bounds are passed to Nevergrad
 parametrization directly. Unbounded mode is not supported.
 
 This wrapper exposes ``num_evaluations`` (number of repeated evaluations
@@ -24,7 +24,7 @@ try:
     import nevergrad as ng
 except ImportError as exc:
     raise ImportError(
-        "Nevergrad is required for TBPSA. Install with: uv add nevergrad"
+        "Nevergrad is required for TBPSA. Install with: uv add 'dfbench[evolution]'"
     ) from exc
 
 

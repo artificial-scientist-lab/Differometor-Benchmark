@@ -1,4 +1,4 @@
-"""REMBO — Random EMbedding Bayesian Optimization via BoTorch.
+"""REMBO: Random EMbedding Bayesian Optimization via BoTorch.
 
 Projects the ambient space into a low-dimensional random subspace, runs
 standard GP-BO there, and projects candidates back. The key idea is that
@@ -18,7 +18,13 @@ Operates in **bounded** parameter space.
 from __future__ import annotations
 
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -61,7 +67,7 @@ class REMBO(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for REMBO. Install with: uv pip install botorch"
+                "BoTorch is required for REMBO. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE
@@ -73,7 +79,7 @@ class REMBO(OptimizationAlgorithm):
     ) -> torch.Tensor:
         """Project from embedding space to normalised ambient [0,1]^D.
 
-        Z: (n, d_e), A: (D, d_e) → X: (n, D)
+        Z: (n, d_e), A: (D, d_e) -> X: (n, D)
         Uses sigmoid to map unbounded projection outputs into [0, 1].
         """
         raw = Z @ A.T  # (n, D)
@@ -139,7 +145,7 @@ class REMBO(OptimizationAlgorithm):
         # Initial Sobol in embedding space
         sobol = torch.quasirandom.SobolEngine(d_e, scramble=True, seed=random_seed)
         Z_train = sobol.draw(n_initial).to(self.device, self.dtype)
-        Z_train = Z_train * 2 * emb_radius - emb_radius  # map [0,1]→[-r,r]
+        Z_train = Z_train * 2 * emb_radius - emb_radius  # map [0,1]->[-r,r]
 
         X_train = self._project_up(Z_train, A)
 

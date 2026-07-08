@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -31,13 +32,24 @@ from dfbench.core.storage.serializers import CheckpointSerializer
 
 def _make_state(eval_count: int = 5) -> RunState:
     return RunState(
-        loss_history=np.array([1.0, 0.5, 0.3, 0.2, 0.1][:eval_count], dtype=object),
-        grad_history=np.array(
-            [np.array([0.1, 0.2]) for _ in range(eval_count)], dtype=object
+        loss_history=np.array(
+            [
+                jnp.asarray(1.0),
+                jnp.asarray(0.5),
+                jnp.asarray(0.3),
+                jnp.asarray(0.2),
+                jnp.asarray(0.1),
+            ][:eval_count],
+            dtype=object,
         ),
-        hessian_history=np.array([np.eye(2) for _ in range(eval_count)], dtype=object),
+        grad_history=np.array(
+            [jnp.asarray([0.1, 0.2]) for _ in range(eval_count)], dtype=object
+        ),
+        hessian_history=np.array(
+            [jnp.asarray(np.eye(2)) for _ in range(eval_count)], dtype=object
+        ),
         params_history=np.array(
-            [np.array([0.0, 0.0]) for _ in range(eval_count)], dtype=object
+            [jnp.asarray([0.0, 0.0]) for _ in range(eval_count)], dtype=object
         ),
         eval_type_history=np.array([1] * eval_count, dtype=object),
         time_steps=np.array([0.0, 0.1, 0.2, 0.3, 0.4][:eval_count], dtype=object),
@@ -113,7 +125,7 @@ class TestSerializers:
         assert out.best_params.size == 0
 
     def test_legacy_missing_keys(self):
-        # A minimal NPZ without metadata/version — must still load.
+        # A minimal NPZ without metadata/version; must still load.
         import io
 
         buf = io.BytesIO()
@@ -314,10 +326,22 @@ class TestRunDataExporter:
         exporter = RunDataExporter(root=str(tmp_path))
         state = _make_state()
         out_dir = exporter.export(state, problem=None, print_summary=False)
-        params_files = list(out_dir.glob("*_parameters.json"))
+        params_files = list(out_dir.glob("*_parameters*.json"))
         assert len(params_files) == 1
         content = json.loads(params_files[0].read_text())
         assert content == [0.0, 0.0]
+
+    def test_losses_json_contains_plain_floats(self, tmp_path):
+        """Losses JSON must contain plain Python floats, not JAX arrays."""
+        exporter = RunDataExporter(root=str(tmp_path))
+        state = _make_state()
+        out_dir = exporter.export(state, problem=None, print_summary=False)
+        losses_files = list(out_dir.glob("*_losses*.json"))
+        assert len(losses_files) == 1
+        content = json.loads(losses_files[0].read_text())
+        assert content == [1.0, 0.5, 0.3, 0.2, 0.1]
+        for v in content:
+            assert isinstance(v, float)
 
 
 # ---------------------------------------------------------------------
@@ -464,7 +488,7 @@ class TestValidateRunState:
 
     def test_A2_ndarray_histories_are_allowed(self):
         """NumPy collapses uniform-shape object arrays to N-D numeric
-        arrays (e.g. five (2,) gradients → shape (5, 2)). The contract is
+        arrays (e.g. five (2,) gradients -> shape (5, 2)). The contract is
         "first axis is the time axis", not strictly 1-D, so this is legal."""
         s = _mutate(
             _make_state(),
@@ -615,7 +639,7 @@ class TestValidateRunState:
         assert r.ok, [str(e) for e in r.errors]
 
     def test_B2_best_loss_drift_is_the_headline_check(self):
-        """best_loss=0.05 but nanmin(loss_history)=0.1 → must be caught."""
+        """best_loss=0.05 but nanmin(loss_history)=0.1 -> must be caught."""
         s = _mutate(_make_state(eval_count=5), best_loss=0.05)
         r = validate_run_state(s)
         assert not r.ok
@@ -721,7 +745,7 @@ class TestCheckpointManagerValidation:
 
     def test_load_rejects_tampered_artifact(self, tmp_path):
         """Save a valid state with validation off, mutate the bytes,
-        reload with validation on → must reject."""
+        reload with validation on -> must reject."""
         manager = self._manager(tmp_path, validate_on_save=False)
         valid = _make_state()
         path = manager.save(valid)

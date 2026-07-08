@@ -1,4 +1,4 @@
-"""GEBO — Gradient-Enhanced Bayesian Optimization via BoTorch.
+"""GEBO: Gradient-Enhanced Bayesian Optimization via BoTorch.
 
 Incorporates gradient observations into the GP surrogate to improve
 sample efficiency. Each evaluation provides both a function value *and* a
@@ -19,7 +19,13 @@ from __future__ import annotations
 
 import jax
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -67,7 +73,7 @@ class GEBO(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for GEBO. Install with: uv pip install botorch"
+                "BoTorch is required for GEBO. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE
@@ -159,7 +165,7 @@ class GEBO(OptimizationAlgorithm):
             "options": {"maxiter": 200, "batch_limit": 32},
         }
 
-        # JIT warmup — use value_and_grad for this algo
+        # JIT warmup: use value_and_grad for this algo
         obj.warmup_value_and_grad()
         obj.start_logging()
 

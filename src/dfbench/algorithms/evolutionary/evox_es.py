@@ -1,24 +1,30 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-import torch
 from typing import Literal, get_args
-from evox.algorithms import (
-    OpenES,
-    XNES,
-    SeparableNES,
-    DES,
-    SNES,
-    ARS,
-    ASEBO,
-    PersistentES,
-    NoiseReuseES,
-    GuidedES,
-    ESMC,
-    CMAES,
-)
-from evox.core import Problem as EvoxProblem
-from evox.workflows import EvalMonitor, StdWorkflow
+
+try:
+    import torch
+    from evox.algorithms import (
+        OpenES,
+        XNES,
+        SeparableNES,
+        DES,
+        SNES,
+        ARS,
+        ASEBO,
+        PersistentES,
+        NoiseReuseES,
+        GuidedES,
+        ESMC,
+        CMAES,
+    )
+    from evox.core import Problem as EvoxProblem
+    from evox.workflows import EvalMonitor, StdWorkflow
+except ImportError as exc:
+    raise ImportError(
+        "evox and torch are required for EvoxES. Install with:  uv add 'dfbench[evolution]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench import (

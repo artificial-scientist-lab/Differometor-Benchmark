@@ -1,6 +1,6 @@
 # Problems
 
-All optimization problems in dfbench represent gravitational-wave detector design tasks. The goal is to find optical component parameters (mirror reflectivities, laser power, cavity lengths, etc.) that minimize the detector's strain sensitivity across a frequency range of 20–5000 Hz.
+All optimization problems in dfbench represent gravitational-wave detector design tasks. The goal is to find optical component parameters (mirror reflectivities, laser power, cavity lengths, etc.) that minimize the detector's strain sensitivity across a frequency range of 20-5000 Hz.
 
 **Import:**
 
@@ -13,8 +13,8 @@ from dfbench.problems import VoyagerProblem, VoyagerTuningProblem, ConstrainedVo
 ## Problem Hierarchy
 
 ```
-ContinuousProblem          (ABC — core/problem.py)
-  └── OpticalSetupProblem  (ABC — problems/base_problem.py)
+ContinuousProblem          (ABC : core/problem.py)
+  └── OpticalSetupProblem  (ABC : problems/base_problem.py)
         ├── VoyagerProblem
         ├── VoyagerTuningProblem
         ├── ConstrainedVoyagerProblem
@@ -32,11 +32,11 @@ Defines the minimal interface every problem must implement:
 | `bounds` | `Array[2, n_params]` | `[lower_bounds, upper_bounds]` for each parameter. |
 | `optimization_pairs` | `list[tuple[str, str]]` | `(component_name, property_name)` tuples mapping each parameter index to a Differometor component. |
 | `n_params` | `int` | Number of parameters = `len(optimization_pairs)`. |
-| `to_spec() → dict` | `dict` | Reconstructive spec — a small, JSON-serialisable dict sufficient to rebuild an equivalent problem instance (see [Reconstruction & Problem Spec](#reconstruction--problem-spec) below). |
+| `to_spec() -> dict` | `dict` | Reconstructive spec: a small, JSON-serialisable dict sufficient to rebuild an equivalent problem instance (see [Reconstruction & Problem Spec](#reconstruction--problem-spec) below). |
 
-**Rationale — bounded problem contract:** Problems expose the bounded loss only; `Objective` owns any mapping required by algorithms that search in unbounded coordinates.
+**Rationale: bounded problem contract:** Problems expose the bounded loss only; `Objective` owns any mapping required by algorithms that search in unbounded coordinates.
 
-**Rationale — reconstructive spec:** A checkpoint is only useful for resume or provenance if the originating problem can be rebuilt. `to_spec()` encodes the problem's constructor arguments so a saved run is fully self-describing (see [Storage & Checkpointing](Storage-and-Checkpointing)).
+**Rationale: reconstructive spec:** A checkpoint is only useful for resume or provenance if the originating problem can be rebuilt. `to_spec()` encodes the problem's constructor arguments so a saved run is fully self-describing (see [Storage & Checkpointing](Storage-and-Checkpointing)).
 
 ### `OpticalSetupProblem` (Optical Base)
 
@@ -44,12 +44,12 @@ Extends `ContinuousProblem` with optics-specific functionality shared by all Dif
 
 - **Frequency grid:** A log-spaced array of frequencies from 20 Hz to 5 kHz (configurable via `n_frequencies`).
 - **Target sensitivity:** Stored in `_target_sensitivities`, computed from the reference detector design at initialization.
-- **`calculate_sensitivity(params)`:** Computes the sensitivity curve for a given parameter vector — used for plotting, not optimization.
+- **`calculate_sensitivity(params)`:** Computes the sensitivity curve for a given parameter vector: used for plotting, not optimization.
 - **`bounds_overrides`:** All concrete problems accept optional property-level bound overrides (narrowing only).
 - **`signal_floor`:** All concrete problems floor detector signal magnitudes before sensitivity normalization. Defaults to `1e-20`.
 - **`print_bounds()`:** Prints the effective per-parameter bounds currently used by the problem.
 
-> **Note:** `OpticalSetupProblem` no longer has an `output_to_files` method. Human-readable JSON/PNG output is now a *derived view* produced by `RunDataExporter` from a `RunState` snapshot (see [Storage & Checkpointing](Storage-and-Checkpointing)). Keeping I/O on the problem was a responsibility violation — it mixed file layout, plotting, and timestamping into the mathematical problem definition.
+> **Note:** `OpticalSetupProblem` no longer has an `output_to_files` method. Human-readable JSON/PNG output is now a *derived view* produced by `RunDataExporter` from a `RunState` snapshot (see [Storage & Checkpointing](Storage-and-Checkpointing)). Keeping I/O on the problem was a responsibility violation: it mixed file layout, plotting, and timestamping into the mathematical problem definition.
 
 ---
 
@@ -63,15 +63,15 @@ Extends `ContinuousProblem` with optics-specific functionality shared by all Dif
 | Parameters | ~25 (reflectivities, tunings, squeezing, power, masses, lengths, phases) |
 | Noise model | Single quantum noise source |
 | Speed | ~12 ms/eval on A100 GPU |
-| Difficulty | Moderate — loss < 0 achievable without physical constraints |
+| Difficulty | Moderate: loss < 0 achievable without physical constraints |
 
 ```python
-problem = VoyagerProblem(n_frequencies=100)
+problem = VoyagerProblem(n_frequencies=50)
 ```
 
 ```python
 problem = VoyagerProblem(
-   n_frequencies=100,
+   n_frequencies=50,
    bounds_overrides={"tuning": (0, 45)},
    signal_floor=1e-20,
 )
@@ -117,15 +117,15 @@ Each parameter corresponds to a `(component, property)` pair from the Voyager se
 | Parameters | 6 (tuning only: `prm`, `itmy`, `etmy`, `itmx`, `etmx`, `srm`) |
 | Noise model | Single quantum noise source |
 | Speed | ~12 ms/eval on A100 GPU |
-| Difficulty | Moderate — lower-dimensional than `VoyagerProblem`, useful for quick prototyping |
+| Difficulty | Moderate: lower-dimensional than `VoyagerProblem`, useful for quick prototyping |
 
 ```python
-problem = VoyagerTuningProblem(n_frequencies=100)
+problem = VoyagerTuningProblem(n_frequencies=50)
 ```
 
 ```python
 problem = VoyagerTuningProblem(
-   n_frequencies=100,
+   n_frequencies=50,
    bounds_overrides={"tuning": (0, 45)},
    signal_floor=1e-20,
 )
@@ -162,10 +162,10 @@ All optimized parameters are mirror tuning angles in degrees:
 | Noise model | Three sources: quantum, amplitude, frequency noise |
 | Constraints | Power thresholds on mirrors, beamsplitters, and detectors |
 | Speed | ~25 ms/eval on A100 GPU |
-| Difficulty | Hard — loss < 0 is very difficult to achieve |
+| Difficulty | Hard: loss < 0 is very difficult to achieve |
 
 ```python
-problem = ConstrainedVoyagerProblem(n_frequencies=100, signal_floor=1e-20)
+problem = ConstrainedVoyagerProblem(n_frequencies=50, signal_floor=1e-20)
 ```
 
 #### Differences from `VoyagerProblem`
@@ -173,9 +173,9 @@ problem = ConstrainedVoyagerProblem(n_frequencies=100, signal_floor=1e-20)
 1. **Realistic noise model:** Uses three separate modulation modes (quantum noise, amplitude noise, frequency noise) and combines their contributions into a single sensitivity curve. This produces a more accurate picture of real detector performance.
 
 2. **Power constraints (ReLU-based):** The loss includes a penalty term for violating optical power limits:
-   - `HARD_SIDE_POWER_THRESHOLD` — maximum power on mirror/beamsplitter side ports
-   - `SOFT_SIDE_POWER_THRESHOLD` — softer limit with gradual penalty
-   - `DETECTOR_POWER_THRESHOLD` — maximum power on detector ports
+   - `HARD_SIDE_POWER_THRESHOLD`: maximum power on mirror/beamsplitter side ports
+   - `SOFT_SIDE_POWER_THRESHOLD`: softer limit with gradual penalty
+   - `DETECTOR_POWER_THRESHOLD`: maximum power on detector ports
 
    For each component the configured `power_penalty_fn(value, threshold)` is called and the results are summed.  Three presets are provided:
 
@@ -238,15 +238,15 @@ The `Objective` wraps this with `value_aux`, `value_and_grad_aux`, `vmap_value_a
 | Property | Value |
 |----------|-------|
 | Setup | Quasi-Universal Interferometer (UIFO) |
-| Parameters | 50–250+ depending on grid size |
+| Parameters | 50-250+ depending on grid size |
 | Noise model | Three sources (same as constrained Voyager) |
 | Constraints | Power thresholds (same as constrained Voyager) |
 | Speed | ~500 ms/eval on A100 GPU |
-| Difficulty | Hard but achievable — the UIFO is overparameterized |
+| Difficulty | Hard but achievable: the UIFO is overparameterized |
 
 ```python
 # From a topology seed (random topology, deterministic from seed)
-problem = UIFOProblem(size=3, n_frequencies=100, topology_seed=42)
+problem = UIFOProblem(size=3, n_frequencies=50, topology_seed=42)
 
 # From a compact topology string
 problem = UIFOProblem(size=3, topology="AECGCCHEG-SLLSSHLLLLS")
@@ -262,7 +262,7 @@ problem = UIFOProblem(
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `size` | `3` | Grid dimensions (3 = 3×3). Larger grids have more components and parameters. |
-| `n_frequencies` | `100` | Frequency points for sensitivity calculation. |
+| `n_frequencies` | `50` | Frequency points for sensitivity calculation. |
 | `topology_seed` | `42` | Seed for random topology generation. Set to `None` (with no other topology args) to generate a truly random topology. The seed is always printed to the console. Mutually exclusive with `topology` and `centers`/`boundaries`. |
 | `topology` | `None` | Compact topology string (see below). Mutually exclusive with `topology_seed`. |
 | `centers` | `None` | Interior cell dict. Must be paired with `boundaries`. Mutually exclusive with `topology_seed` and `topology`. |
@@ -276,12 +276,12 @@ problem = UIFOProblem(
 
 There are three mutually exclusive ways to specify a UIFO topology:
 
-1. **`topology_seed`** — The simplest option. A random topology is generated deterministically from the seed (default: `42`). Pass `topology_seed=None` with no other topology arguments to generate a truly random topology — the seed is printed so you can reproduce it.
-2. **`topology` string** — A compact encoding ideal for configs, papers, and sharing. Uses single-character codes:
-   - **Interior cells:** `A`–`D` = beamsplitter (left/right/top/bottom), `E`–`H` = directional\_beamsplitter (left/right/top/bottom)
+1. **`topology_seed`**: The simplest option. A random topology is generated deterministically from the seed (default: `42`). Pass `topology_seed=None` with no other topology arguments to generate a truly random topology: the seed is printed so you can reproduce it.
+2. **`topology` string**: A compact encoding ideal for configs, papers, and sharing. Uses single-character codes:
+   - **Interior cells:** `A`-`D` = beamsplitter (left/right/top/bottom), `E`-`H` = directional\_beamsplitter (left/right/top/bottom)
    - **Boundary cells:** `L` = laser, `S` = squeezer, `D` = detector, `H` = balanced\_homodyne
    - Format: `"<interior_chars>-<boundary_chars>"` in row-major order.
-3. **`centers` + `boundaries` dicts** — Explicit component placement, matching Differometor’s native format.
+3. **`centers` + `boundaries` dicts**: Explicit component placement, matching Differometor's native format.
 
 Conversion helpers are available:
 
@@ -296,7 +296,7 @@ centers, boundaries = topology_from_string(topology_str, size=3)
 
 A Quasi-Universal Interferometer Field Optimization (UIFO) is a grid-based interferometer where beamsplitters, mirrors, lasers, and squeezers are placed on a grid and connected by spaces. The topology (which components are placed where and how they connect) is generated randomly from `topology_seed` (printed on initialization for reproducibility). Once the topology is fixed, only the continuous parameters (reflectivities, tunings, lengths, etc.) are optimized.
 
-**Rationale — coupled grid-cell spaces:** Horizontal and vertical spaces at the same grid positions are constrained to have equal lengths via `constrain_inter_grid_cell_spaces()`. This preserves the physical grid structure and prevents the optimizer from "folding" the interferometer into a degenerate geometry.
+**Rationale: coupled grid-cell spaces:** Horizontal and vertical spaces at the same grid positions are constrained to have equal lengths via `constrain_inter_grid_cell_spaces()`. This preserves the physical grid structure and prevents the optimizer from "folding" the interferometer into a degenerate geometry.
 
 #### Design note
 
@@ -306,9 +306,9 @@ The reference sensitivity target is always the Voyager detector. Since the UIFO 
 
 ## Reconstruction & Problem Spec
 
-Every problem implements `to_spec() → dict`, which returns a small, JSON-serialisable dict capturing everything needed to rebuild an equivalent instance in a separate process. This is the reconstructive contract that makes checkpoints self-describing.
+Every problem implements `to_spec() -> dict`, which returns a small, JSON-serialisable dict capturing everything needed to rebuild an equivalent instance in a separate process. This is the reconstructive contract that makes checkpoints self-describing.
 
-Starting with dfbench 0.1.1, the raw `to_spec()` dict is wrapped in a typed `ProblemSpec` container (`dfbench.core.problem.ProblemSpec`) that carries an explicit schema `version` and a separated `params` field. Checkpoints embed the container (`ProblemSpec.to_dict()` → `{"type", "version", "params"}`) in `RunMetadata.extra["problem_spec"]`, so consumers get a stable, schema-validated identity instead of an untyped dict. Legacy flat specs (`{"type", <kwargs>}`) written by older versions are still accepted on load via `ProblemSpec.from_dict`.
+Starting with dfbench 0.1.1, the raw `to_spec()` dict is wrapped in a typed `ProblemSpec` container (`dfbench.core.problem.ProblemSpec`) that carries an explicit schema `version` and a separated `params` field. Checkpoints embed the container (`ProblemSpec.to_dict()` -> `{"type", "version", "params"}`) in `RunMetadata.extra["problem_spec"]`, so consumers get a stable, schema-validated identity instead of an untyped dict. Legacy flat specs (`{"type", <kwargs>}`) written by older versions are still accepted on load via `ProblemSpec.from_dict`.
 
 ### How it works
 
@@ -323,11 +323,11 @@ from dfbench.core.problem import ProblemSpec, build_problem_from_spec
 
 # A spec captured from a live problem
 ps = problem.to_problem_spec()
-# ProblemSpec(type="VoyagerProblem", params={"n_frequencies": 100, ...}, version=1)
+# ProblemSpec(type="VoyagerProblem", params={"n_frequencies": 50, ...}, version=1)
 
 # JSON-safe dict for embedding in checkpoint metadata
 spec_dict = ps.to_dict()
-# {"type": "VoyagerProblem", "version": 1, "params": {"n_frequencies": 100, ...}}
+# {"type": "VoyagerProblem", "version": 1, "params": {"n_frequencies": 50, ...}}
 
 # Rebuild an equivalent problem later, in any process
 problem2 = build_problem_from_spec(ps)
@@ -358,7 +358,7 @@ The `params` sub-dict is whatever each problem's `to_spec()` returns minus the `
 
 ### Penalty function encoding
 
-Callables like `power_penalty_fn` are encoded **by name** via a registry of presets (`squashed_relu_penalty`, `relu_penalty`, `zero_penalty`). This keeps the spec JSON-safe. Custom penalty functions that are not registered presets will raise on `to_spec()` — register them or use the built-in presets.
+Callables like `power_penalty_fn` are encoded **by name** via a registry of presets (`squashed_relu_penalty`, `relu_penalty`, `zero_penalty`). This keeps the spec JSON-safe. Custom penalty functions that are not registered presets will raise on `to_spec()`. Register them or use the built-in presets.
 
 ### Reconstructing from a checkpoint
 

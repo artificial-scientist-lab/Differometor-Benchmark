@@ -1,7 +1,13 @@
 """State-of-the-art Bayesian Optimization using BoTorch with batch acquisition."""
 
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from botorch.acquisition import qLogExpectedImprovement as qLogEI
 from botorch.utils.transforms import normalize
 from jaxtyping import Array, Float

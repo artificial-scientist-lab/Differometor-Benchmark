@@ -1,4 +1,4 @@
-"""qKG — Knowledge Gradient acquisition via BoTorch.
+"""qKG: Knowledge Gradient acquisition via BoTorch.
 
 Knowledge Gradient maximises the expected *increase in value of the best
 posterior mean* after observing a new point, providing a one-step Bayes-optimal
@@ -14,7 +14,13 @@ Operates in **bounded** parameter space.
 from __future__ import annotations
 
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -60,8 +66,7 @@ class BotorchqKG(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for BotorchqKG. Install with: "
-                "uv pip install botorch"
+                "BoTorch is required for BotorchqKG. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE

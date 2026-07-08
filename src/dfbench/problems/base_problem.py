@@ -103,7 +103,7 @@ class OpticalSetupProblem(ContinuousProblem):
     def __init__(
         self,
         name: str,
-        n_frequencies: int = 100,
+        n_frequencies: int = 50,
         signal_floor: float = DEFAULT_SIGNAL_FLOOR,
     ):
         """Initialize the optimization problem.
@@ -111,7 +111,7 @@ class OpticalSetupProblem(ContinuousProblem):
         Args:
             name (str): Name of the problem, used for output file naming.
             n_frequencies (int): Number of frequency points for sensitivity calculation.
-                Defaults to 100.
+                Defaults to 50.
             signal_floor: Optional lower bound for detector signal
                 magnitudes before sensitivity normalization.
         """

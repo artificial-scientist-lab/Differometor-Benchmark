@@ -1,4 +1,4 @@
-"""L-BFGS optimizer (Optax) — canonical implementation for this batch.
+"""L-BFGS optimizer (Optax): canonical implementation for this batch.
 
 This wraps ``optax.lbfgs()`` following the same JIT-compiled pattern as
 the existing ``LBFGSGD`` class but registered under the ``optax_*`` naming
@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
-import optax
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for OptaxLBFGS. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
@@ -66,7 +72,7 @@ class OptaxLBFGS(OptimizationAlgorithm):
 
         Args:
             objective: Pre-configured Objective.
-            init_params: Starting point.  ``None`` → random unbounded.
+            init_params: Starting point.  ``None`` -> random unbounded.
             random_seed: Seed for reproducibility.
             patience: Early-stop after this many evals without improvement.
             **lbfgs_kwargs: Forwarded to ``optax.lbfgs()``.

@@ -7,7 +7,7 @@ A :class:`ContinuousProblem` also carries a reconstructive contract via
 :meth:`to_spec` / :meth:`from_spec`: a small, serializable dict that
 captures everything needed to rebuild an *equivalent* problem instance
 in a separate process. This is recorded in checkpoint metadata so a
-saved run is self-describing — the problem identity is recoverable from
+saved run is self-describing: the problem identity is recoverable from
 the file alone, not just from the caller's memory.
 
 The typed container :class:`ProblemSpec` wraps the raw ``to_spec()`` dict
@@ -54,7 +54,7 @@ class ProblemSpec:
 
     The container carries the registry ``type`` (the class name or
     ``spec_type``), a schema ``version`` for the container itself, and
-    ``params`` — the constructor arguments needed to rebuild an
+    ``params``: the constructor arguments needed to rebuild an
     equivalent problem instance. The dict produced by
     :meth:`to_dict` is JSON-safe and is what gets embedded in
     :class:`~dfbench.core.storage.RunMetadata.extra["problem_spec"].
@@ -173,7 +173,7 @@ def build_problem_from_spec(spec: ProblemSpec | dict[str, Any]) -> "ContinuousPr
     """Reconstruct a problem instance from a :class:`ProblemSpec` or dict.
 
     Accepts either a typed :class:`ProblemSpec` container or a raw dict
-    (legacy flat form or typed container form — both are normalized via
+    (legacy flat form or typed container form; both are normalized via
     :meth:`ProblemSpec.from_dict`). The ``type`` key must match a
     registered problem class; remaining keys (or the ``params`` sub-dict)
     are passed as keyword arguments to that class's constructor.
@@ -278,8 +278,8 @@ class ContinuousProblem(ABC):
         an equivalent instance. Callables should be encoded by name (e.g.
         a registered penalty function's ``__name__``).
 
-        Implementations must be pure and cheap — no JAX arrays, no live
-        objects — so the dict can be JSON-serialised and stored in
+        Implementations must be pure and cheap: no JAX arrays, no live
+        objects, so the dict can be JSON-serialised and stored in
         checkpoint metadata.
 
         Prefer :meth:`to_problem_spec` for new code; this method is kept

@@ -10,9 +10,9 @@ Every algorithm must:
 
 1. **Subclass** `OptimizationAlgorithm`
 2. **Declare** `algorithm_str` and `algorithm_type`
-3. **Implement** `optimize(objective, …) → None`
+3. **Implement** `optimize(objective, ...) -> None`
 4. **Use `Objective`** for all function evaluations
-    - *Unless* you use your own JIT-compiled loop — then manually log calls via `Objective.log_evaluation(...)` afterwards. This adds negligible overhead relative to the objective function.
+    - *Unless* you use your own JIT-compiled loop, then manually log calls via `Objective.log_evaluation(...)` afterwards. This adds negligible overhead relative to the objective function.
 
 That's it. No manual timing, history management or file I/O necessary.
 
@@ -24,16 +24,16 @@ Place your algorithm in the appropriate subdirectory:
 
 ```
 src/dfbench/algorithms/
-├── derivative_free/     ← direct search and non-gradient local solvers
-├── global_search/       ← stochastic global optimizers
-├── evolutionary/        ← population-based methods (PSO, ES)
+├── derivative_free/     <- direct search and non-gradient local solvers
+├── global_search/       <- stochastic global optimizers
+├── evolutionary/        <- population-based methods (PSO, ES)
 ├── gradient_based/
-│   ├── optax/           ← Optax optimizer wrappers (subclass OptaxAlgorithm)
-│   ├── scipy/           ← SciPy minimize wrappers (subclass ScipyMinimizeAlgorithm)
-│   ├── custom_jax.py    ← native-JAX custom/hybrid gradient methods
-│   └── *.py             ← custom optimization loops
-├── surrogate_based/     ← builds a surrogate model (BO, kNN, etc.)
-└── generative/          ← generative models (VAE, diffusion, etc.)
+│   ├── optax/           <- Optax optimizer wrappers (subclass OptaxAlgorithm)
+│   ├── scipy/           <- SciPy minimize wrappers (subclass ScipyMinimizeAlgorithm)
+│   ├── custom_jax.py    <- native-JAX custom/hybrid gradient methods
+│   └── *.py             <- custom optimization loops
+├── surrogate_based/     <- builds a surrogate model (BO, kNN, etc.)
+└── generative/          <- generative models (VAE, diffusion, etc.)
 ```
 
 For example: `src/dfbench/algorithms/evolutionary/my_algorithm.py`
@@ -89,7 +89,7 @@ class MyAlgorithm(OptimizationAlgorithm):
             objective: Pre-configured Objective instance.
             max_iterations: Max algorithm iterations (not evals). None = budget only.
                 For algorithms where each iteration performs exactly one evaluation
-                (e.g. gradient-based methods), omit this parameter —
+                (e.g. gradient-based methods), omit this parameter -
                 `obj.budget_exceeded` already handles it.
             init_params: Optional starting point.
             random_seed: Seed for reproducibility.
@@ -164,7 +164,7 @@ from dfbench.algorithms.evolutionary.my_algorithm import MyAlgorithm
 from dfbench.algorithms.evolutionary.my_algorithm import MyAlgorithm
 
 __all__ = [
-    …,
+    ...,
     "MyAlgorithm",
 ]
 ```
@@ -249,7 +249,7 @@ while not obj.budget_exceeded:
 
 ### 7. Done
 
-`optimize()` returns `None`. The `Objective` was mutated in place — the caller (benchmark harness or user script) accesses results from the same instance it passed in. This follows the Python convention that in-place mutating methods return `None` (like `list.sort()`).
+`optimize()` returns `None`. The `Objective` was mutated in place; the caller (benchmark harness or user script) accesses results from the same instance it passed in. This follows the Python convention that in-place mutating methods return `None` (like `list.sort()`).
 
 ---
 
@@ -266,14 +266,14 @@ while not obj.budget_exceeded:
 | `obj.vmap_value_and_grad(batch)` | Batched gradient-based | batch losses, grads, params |
 | `obj.vmap_hessian(batch)` | Batched second-order optimization | batch hessians, batch params |
 | `obj.vmap_value_grad_and_hessian(batch)` | Batched second-order optimization | batch losses, grads, hessians, params |
-| `obj.value_function(…)` | Raw JAX callable for custom JIT loops | nothing; use `log_evaluation` afterwards |
-| `obj.log_evaluation(…)` | Custom JIT'd loop | whatever you pass, including optional Hessians |
+| `obj.value_function(...)` | Raw JAX callable for custom JIT loops | nothing; use `log_evaluation` afterwards |
+| `obj.log_evaluation(...)` | Custom JIT'd loop | whatever you pass, including optional Hessians |
 
 **Important:** `obj.grad()` and `obj.hessian()` do **not** log a loss value. If you need the loss too, use `obj.value_and_grad()` or `obj.value_grad_and_hessian()`.
 
 ### Custom JIT-compiled loops with `log_evaluation()`
 
-Some optimizers (e.g. Optax's L-BFGS) need to call `value_and_grad` *inside* a JIT-compiled function — for instance because the optimizer's line-search requires the raw value function. In that case you can't use `obj.value_and_grad()` (which has Python-side logging). Instead:
+Some optimizers (e.g. Optax's L-BFGS) need to call `value_and_grad` *inside* a JIT-compiled function, for instance because the optimizer's line-search requires the raw value function. In that case you can't use `obj.value_and_grad()` (which has Python-side logging). Instead:
 
 1. Get an unlogged raw value function from `obj.value_function(...)`
 2. Build your own JIT-compiled step
@@ -302,7 +302,7 @@ while not obj.budget_exceeded:
     obj.log_evaluation(prior_params, loss, grads)  # public API for manual logging
 ```
 
-> **Do NOT call** `obj._log()`, `obj._log_evals()`, or `obj._log_to_file()` directly — these are private methods. `log_evaluation()` delegates to `_log()` which coordinates all internal logging.
+> **Do NOT call** `obj._log()`, `obj._log_evals()`, or `obj._log_to_file()` directly; these are private methods. `log_evaluation()` delegates to `_log()` which coordinates all internal logging.
 
 See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/lbfgs_gd.py` for a complete working example.
 
@@ -351,7 +351,7 @@ If you need a different transform than sigmoid, configure it explicitly before l
 ```python
 import jax
 
-# Scalar function — works on floats and arrays alike
+# Scalar function: works on floats and arrays alike
 obj.set_space_mode(
     True,
     unit_mapping=jax.nn.sigmoid,
@@ -362,7 +362,7 @@ obj.set_space_mode(
 Important:
 
 - Always pass both functions together (forward and inverse)
-- The forward maps to [0, 1]; the inverse maps [0, 1] → unbounded. Bounds scaling is handled by `Objective`
+- The forward maps to [0, 1]; the inverse maps [0, 1] -> unbounded. Bounds scaling is handled by `Objective`
 - Functions can be scalar (e.g. `jax.nn.sigmoid`) or element-wise vector; both work because JAX broadcasts element-wise operations. Batching is handled by `Objective` via `jax.vmap`
 - `obj.best_params_bounded` and `obj.random_params_unbounded()` then follow your custom mapping pair
 
@@ -377,10 +377,10 @@ Many algorithms wrap external optimization libraries (EvoX, BoTorch, Optax). Her
 ```python
 from dfbench import t2j, j2t
 
-# Convert JAX → PyTorch for the library
+# Convert JAX -> PyTorch for the library
 params_torch = j2t(params_jax)
 
-# Convert PyTorch → JAX for evaluation
+# Convert PyTorch -> JAX for evaluation
 params_jax = t2j(params_torch)
 losses_jax = obj.vmap_value(params_jax)
 losses_torch = j2t(losses_jax)
@@ -390,7 +390,7 @@ The conversion goes through NumPy and adds negligible overhead relative to evalu
 
 ### JAX-based libraries (Optax)
 
-No conversion needed — Optax operates directly on JAX arrays:
+No conversion needed; Optax operates directly on JAX arrays:
 
 ```python
 import optax

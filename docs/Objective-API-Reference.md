@@ -54,9 +54,9 @@ Objective(
 | `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
 | `save_to_file_every` | `int \| None` | `None` | Automatically checkpoint every N evaluations. `None` disables auto-saving. The time spent saving is excluded from the elapsed-time clock. |
 | `unit_mapping` | `Callable \| None` | `None` | Optional function mapping unbounded params to the **[0, 1] range**. Can be scalar (e.g. `jax.nn.sigmoid`) or element-wise vector. The Objective handles scaling to actual bounds: `bounded = lb + (ub - lb) * f(x)`. If omitted, the default sigmoid is used. |
-| `inverse_unit_mapping` | `Callable \| None` | `None` | Inverse of the forward mapping, mapping [0, 1] → unbounded space. The Objective normalises bounded params to [0, 1] before calling this: `unbounded = f_inv((bounded - lb) / (ub - lb))`. Must be provided whenever `unit_mapping` is provided. |
+| `inverse_unit_mapping` | `Callable \| None` | `None` | Inverse of the forward mapping, mapping [0, 1] -> unbounded space. The Objective normalises bounded params to [0, 1] before calling this: `unbounded = f_inv((bounded - lb) / (ub - lb))`. Must be provided whenever `unit_mapping` is provided. |
 | `hessian_batch_size` | `int` | `1` | Number of Hessian columns to compute simultaneously via `vmap`. `1` (default) is the most memory-efficient (sequential `lax.map`); set to `n_params` for full `jax.hessian` parallelism. |
-| `checkpoint_format` | `str` | `"npz"` | On-disk format for checkpoints. `"npz"` writes compressed NumPy archives; `"json"` writes a pickle-free, human-readable JSON file — useful when loading checkpoints from untrusted sources or when you want to inspect them by hand. No extra imports needed. |
+| `checkpoint_format` | `str` | `"npz"` | On-disk format for checkpoints. `"npz"` writes compressed NumPy archives; `"json"` writes a pickle-free, human-readable JSON file, useful when loading checkpoints from untrusted sources or when you want to inspect them by hand. No extra imports needed. |
 | `checkpoint_dir` | `str \| Path \| None` | `None` | Root directory for checkpoint and output artifacts. Defaults to `./data/objective_run_data`. Pass a path to redirect all artifacts (e.g. to a scratch disk or a `tmp_path` in tests) without importing any storage class. |
 
 To customise the storage stack beyond these two knobs (e.g. a custom serializer or a non-filesystem backend), subclass `Objective` and override `_build_storage`.
@@ -84,7 +84,7 @@ Rules:
 - The forward mapping must produce values in **[0, 1]**; the Objective scales to actual bounds via `bounded = lb + (ub - lb) * f(x)`
 - The inverse mapping receives values already normalised to [0, 1] by the Objective: `unbounded = f_inv((bounded - lb) / (ub - lb))`
 - The inverse should satisfy approximately: `inverse(forward(x)) ≈ x` in the range you optimize over
-- Both callables can be **scalar** functions (e.g. `jax.nn.sigmoid`) or **element-wise vector** functions — JAX broadcasts element-wise operations, so both work. The Objective uses `jax.vmap` for batching regardless
+- Both callables can be **scalar** functions (e.g. `jax.nn.sigmoid`) or **element-wise vector** functions: JAX broadcasts element-wise operations, so both work. The Objective uses `jax.vmap` for batching regardless
 
 Minimal custom example (scalar function):
 
@@ -92,7 +92,7 @@ Minimal custom example (scalar function):
 import jax
 from dfbench import Objective
 
-# sigmoid maps (-inf, +inf) -> (0, 1) — perfect for the [0,1] contract
+# sigmoid maps (-inf, +inf) -> (0, 1): perfect for the [0,1] contract
 obj = Objective(
     problem,
     unbounded=True,
@@ -123,7 +123,7 @@ obj = Objective(
 )
 ```
 
-You do **not** need to handle bounds scaling — the Objective does that automatically.
+You do **not** need to handle bounds scaling; the Objective does that automatically.
 
 ### Choosing what to save
 
@@ -182,7 +182,7 @@ The active configuration is stored as a `SaveConfig` and embedded in every check
 
 ### Storage (internal)
 
-All file I/O (checkpointing, human-readable export) is handled internally by the modular `dfbench.core.storage` layer. The Objective assembles a `CheckpointManager` (with serializer, storage backend, and path resolver) and a `RunDataExporter` behind the scenes using sensible defaults — these components are **not** user-facing constructor parameters. The `save_to_file_every` argument is the only storage-related knob exposed to the user; it sets the periodic checkpoint cadence on the internal manager.
+All file I/O (checkpointing, human-readable export) is handled internally by the modular `dfbench.core.storage` layer. The Objective assembles a `CheckpointManager` (with serializer, storage backend, and path resolver) and a `RunDataExporter` behind the scenes using sensible defaults; these components are **not** user-facing constructor parameters. The `save_to_file_every` argument is the only storage-related knob exposed to the user; it sets the periodic checkpoint cadence on the internal manager.
 
 The storage components are still modular and individually testable (see [Storage & Checkpointing](Storage-and-Checkpointing)). Advanced users who need to swap a serializer, backend, or resolver can subclass `Objective` and override the internal assembly, or use the storage classes directly outside the Objective.
 
@@ -195,38 +195,38 @@ All evaluation methods automatically record their results in the internal histor
 ### Single-point evaluation
 
 ```python
-obj.value(params)              # → float
-obj.grad(params)               # → Array[n_params]
-obj.hessian(params)            # → Array[n_params, n_params]
-obj.value_and_grad(params)     # → (float, Array[n_params])
-obj.value_grad_and_hessian(params)  # → (float, Array[n_params], Array[n_params, n_params])
+obj.value(params)              # -> float
+obj.grad(params)               # -> Array[n_params]
+obj.hessian(params)            # -> Array[n_params, n_params]
+obj.value_and_grad(params)     # -> (float, Array[n_params])
+obj.value_grad_and_hessian(params)  # -> (float, Array[n_params], Array[n_params, n_params])
 ```
 
-- `value(params)` — Evaluates the loss at `params`. Logs loss and params.
-- `grad(params)` — Computes the gradient. Logs grad and params, but **not** a loss value (the loss is not computed).
-- `hessian(params)` — Computes the exact Hessian. Logs Hessian and params, but **not** a loss value.
-- `value_and_grad(params)` — Computes both in a single forward+backward pass. Logs all three. **Preferred when you need both loss and gradient** because it is more efficient than calling `value` and `grad` separately and it logs the loss.
-- `value_grad_and_hessian(params)` — Computes loss, gradient, and Hessian together and logs all four.
+- `value(params)`: Evaluates the loss at `params`. Logs loss and params.
+- `grad(params)`: Computes the gradient. Logs grad and params, but **not** a loss value (the loss is not computed).
+- `hessian(params)`: Computes the exact Hessian. Logs Hessian and params, but **not** a loss value.
+- `value_and_grad(params)`: Computes both in a single forward+backward pass. Logs all three. **Preferred when you need both loss and gradient** because it is more efficient than calling `value` and `grad` separately and it logs the loss.
+- `value_grad_and_hessian(params)`: Computes loss, gradient, and Hessian together and logs all four.
 
 ### Batched evaluation
 
 ```python
-obj.vmap_value(params_batch)              # → Array[batch]
-obj.vmap_grad(params_batch)               # → Array[batch, n_params]
-obj.vmap_hessian(params_batch)            # → Array[batch, n_params, n_params]
-obj.vmap_value_and_grad(params_batch)     # → (Array[batch], Array[batch, n_params])
+obj.vmap_value(params_batch)              # -> Array[batch]
+obj.vmap_grad(params_batch)               # -> Array[batch, n_params]
+obj.vmap_hessian(params_batch)            # -> Array[batch, n_params, n_params]
+obj.vmap_value_and_grad(params_batch)     # -> (Array[batch], Array[batch, n_params])
 obj.vmap_value_grad_and_hessian(params_batch)
-# → (Array[batch], Array[batch, n_params], Array[batch, n_params, n_params])
+# -> (Array[batch], Array[batch, n_params], Array[batch, n_params, n_params])
 ```
 
 Convenience aliases:
 
 ```python
-obj.batched_value(…)            # same as vmap_value
-obj.batched_grad(…)             # same as vmap_grad
-obj.batched_hessian(…)          # same as vmap_hessian
-obj.batched_value_and_grad(…)   # same as vmap_value_and_grad
-obj.batched_value_grad_and_hessian(…)  # same as vmap_value_grad_and_hessian
+obj.batched_value(...)            # same as vmap_value
+obj.batched_grad(...)             # same as vmap_grad
+obj.batched_hessian(...)          # same as vmap_hessian
+obj.batched_value_and_grad(...)   # same as vmap_value_and_grad
+obj.batched_value_grad_and_hessian(...)  # same as vmap_value_grad_and_hessian
 ```
 
 Batched methods use `jax.vmap` and evaluate the entire batch as **one** history entry. The eval counter is incremented by the batch size. When `"batched_loss"` is not in the `save` list (default), only the batch minimum loss is stored.
@@ -236,10 +236,10 @@ Batched methods use `jax.vmap` and evaluate the entire batch as **one** history 
 Available on problems that opt into the power-penalty contract (`ConstrainedVoyagerProblem`, `UIFOProblem`). These methods return the loss plus an `aux` pytree dict carrying the loss decomposition, a physical `is_feasible` flag, per-constraint violations, and the raw per-group power arrays. See the [Power thresholds and aux diagnostics](#power-thresholds-and-aux-diagnostics) section for the aux schema.
 
 ```python
-obj.value_aux(params)                     # → (float, dict)
-obj.value_and_grad_aux(params)            # → (float, Array[n_params], dict)
-obj.vmap_value_aux(params_batch)          # → (Array[batch], dict)
-obj.vmap_value_and_grad_aux(params_batch) # → (Array[batch], Array[batch, n_params], dict)
+obj.value_aux(params)                     # -> (float, dict)
+obj.value_and_grad_aux(params)            # -> (float, Array[n_params], dict)
+obj.vmap_value_aux(params_batch)          # -> (Array[batch], dict)
+obj.vmap_value_and_grad_aux(params_batch) # -> (Array[batch], Array[batch, n_params], dict)
 ```
 
 - `value_aux(params)` returns `(loss, aux)`. The loss is logged into the standard loss history; aux fields are recorded into the per-field aux histories only when the matching save token is enabled.
@@ -292,7 +292,7 @@ Because this callable is intentionally unlogged, pair it with `obj.log_evaluatio
 ### Manual logging
 
 ```python
-obj.log_evaluation(params=…, loss=…, grad=…, hessian=…)
+obj.log_evaluation(params=..., loss=..., grad=..., hessian=...)
 ```
 
 For algorithms with custom JIT-compiled evaluation loops that use `obj.value_function(...)` instead of calling `obj.value()` directly. Accepts the same `params`, `loss`, `grad`, `hessian` arguments and performs identical history recording.
@@ -310,7 +310,7 @@ Starts the wall-clock timer. **Must be called after JIT warmup and before the op
 obj.warmup_value_and_grad()           # warmup
 obj.start_logging()                    # timer starts NOW
 while not obj.budget_exceeded:
-    …
+    ...
 ```
 
 ### `warmup_*()`
@@ -428,7 +428,7 @@ Returns uniform random samples inside `problem.bounds`.
 
 Generates samples uniform in the bounded space then maps them to unbounded space using:
 
-- your custom `inverse_unit_mapping` if provided — the Objective normalises bounded samples to [0, 1] first, then calls your inverse
+- your custom `inverse_unit_mapping` if provided: the Objective normalises bounded samples to [0, 1] first, then calls your inverse
 - otherwise the default inverse sigmoid (logit)
 
 With the matching forward mapping, this round-trip holds:
@@ -460,11 +460,11 @@ bounded ≈ lb + (ub - lb) * forward(random_params_unbounded(...))
 | `max_time` | `float \| None` | The wall-clock time budget in seconds, or `None` if unlimited. |
 | `evals_left` | `int \| None` | Remaining evaluation budget. `None` if unlimited. |
 | `evals_exceeded` | `bool` | Whether the evaluation cap has been reached. |
-| `evals_progress_fraction` | `float` | Fraction of eval budget consumed (0–1). |
+| `evals_progress_fraction` | `float` | Fraction of eval budget consumed (0-1). |
 | `time_elapsed` | `float` | Seconds since `start_logging()`. |
 | `time_left` | `float \| None` | Seconds remaining. `None` if unlimited. |
 | `time_exceeded` | `bool` | Whether the time cap has been reached. |
-| `time_progress_fraction` | `float` | Fraction of time budget consumed (0–1). |
+| `time_progress_fraction` | `float` | Fraction of time budget consumed (0-1). |
 | `budget_left_fraction` | `float` | Fraction of the tightest budget remaining. `min(1 - time_progress, 1 - evals_progress)`, considering only budgets that are set. 1.0 when no budget is configured. |
 | `budget_progress_fraction` | `float` | Fraction of the tightest budget consumed (`1 - budget_left_fraction`). 0.0 when no budget is configured. |
 | `budget_exceeded` | `bool` | `True` when **any** budget (time **or** evals) is exhausted. This is the main loop-termination check. |
@@ -532,7 +532,7 @@ The aux histories are aligned with the standard histories by index. Non-aux eval
 | Property | Type | Description |
 |----------|------|-------------|
 | `improvement_count` | `int` | How many times `best_loss` was improved. |
-| `evals_since_improvement` | `int` | Evaluations since the last improvement — useful for patience-based early stopping. |
+| `evals_since_improvement` | `int` | Evaluations since the last improvement, useful for patience-based early stopping. |
 
 ---
 
@@ -540,7 +540,7 @@ The aux histories are aligned with the standard histories by index. Non-aux eval
 
 All file I/O is handled internally by the modular `dfbench.core.storage` layer (see [Storage & Checkpointing](Storage-and-Checkpointing)). The Objective builds and applies the canonical `RunState` data contract; the serializer, backend, and resolver are assembled internally with sensible defaults.
 
-### `save_run_data(algorithm_name=None, filepath=None, hyper_param_str=None) → Path`
+### `save_run_data(algorithm_name=None, filepath=None, hyper_param_str=None) -> Path`
 
 Saves the full optimization state to a checkpoint file via the internal `CheckpointManager.save()`. The serializer (default `NpzCheckpointSerializer`) encodes a `RunState` snapshot; the backend (default `LocalFilesystemBackend`) writes it **atomically** (temp file in the same directory + `os.replace`), so an interrupted job never leaves a half-written file. If `algorithm_name` is not provided it defaults to `self.algorithm_str` (or `"unknown"`).
 
@@ -552,7 +552,7 @@ The first save without explicit overrides caches the path; subsequent periodic s
 
 ### `load_run_data(filepath)`
 
-Restores all tracking state from a checkpoint via `CheckpointManager.load()` → `Objective._apply_run_state()`. Adjusts `start_time` so that `time_elapsed` continues seamlessly from where the checkpoint left off. The loaded path is cached so a later `save_run_data()` overwrites the same file. If the checkpoint's `SaveConfig` differs from the current Objective's, a warning is printed (when `verbose >= 1`).
+Restores all tracking state from a checkpoint via `CheckpointManager.load()` -> `Objective._apply_run_state()`. Adjusts `start_time` so that `time_elapsed` continues seamlessly from where the checkpoint left off. The loaded path is cached so a later `save_run_data()` overwrites the same file. If the checkpoint's `SaveConfig` differs from the current Objective's, a warning is printed (when `verbose >= 1`).
 
 The originating `Problem` can be rebuilt from the embedded `problem_spec`:
 
@@ -566,7 +566,7 @@ if spec is not None:
     problem = build_problem_from_spec(ProblemSpec.from_dict(spec))
 ```
 
-### `output_to_files(hyper_param_str="", hyper_param_str_in_filename=True) → Path`
+### `output_to_files(hyper_param_str="", hyper_param_str_in_filename=True, *, write_parameters_json=True, write_losses_json=True, write_losses_png=True, write_sensitivity_png=True) -> Path`
 
 Writes human-readable outputs via `RunDataExporter.export()`, which derives everything from a `RunState` snapshot (not a second write path):
 - JSON with best parameters (bounded space)
@@ -574,9 +574,11 @@ Writes human-readable outputs via `RunDataExporter.export()`, which derives ever
 - PNG plot of the loss curve
 - (For optical problems) PNG plot of the sensitivity curve vs. target
 
-Output directory (built by the exporter): `data/problem_output/{problem_name}/{algorithm_str}/{hyper_param_str}/`
+Output directory (built by the exporter): `data/problem_output/{problem_name}/{algorithm_str}_{hyper_param_str}/` (collapsing to just `{algorithm_str}` when there is no hyperparameter string). When `hyper_param_str` is not passed explicitly, it is read from the run state's `metadata.hyper_param_str`.
 
-### `get_summary() → dict`
+Each artifact is independently optional; pass the corresponding `write_*` flag as `False` to skip that file. The output directory is still created and returned regardless of which artifacts are written. The `write_sensitivity_png` flag is an additional gate on top of the existing optical-problem condition; passing `True` does not force a sensitivity plot on a non-optical problem.
+
+### `get_summary() -> dict`
 
 Returns a snapshot dictionary:
 
@@ -601,11 +603,11 @@ Returns a snapshot dictionary:
 Every evaluation method follows the same pipeline internally:
 
 1. **Execute** the JAX function (`_func`, `_value_and_grad_func`, `_vmap_func`, etc.)
-2. **`_log(params, loss, grad, hessian)`** — the coordinator: checks `time_exceeded`, appends to `_time_steps`, then delegates to `_log_evals()` and `_log_to_file()`.
-3. **`_log_evals(params, loss, grad, hessian, time_exceeded)`** — record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget. Receives `time_exceeded` as an explicit parameter from `_log()` to ensure a consistent time snapshot.
-4. **`_log_to_file()`** — calls `CheckpointManager.tick(eval_count, state_factory)`, which checks the cadence (`save_every`, set from `save_to_file_every`), lazily builds a `RunState` only when a checkpoint is due, saves it through the internal `StorageBackend`, and returns the wall-clock duration of the save. The Objective advances `_start_time` by that duration so the checkpoint write does not consume wall-clock budget.
+2. **`_log(params, loss, grad, hessian)`**: the coordinator: checks `time_exceeded`, appends to `_time_steps`, then delegates to `_log_evals()` and `_log_to_file()`.
+3. **`_log_evals(params, loss, grad, hessian, time_exceeded)`**: record histories; update `best_loss` / `best_params`; update `improvement_count` / `evals_since_improvement`; check eval budget. Receives `time_exceeded` as an explicit parameter from `_log()` to ensure a consistent time snapshot.
+4. **`_log_to_file()`**: calls `CheckpointManager.tick(eval_count, state_factory)`, which checks the cadence (`save_every`, set from `save_to_file_every`), lazily builds a `RunState` only when a checkpoint is due, saves it through the internal `StorageBackend`, and returns the wall-clock duration of the save. The Objective advances `_start_time` by that duration so the checkpoint write does not consume wall-clock budget.
 
-> **Important:** These are private methods — do not call `_log()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad, hessian=None)` method instead, which delegates to `_log()`. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm#custom-jit-compiled-loops-with-log_evaluation) for details.
+> **Important:** These are private methods; do not call `_log()`, `_log_evals()`, or `_log_to_file()` directly from algorithm code. If you want manual logging, use the public `log_evaluation(params, loss, grad, hessian=None)` method instead, which delegates to `_log()`. See the [JIT-compiled loop guide](Implementing-a-New-Algorithm#custom-jit-compiled-loops-with-log_evaluation) for details.
 
 Budget enforcement happens *after* the evaluation returns. This means the algorithm always receives a valid result, but once any budget is exceeded the history stops growing and `budget_exceeded` becomes `True`.
 

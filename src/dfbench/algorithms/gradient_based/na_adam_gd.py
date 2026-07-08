@@ -1,7 +1,13 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for this algorithm. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 from typing import Literal
 from jaxtyping import Array, Float
 

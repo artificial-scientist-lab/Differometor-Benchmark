@@ -20,7 +20,7 @@ You can use it to:
 
 Differometor is implemented in Python using the [JAX](https://docs.jax.dev/en/latest/index.html) framework and closely follows the design of the established [Finesse simulator](https://finesse.ifosim.org/).
 
-📄 **Documentation**: Read details about the inner workings of Differometor [here](media/documentation.pdf).
+**Documentation**: Read details about the inner workings of Differometor [here](media/documentation.pdf).
 
 <img src="media/workflow.png" alt="workflow" width="500"/>
 
@@ -60,7 +60,7 @@ pip install --upgrade "jax[cuda12]==0.5.0"
 
 ## Overview
 
-Differometor’s implementation closely follows the design of the established [Finesse simulator](https://finesse.ifosim.org/). Differometor can simulate:
+Differometor's implementation closely follows the design of the established [Finesse simulator](https://finesse.ifosim.org/). Differometor can simulate:
 
 * Plane wave propagation in quasi-static, user-specified interferometer configurations
 * Light field modulations / signal propagation
@@ -322,7 +322,7 @@ The output figures show that after 6000 iterations, the optimization successfull
 
 ## Documentation
 
-📄 **Documentation**: Read details about the inner workings of Differometor [here](media/documentation.pdf).
+**Documentation**: Read details about the inner workings of Differometor [here](media/documentation.pdf).
 
 Differometor provides a Setup class to define the interferometer setup. You can add the following components:
 

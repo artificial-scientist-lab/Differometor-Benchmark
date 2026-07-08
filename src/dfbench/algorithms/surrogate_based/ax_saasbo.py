@@ -1,4 +1,4 @@
-"""SAASBO — Sparse Axis-Aligned Subspace BO via Ax/BoTorch.
+"""SAASBO: Sparse Axis-Aligned Subspace BO via Ax/BoTorch.
 
 Uses fully Bayesian GP inference with a sparsity-inducing half-Cauchy prior on
 lengthscales, making it effective in high-dimensional spaces where only a few
@@ -19,7 +19,13 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -56,8 +62,7 @@ class AxSAASBO(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _AX_AVAILABLE:
             raise ImportError(
-                "Ax is required for AxSAASBO. Install with: "
-                "uv pip install 'ax-platform[botorch]'"
+                "Ax is required for AxSAASBO. Install with: uv add 'dfbench[bo]'"
             )
 
     def optimize(

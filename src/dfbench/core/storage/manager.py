@@ -242,7 +242,7 @@ class CheckpointManager:
         """Return the embedded ``problem_spec`` dict from a loaded state, if any.
 
         The returned dict is the raw form stored in
-        ``metadata.extra["problem_spec"]`` — either the typed container
+        ``metadata.extra["problem_spec"]``: either the typed container
         (``{"type", "version", "params"}``) or the legacy flat form
         (``{"type", <kwargs>}``). Callers that want the typed
         :class:`~dfbench.core.problem.ProblemSpec` container should

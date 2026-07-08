@@ -80,12 +80,12 @@ class TestProblemRegistry:
 
 class TestProblemSpec:
     def test_construct_and_to_dict(self):
-        ps = ProblemSpec(type="VoyagerProblem", params={"n_frequencies": 100})
+        ps = ProblemSpec(type="VoyagerProblem", params={"n_frequencies": 50})
         d = ps.to_dict()
         assert d == {
             "type": "VoyagerProblem",
             "version": PROBLEM_SPEC_VERSION,
-            "params": {"n_frequencies": 100},
+            "params": {"n_frequencies": 50},
         }
 
     def test_from_dict_typed_container(self):

@@ -1,13 +1,12 @@
 """SAM (Sharpness-Aware Minimization) optimizer (Optax contrib)."""
 
 import jax
-import optax
-import optax.contrib
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
     _is_nonfinite,
     _MAX_NAN_STREAK,
+    optax,
 )
 from dfbench.core.objective import Objective
 
@@ -58,7 +57,7 @@ class OptaxSAM(OptaxAlgorithm):
         grad_clip_norm=1.0,
         **kwargs,
     ):
-        """SAM loop — two gradient evaluations per logical step."""
+        """SAM loop: two gradient evaluations per logical step."""
         obj = objective
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 

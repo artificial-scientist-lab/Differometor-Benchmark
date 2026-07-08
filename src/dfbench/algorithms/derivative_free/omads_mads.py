@@ -10,7 +10,7 @@ They are suited for rugged-landscape local exploration, not global
 black-box optimization.
 
 Requires:
-    OMADS >= 2408.0 (``pip install OMADS``)
+    OMADS >= 2408.0 (``uv add 'dfbench[dfo]'``)
 
 Note:
     OMADS has a known attribute-name mismatch with recent ``samplersLib``
@@ -30,7 +30,7 @@ from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
 
 # ---------------------------------------------------------------------------
-# OMADS compatibility shim — fix attribute name mismatch in samplersLib
+# OMADS compatibility shim: fix attribute name mismatch in samplersLib
 # ---------------------------------------------------------------------------
 
 _OMADS_IMPORT_ERROR: str | None = None
@@ -61,7 +61,7 @@ def _check_omads_available() -> None:
         raise ImportError(
             f"OMADS is required for MADS/OrthoMADS algorithms but could not be "
             f"imported: {_OMADS_IMPORT_ERROR}\n"
-            f"Install with: pip install OMADS"
+            f"Install with: uv add 'dfbench[dfo]'"
         )
 
 
@@ -115,7 +115,7 @@ def _run_omads(
         init = obj.random_params_bounded()
         baseline = np.array(init, dtype=np.float64).tolist()
 
-    # OMADS budget — set generously; Objective budget is the real limiter.
+    # OMADS budget: set generously; Objective budget is the real limiter.
     omads_budget = obj.max_evals if obj.max_evals is not None else 1_000_000
 
     # --- blackbox callable ---------------------------------------------------

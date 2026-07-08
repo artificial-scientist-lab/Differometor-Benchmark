@@ -78,7 +78,7 @@ def random_bounded_start(
             is returned alongside the sample.
 
     Returns:
-        (x0, new_key) – x0 is a 1-D ``np.ndarray`` of shape ``(n_params,)``.
+        (x0, new_key): x0 is a 1-D ``np.ndarray`` of shape ``(n_params,)``.
     """
     key, subkey = random.split(key)
     lower, upper = obj.problem.bounds
@@ -123,7 +123,7 @@ def multistart_loop(
     Args:
         obj: The Objective instance (already logging).
         key: JAX PRNG key for sampling restarts.
-        solve_fn: ``(x0: np.ndarray) -> None`` – runs one solver call.
+        solve_fn: ``(x0: np.ndarray) -> None``: runs one solver call.
         n_restarts: Total number of solver invocations.
         init_params: Optional starting point for the first restart.
     """

@@ -1,4 +1,4 @@
-"""LineBO — Line Bayesian Optimization via BoTorch.
+"""LineBO: Line Bayesian Optimization via BoTorch.
 
 Restricts each BO iteration to a 1-D line through the ambient space.  The
 line direction rotates between random directions and the gradient at the
@@ -17,7 +17,13 @@ Operates in **bounded** parameter space.
 from __future__ import annotations
 
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -61,7 +67,7 @@ class LineBO(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for LineBO. Install with: uv pip install botorch"
+                "BoTorch is required for LineBO. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE
@@ -169,7 +175,7 @@ class LineBO(OptimizationAlgorithm):
                 1, scramble=True, seed=random_seed + iteration
             )
             T = sobol_1d.draw(line_samples).to(self.device, self.dtype).squeeze(-1)
-            T = T * (t_hi - t_lo) + t_lo  # map [0,1]→[t_lo, t_hi]
+            T = T * (t_hi - t_lo) + t_lo  # map [0,1]->[t_lo, t_hi]
 
             X_line = center.unsqueeze(0) + T.unsqueeze(-1) * d.unsqueeze(0)
             X_line = torch.clamp(X_line, 0.0, 1.0)

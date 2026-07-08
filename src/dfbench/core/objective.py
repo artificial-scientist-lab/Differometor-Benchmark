@@ -36,37 +36,37 @@ class Objective:
 
     Core responsibilities
     ---------------------
-    1. **Function evaluation** – exposes ``value``, ``grad``, ``hessian``,
+    1. **Function evaluation**: exposes ``value``, ``grad``, ``hessian``,
        ``value_and_grad``, and ``value_grad_and_hessian`` for single-point
        queries as well as ``vmap_value``, ``vmap_grad``, ``vmap_hessian``,
        and their combined variants (aliased as ``batched_*``) for batched
        evaluation.  The instance is also callable: ``obj(params)`` is
        equivalent to ``obj.value(params)``.
 
-    2. **Budget enforcement** – honours ``max_evals`` and ``max_time``
+    2. **Budget enforcement**: honours ``max_evals`` and ``max_time``
        constraints.  Once a budget is exhausted the ``budget_exceeded``
        flag is raised and further evaluations are no longer logged.
 
-    3. **History tracking** – maintains aligned histories of losses, params,
+    3. **History tracking**: maintains aligned histories of losses, params,
        gradients, evaluation types, and elapsed time.  The ``save`` list of
        string tokens (plus the three standard flags ``save_time_steps``,
        ``save_params_history``, and ``save_batched_params_history``) controls what is stored; the active
        configuration is recorded as a :class:`SaveConfig` and embedded in
        every checkpoint so a resumed run can detect mismatches.
 
-        4. **Bounded / unbounded mode** – when ``unbounded=True`` the objective
+        4. **Bounded / unbounded mode**: when ``unbounded=True`` the objective
              is evaluated through a configurable mapping from unbounded to bounded
              space (default: sigmoid transform) so that algorithms can optimise in
              unconstrained $(-\\infty, +\\infty)$ space while the underlying
              problem remains bounded.  Custom mappings map to the [0, 1] range;
              the Objective scales to actual bounds automatically.
 
-    5. **Reproducible random sampling** – ``set_seed`` initialises a JAX
+    5. **Reproducible random sampling**: ``set_seed`` initialises a JAX
        PRNG key that is consumed by ``random_params_bounded`` and
        ``random_params_unbounded``, guaranteeing identical initial
        populations across runs.
 
-    6. **Checkpointing & I/O** – ``save_run_data`` / ``load_run_data``
+    6. **Checkpointing & I/O**: ``save_run_data`` / ``load_run_data``
        persist the full optimisation state to compressed NPZ files;
        ``output_to_files`` writes human-readable JSON + PNG summaries.
 
@@ -87,39 +87,39 @@ class Objective:
     --------------
     **Evaluation**
 
-    - ``value(params)``            – scalar loss.
-    - ``grad(params)``             – gradient vector.
-    - ``hessian(params)``          – Hessian matrix.
-    - ``value_and_grad(params)``   – both in one forward+backward pass.
-    - ``value_grad_and_hessian(params)`` – loss, gradient, and Hessian.
-    - ``vmap_value(params)``       – batched losses   (alias ``batched_value``).
-    - ``vmap_grad(params)``        – batched gradients (alias ``batched_grad``).
-    - ``vmap_hessian(params)``     – batched Hessians (alias ``batched_hessian``).
-    - ``vmap_value_and_grad(params)`` – batched loss + grad.
-    - ``vmap_value_grad_and_hessian(params)`` – batched loss + grad + Hessian.
+    - ``value(params)``: scalar loss.
+    - ``grad(params)``: gradient vector.
+    - ``hessian(params)``: Hessian matrix.
+    - ``value_and_grad(params)``: both in one forward+backward pass.
+    - ``value_grad_and_hessian(params)``: loss, gradient, and Hessian.
+    - ``vmap_value(params)``: batched losses   (alias ``batched_value``).
+    - ``vmap_grad(params)``: batched gradients (alias ``batched_grad``).
+    - ``vmap_hessian(params)``: batched Hessians (alias ``batched_hessian``).
+    - ``vmap_value_and_grad(params)``: batched loss + grad.
+    - ``vmap_value_grad_and_hessian(params)``: batched loss + grad + Hessian.
 
     **Lifecycle**
 
-    - ``warmup_*()``               – deterministic two-call JAX warmups; call
+    - ``warmup_*()``: deterministic two-call JAX warmups; call
       before ``start_logging()``.
-    - ``start_logging()``          – starts the wall-clock timer; call before optimising.
-    - ``reset()``                  – clears all histories / counters for a fresh run.
+    - ``start_logging()``: starts the wall-clock timer; call before optimising.
+    - ``reset()``: clears all histories / counters for a fresh run.
 
     **Random sampling**
 
-        - ``set_seed(seed)``             – set JAX PRNG seed for reproducibility.
-        - ``random_params(n)``           – samples from the active parameter space.
-        - ``random_params_bounded(n)``   – uniform samples inside parameter bounds.
-        - ``random_params_unbounded(n)`` – samples mapped to unbounded space via
+        - ``set_seed(seed)``: set JAX PRNG seed for reproducibility.
+        - ``random_params(n)``: samples from the active parameter space.
+        - ``random_params_bounded(n)``: uniform samples inside parameter bounds.
+        - ``random_params_unbounded(n)``: samples mapped to unbounded space via
             inverse mapping (default: inverse-sigmoid).  For custom mappings
             the Objective normalises to [0, 1] before calling the inverse.
 
     **I/O**
 
-    - ``save_run_data(...)``       – checkpoint to compressed NPZ.
-    - ``load_run_data(filepath)``  – restore from checkpoint.
-    - ``output_to_files(...)``     – write JSON params/losses + PNG plots.
-    - ``get_summary()``            – dict snapshot of current run statistics.
+    - ``save_run_data(...)``: checkpoint to compressed NPZ.
+    - ``load_run_data(filepath)``: restore from checkpoint.
+    - ``output_to_files(...)``: write JSON params/losses + PNG plots.
+    - ``get_summary()``: dict snapshot of current run statistics.
 
     Key properties
     --------------
@@ -176,9 +176,9 @@ class Objective:
     +------------------------------------+---------------------------------------------------+
     | ``evals_since_improvement``        | Evaluations since last improvement.               |
     +------------------------------------+---------------------------------------------------+
-    | ``evals_progress_fraction``        | Fraction of eval budget consumed (0–1).           |
+    | ``evals_progress_fraction``        | Fraction of eval budget consumed (0-1).           |
     +------------------------------------+---------------------------------------------------+
-    | ``time_progress_fraction``         | Fraction of time budget consumed (0–1).           |
+    | ``time_progress_fraction``         | Fraction of time budget consumed (0-1).           |
     +------------------------------------+---------------------------------------------------+
     | ``budget_left_fraction``           | Fraction of tightest budget remaining (1->0).     |
     +------------------------------------+---------------------------------------------------+
@@ -262,7 +262,7 @@ class Objective:
             unit_mapping: Optional function that maps unbounded
                 parameters to the [0, 1] range (unit interval).  Can be a
                 scalar function (e.g. ``jax.nn.sigmoid``) or a vector function
-                operating element-wise on arrays — both work because JAX
+                operating element-wise on arrays; both work because JAX
                 broadcasts element-wise operations.  The Objective handles
                 scaling from [0, 1] to the actual problem bounds:
                 ``bounded = lower + (upper - lower) * f(unbounded)``.
@@ -281,7 +281,7 @@ class Objective:
                 ``n_params`` compute columns in chunks.
             checkpoint_format: On-disk format for checkpoints. ``"npz"``
                 (default) writes compressed NumPy archives; ``"json"`` writes a
-                pickle-free, human-readable JSON file — useful when loading
+                pickle-free, human-readable JSON file, useful when loading
                 checkpoints from untrusted sources or when you want to inspect
                 them by hand. No extra imports needed.
             checkpoint_dir: Root directory for checkpoint and output artifacts.
@@ -479,7 +479,7 @@ class Objective:
         """Map params from bounded to unbounded space using configured inverse.
 
         For custom mappings, normalises to [0, 1] first, then calls the
-        user-provided inverse which maps [0, 1] → (-∞, +∞).
+        user-provided inverse which maps [0, 1] -> (-∞, +∞).
         """
         if self._inverse_unit_mapping is not None:
             arr = jnp.asarray(params)
@@ -702,7 +702,7 @@ class Objective:
                 scales to actual bounds: ``lb + (ub - lb) * f(x)``.
                 Must be passed together with ``inverse_unit_mapping``.
             inverse_unit_mapping: Inverse of the forward mapping,
-                mapping [0, 1] → (-∞, +∞).  The Objective normalises bounded
+                mapping [0, 1] -> (-∞, +∞).  The Objective normalises bounded
                 params to [0, 1] before calling this.  Must be passed together
                 with ``unit_mapping``.
 
@@ -2904,6 +2904,11 @@ class Objective:
         self,
         hyper_param_str: str = "",
         hyper_param_str_in_filename: bool = True,
+        *,
+        write_parameters_json: bool = True,
+        write_losses_json: bool = True,
+        write_losses_png: bool = True,
+        write_sensitivity_png: bool = True,
     ) -> Path:
         """Output optimization results to human-readable files (plots + JSON).
 
@@ -2917,11 +2922,21 @@ class Objective:
         {algorithm_str}/{hyper_param_str}/`` by default (configurable via
         the exporter's ``root``).
 
+        Each artifact is independently optional; pass ``write_*`` as
+        ``False`` to skip that file. The output directory is still created
+        and returned regardless of which artifacts are written.
+
         Args:
             hyper_param_str: Hyperparameter string for directory naming
                 (e.g., "lr0.1_patience500").
             hyper_param_str_in_filename: Whether to include hyperparams in
                 filename.
+            write_parameters_json: Write the best-parameters JSON file.
+            write_losses_json: Write the loss-history JSON file.
+            write_losses_png: Write the loss-curve PNG plot.
+            write_sensitivity_png: Write the sensitivity PNG plot. Only
+                produced when the problem exposes sensitivity data; the
+                flag is an additional gate on top of that condition.
 
         Returns:
             Path to the output directory.
@@ -2932,4 +2947,8 @@ class Objective:
             problem=self._problem,
             hyper_param_str=hyper_param_str,
             hyper_param_str_in_filename=hyper_param_str_in_filename,
+            write_parameters_json=write_parameters_json,
+            write_losses_json=write_losses_json,
+            write_losses_png=write_losses_png,
+            write_sensitivity_png=write_sensitivity_png,
         )

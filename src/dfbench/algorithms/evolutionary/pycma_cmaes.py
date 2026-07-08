@@ -11,13 +11,13 @@ Voyager), the CMA search runs in the unit cube ``[0, 1]^n`` and candidates
 are mapped to physical bounds (``lb + u * (ub - lb)``) only at evaluation
 time, so a single scalar ``sigma`` is a sensible step for every coordinate.
 
-Unbounded mode is not supported by this backend — the algorithms expect a
+Unbounded mode is not supported by this backend; the algorithms expect a
 finite domain and will raise ``ValueError`` during ``optimize()`` if the
 Objective has been configured in unbounded mode prior to this call.
 
 Requires
 --------
-    pycma >= 3.3  (``uv add cma``)
+    pycma >= 3.3  (``uv add 'dfbench[evolution]'``)
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ try:
     import cma
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "pycma is required for PyCMA* algorithms. Install it with:  uv add cma"
+        "pycma is required for PyCMA* algorithms. Install it with:  uv add 'dfbench[evolution]'"
     ) from exc
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
@@ -462,9 +462,9 @@ class PyCMABIPOP(OptimizationAlgorithm):
 
     After the first run, BIPOP alternates between two regimes:
 
-    * **Large population** – population size is doubled each time this regime
+    * **Large population**: population size is doubled each time this regime
       is entered, and the initial step size is reset to ``sigma0``.
-    * **Small population** – population size is drawn uniformly at random
+    * **Small population**: population size is drawn uniformly at random
       from the range ``[base_pop, large_pop // 2]``; initial step size is
       drawn from ``sigma0 × 10^U(−2, 0)``.
 

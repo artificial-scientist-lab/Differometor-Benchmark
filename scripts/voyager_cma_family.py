@@ -54,7 +54,7 @@ try:
         (PyCMABIPOP(batch_size=POP_SIZE), {"pop_size": POP_SIZE, "max_restarts": 10}),
     ]
 except ImportError:
-    print("pycma not installed — skipping pycma algorithms.")
+    print("pycma not installed, skipping pycma algorithms.")
 
 # --- cmaes ---
 try:
@@ -62,7 +62,7 @@ try:
 
     configs.append((CMAESSepCMA(batch_size=POP_SIZE), {"pop_size": POP_SIZE}))
 except ImportError:
-    print("cmaes not installed — skipping CMAESSepCMA.")
+    print("cmaes not installed, skipping CMAESSepCMA.")
 
 # --- evosax ---
 try:
@@ -73,7 +73,7 @@ try:
         (EvosaxLMMAES(batch_size=POP_SIZE), {"pop_size": POP_SIZE}),
     ]
 except ImportError:
-    print("evosax not installed — skipping evosax algorithms.")
+    print("evosax not installed, skipping evosax algorithms.")
 
 # --- native JAX ---
 

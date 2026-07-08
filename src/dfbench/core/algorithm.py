@@ -84,7 +84,7 @@ class OptimizationAlgorithm(ABC):
         Subclasses must override this method and implement their algorithm-specific logic
         in step 6 (main optimization loop).
 
-        The Objective instance is mutated in place — all logged data (losses, params,
+        The Objective instance is mutated in place; all logged data (losses, params,
         gradients, timestamps) is recorded directly into it. There is no return value;
         the caller already holds the reference.
 
@@ -148,7 +148,7 @@ class OptimizationAlgorithm(ABC):
             ...  # --------- Looped algorithm logic here ---------
             # Loss printing is also done by the Objective. The frequency can be set in its __init__().
 
-        # 7. Done — the Objective instance now contains all logged data.
+        # 7. Done. The Objective instance now contains all logged data.
         # What data is logged is decided by the user initializing the Objective.
         # Plotting and saving to file can be done afterwards by calling methods on the Objective.
         # If automatic file saving was enabled by the user, the data is already saved to file and can be loaded from there as well.

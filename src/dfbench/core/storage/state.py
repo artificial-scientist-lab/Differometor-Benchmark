@@ -151,15 +151,15 @@ class RunState:
 # Invariant contract
 # ------------------------------------------------------------------
 #
-# The validator is a pure function — no I/O, no exceptions raised. It
+# The validator is a pure function: no I/O, no exceptions raised. It
 # *collects* every violation so a competition rejection report lists all
-# problems in one pass rather than one-at-a-time (raise→catch→raise→catch).
+# problems in one pass rather than one-at-a-time (raise->catch->raise->catch).
 #
 # Two tiers are checked:
 #
-# * **Structural (A)** — cheap type/shape/range checks that always hold
+# * **Structural (A)**: cheap type/shape/range checks that always hold
 #   for a well-formed ``RunState``. Checked on every call.
-# * **Semantic (B)** — cross-field consistency checks (e.g.
+# * **Semantic (B)**: cross-field consistency checks (e.g.
 #   ``best_loss == nanmin(loss_history)``). Skipped when ``strict=False``
 #   because they can transiently fail for a partial mid-run snapshot (for
 #   example, when ``best_params`` was intentionally left empty by a
@@ -260,7 +260,7 @@ def _history_len(a: np.ndarray) -> int:
     entries, the canonical serializer contract) or as N-D numeric arrays
     (when NumPy collapses uniform-shape object arrays, e.g. five (2,)
     gradients become shape (5, 2)). In both cases the first axis is the
-    time axis. A 0-d array is treated as length 0 — it should never occur
+    time axis. A 0-d array is treated as length 0; it should never occur
     for a well-formed history but ``np.array([])`` is 1-d so this branch
     is defensive only.
     """
@@ -280,7 +280,7 @@ def _history_alignment_target(state: RunState) -> int:
 def _check_structural(state: RunState) -> list[RunStateValidationError]:
     errs: list[RunStateValidationError] = []
 
-    # A1 — eval_count is a non-negative int
+    # A1: eval_count is a non-negative int
     if not _is_nonneg_int(state.eval_count):
         errs.append(
             RunStateValidationError(
@@ -290,7 +290,7 @@ def _check_structural(state: RunState) -> list[RunStateValidationError]:
             )
         )
 
-    # A2 — the six aligned histories are numpy arrays. NumPy collapses
+    # A2: the six aligned histories are numpy arrays. NumPy collapses
     # uniform-shape object arrays to N-D numeric arrays (e.g. a grad
     # history of five (2,)-vectors becomes shape (5, 2)), so we only
     # require an ndarray; A3 checks the *first* axis is the time axis.
@@ -320,7 +320,7 @@ def _check_structural(state: RunState) -> list[RunStateValidationError]:
                 )
             )
 
-    # A4 — best_params is 1-D float64, or empty
+    # A4: best_params is 1-D float64, or empty
     bp = state.best_params
     if not isinstance(bp, np.ndarray):
         errs.append(
@@ -339,7 +339,7 @@ def _check_structural(state: RunState) -> list[RunStateValidationError]:
             )
         )
 
-    # A5 — eval_type_counts keys are ints, values non-negative ints
+    # A5: eval_type_counts keys are ints, values non-negative ints
     counts = state.eval_type_counts
     if not isinstance(counts, dict):
         errs.append(
@@ -370,7 +370,7 @@ def _check_structural(state: RunState) -> list[RunStateValidationError]:
                 )
                 break
 
-    # A6 — metadata is a RunMetadata
+    # A6: metadata is a RunMetadata
     if not isinstance(state.metadata, RunMetadata):
         errs.append(
             RunStateValidationError(
@@ -380,7 +380,7 @@ def _check_structural(state: RunState) -> list[RunStateValidationError]:
             )
         )
 
-    # A7 — scalar counters are non-negative ints
+    # A7: scalar counters are non-negative ints
     for name in ("improvement_count", "evals_since_improvement", "log_call_count"):
         v = getattr(state, name)
         if not _is_nonneg_int(v):
@@ -398,7 +398,7 @@ def _check_structural(state: RunState) -> list[RunStateValidationError]:
 def _check_aligned(
     state: RunState, errs: list[RunStateValidationError]
 ) -> dict[str, int]:
-    """A3 — aligned lengths for non-empty histories.
+    """A3: aligned lengths for non-empty histories.
 
     Histories may legitimately be empty (a SaveConfig flag is off, or the
     run was reduced by ``RunData.to_run_state`` which drops grad/hessian/
@@ -496,7 +496,7 @@ def _check_semantic(
     has_loss = _has_recorded_loss(state.loss_history, loss_n)
     bl = float(state.best_loss)
 
-    # B1 — best_loss is finite iff a non-NaN loss was recorded.
+    # B1: best_loss is finite iff a non-NaN loss was recorded.
     # grad-only / hessian-only evals increment eval_count and append NaN
     # to loss_history without updating best_loss, so best_loss==inf with
     # eval_count>0 is legal as long as no real loss was recorded.
@@ -523,7 +523,7 @@ def _check_semantic(
             )
         )
 
-    # B2 — best_loss == nanmin(loss_history) when a loss was recorded.
+    # B2: best_loss == nanmin(loss_history) when a loss was recorded.
     # nanmin handles batched entries and NaN placeholders. Skipped when
     # no loss was recorded (B1 covers that case).
     if has_loss and not np.isinf(bl):
@@ -549,7 +549,7 @@ def _check_semantic(
                 )
             )
 
-    # B4 — sum(eval_type_counts.values()) == log_call_count
+    # B4: sum(eval_type_counts.values()) == log_call_count
     if isinstance(state.eval_type_counts, dict):
         total = sum(int(v) for v in state.eval_type_counts.values())
         if total != int(state.log_call_count):
@@ -564,7 +564,7 @@ def _check_semantic(
                 )
             )
 
-    # B5 — improvement_count <= log_call_count
+    # B5: improvement_count <= log_call_count
     if int(state.improvement_count) > int(state.log_call_count):
         errs.append(
             RunStateValidationError(
@@ -577,7 +577,7 @@ def _check_semantic(
             )
         )
 
-    # B6 — evals_since_improvement <= eval_count
+    # B6: evals_since_improvement <= eval_count
     if int(state.evals_since_improvement) > int(state.eval_count):
         errs.append(
             RunStateValidationError(
@@ -607,7 +607,7 @@ def validate_run_state(state: RunState, *, strict: bool = True) -> ValidationRep
     Args:
         state: The snapshot to validate.
         strict: When ``True`` (default), run both the structural and
-            semantic tiers. When ``False``, skip the semantic tier — use
+            semantic tiers. When ``False``, skip the semantic tier; use
             this for partial mid-run snapshots where a B-tier invariant
             can transiently fail (e.g. ``best_params`` not yet set, or a
             ``RunData.to_run_state`` reduction that zeroes the counters).

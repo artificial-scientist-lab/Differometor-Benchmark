@@ -7,7 +7,7 @@ registry below so the test bodies themselves stay identical.
 
 Two goals drive this:
 
-* Every algorithm is held to the same contract — it produces evaluations,
+* Every algorithm is held to the same contract: it produces evaluations,
   leaves the ``Objective`` in a consistent state, respects bounds, etc.
 * Adding a new algorithm requires nothing more than appending one entry to
   ``REGISTRY``; the full set of tests then runs against it automatically.
@@ -39,7 +39,7 @@ from dfbench.algorithms import (
     BotorchBO,
     BotorchTuRBO,
     BotorchqKG,
-    BotorchqNEI,
+    BotorchQNEI,
     CMAESSepCMA,
     COBYLA,
     COBYQA,
@@ -171,8 +171,8 @@ def _botorch_kwargs(max_evals: int) -> dict[str, Any]:
     return {"max_iterations": 2, "n_initial": min(5, max(2, max_evals // 4))}
 
 
-# Order: misc gradient → optax → scipy → evolutionary → derivative-free
-# → global search → surrogate → generative.
+# Order: misc gradient -> optax -> scipy -> evolutionary -> derivative-free
+# -> global search -> surrogate -> generative.
 # To add a new algorithm, append one AlgoSpec entry here.
 REGISTRY: list[AlgoSpec] = [
     # -- misc gradient-based --------------------------------------------------
@@ -299,7 +299,7 @@ REGISTRY: list[AlgoSpec] = [
         extra_kwargs=_botorch_kwargs,
     ),
     AlgoSpec(
-        BotorchqNEI,
+        BotorchQNEI,
         AlgorithmType.SURROGATE_BASED,
         unbounded=False,
         extra_kwargs=_botorch_kwargs,
@@ -534,7 +534,7 @@ class TestBoundsContract:
     )
     def test_native_bounded_raw_params_inside_box(self, spec: AlgoSpec, mock_problem):
         """For native-bounded algorithms, the raw ``best_params`` must also
-        lie inside the box — there is no sigmoid postprocessing to fall back on.
+        lie inside the box; there is no sigmoid postprocessing to fall back on.
         """
         obj = _run(spec, mock_problem)
         bp = np.asarray(obj.best_params)

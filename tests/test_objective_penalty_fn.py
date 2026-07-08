@@ -2,7 +2,7 @@
 
 Mirrors ``test_objective_space_mode.py``: ``set_penalty_fn`` must update
 the problem's penalty function, re-trace the JIT-compiled objective, and
-rebind the Objective's cached evaluation callables — all before
+rebind the Objective's cached evaluation callables, all before
 ``start_logging()``.
 """
 
@@ -106,7 +106,7 @@ class TestSetPenaltyFn:
     def test_set_penalty_fn_takes_effect(self, problem):
         """Switching to zero_penalty removes the penalty term from the loss."""
         obj = Objective(problem)
-        params = jnp.array([0.0, 0.0])  # zero base loss → loss == penalty
+        params = jnp.array([0.0, 0.0])  # zero base loss -> loss == penalty
 
         default_loss = float(obj.value(params))
         assert default_loss > 0.0  # squashed_relu produces a penalty
@@ -156,7 +156,7 @@ class TestSetPenaltyFn:
         loss_composed = float(obj.value(params))
 
         # In unbounded space the params are sigmoid-mapped away from the
-        # bounds, and the penalty is now zero — value must differ.
+        # bounds, and the penalty is now zero; value must differ.
         assert loss_composed != pytest.approx(loss_bounded)
         assert obj.unbounded is True
         assert obj.penalty_fn is zero_penalty

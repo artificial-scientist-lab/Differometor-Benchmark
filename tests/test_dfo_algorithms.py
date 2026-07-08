@@ -1,4 +1,4 @@
-"""Section 7b — Derivative-free algorithm unit tests with mock problem.
+"""Section 7b: Derivative-free algorithm unit tests with mock problem.
 
 Smoke tests and parametrized checks for PDFO (UOBYQA, NEWUOA, LINCOA)
 and Py-BOBYQA algorithms.

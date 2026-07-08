@@ -1,6 +1,6 @@
-"""Section 4 (partial) — Problem bounds overrides and penalty functions.
+"""Section 4 (partial): Problem bounds overrides and penalty functions.
 
-Tests 4.10–4.11, 4.15, 4.21–4.26 — these do NOT require Differometor simulation.
+Tests 4.10-4.11, 4.15, 4.21-4.26: these do NOT require Differometor simulation.
 """
 
 from __future__ import annotations
@@ -46,7 +46,7 @@ class _StubProblem(OpticalSetupProblem):
 
 
 # ======================================================================
-# _apply_property_bounds_overrides (4.21–4.23)
+# _apply_property_bounds_overrides (4.21-4.23)
 # ======================================================================
 
 
@@ -98,7 +98,7 @@ class TestApplyPropertyBoundsOverrides:
 
 
 # ======================================================================
-# Penalty functions (4.24–4.26)
+# Penalty functions (4.24-4.26)
 # ======================================================================
 
 

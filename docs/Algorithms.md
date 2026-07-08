@@ -1,6 +1,6 @@
 # Algorithms
 
-All built-in algorithms subclass `OptimizationAlgorithm` and follow a common contract: they receive a pre-configured `Objective`, run their optimization loop, and mutate it in place (logging all results). `optimize()` returns `None` — the caller accesses results from the same `Objective` instance it passed in.
+All built-in algorithms subclass `OptimizationAlgorithm` and follow a common contract: they receive a pre-configured `Objective`, run their optimization loop, and mutate it in place (logging all results). `optimize()` returns `None`; the caller accesses results from the same `Objective` instance it passed in.
 
 **Import:**
 
@@ -23,7 +23,7 @@ from dfbench.algorithms import (
     RandomSearch,                            # generic, blackbox global search
     BasinHopping, DualAnnealing,             # SciPy global search
     BotorchBO, BotorchTuRBO,                 # surrogate-based (standard)
-    AxSAASBO, BAxUS, BotorchqNEI, BotorchqKG,  # structured BO
+    AxSAASBO, BAxUS, BotorchQNEI, BotorchqKG,  # structured BO
     REMBO, GEBO, LineBO, TuRBOLBFGS,            # geometry / hybrid BO
     HEBO, SMAC,                                  # external BO packages
     VAESampling,                              # generative
@@ -116,12 +116,12 @@ optimizer.optimize(
 
 | Hyperparameter | Default | Description |
 |----------------|---------|-------------|
-| `T0` | `15.0` | Initial temperature. Higher → more frequent gradient ascent. |
+| `T0` | `15.0` | Initial temperature. Higher -> more frequent gradient ascent. |
 | `sigma` | `1.0` | Multiplicative expansion of the gradient when performing ascent. |
 | `max_ascent_prob` | `0.33` | Hard cap on ascent probability. The paper recommends < 0.33 for convergence. |
 | `use_double_annealing` | `False` | Use the "double SA" formula for exponentially decaying learning rates. |
 
-**Rationale — why gradient ascent?** Local minima are a major issue in high-dimensional non-convex landscapes. SA-GD occasionally moves uphill with a probability that depends on the temperature and the loss difference, similar to Metropolis–Hastings. This gives the optimizer a chance to escape shallow local minima early in the run, while converging normally once the temperature cools.
+**Rationale: why gradient ascent?** Local minima are a major issue in high-dimensional non-convex landscapes. SA-GD occasionally moves uphill with a probability that depends on the temperature and the loss difference, similar to Metropolis-Hastings. This gives the optimizer a chance to escape shallow local minima early in the run, while converging normally once the temperature cools.
 
 ---
 
@@ -155,7 +155,7 @@ optimizer.optimize(
 | `noise_cap_relative_to_update` | `0.25` | Caps noise to this fraction of the Adam update norm. |
 | `noise_cap_start_iter` | `500` | Iteration at which relative capping activates. |
 
-**Rationale — noise capping:** Without capping, noise can overwhelm the optimizer update when gradients are very small (near a plateau). The relative cap ensures noise never exceeds 25% (by default) of the Adam step magnitude.
+**Rationale: noise capping:** Without capping, noise can overwhelm the optimizer update when gradients are very small (near a plateau). The relative cap ensures noise never exceeds 25% (by default) of the Adam step magnitude.
 
 ---
 
@@ -163,7 +163,7 @@ optimizer.optimize(
 
 L-BFGS optimizer from Optax. Uses second-order curvature information for faster convergence on smooth landscapes.
 
-> **Note:** Because `optax.lbfgs` needs a raw value function for its internal line-search, this algorithm gets one from `obj.value_function(unbounded=True)`, JIT-compiles the full optimization step, and uses `obj.log_evaluation()` to record results after each step instead of calling `obj.value_and_grad()` directly. This makes it a useful reference for implementing other algorithms that require custom JIT-compiled evaluation loops — see `src/dfbench/algorithms/gradient_based/lbfgs_gd.py`.
+> **Note:** Because `optax.lbfgs` needs a raw value function for its internal line-search, this algorithm gets one from `obj.value_function(unbounded=True)`, JIT-compiles the full optimization step, and uses `obj.log_evaluation()` to record results after each step instead of calling `obj.value_and_grad()` directly. This makes it a useful reference for implementing other algorithms that require custom JIT-compiled evaluation loops (see `src/dfbench/algorithms/gradient_based/lbfgs_gd.py`).
 
 ```python
 optimizer = LBFGSGD()
@@ -258,7 +258,7 @@ optimizer.optimize(
 
 ---
 
-### EvoxES (Evolution Strategies — EvoX backend)
+### EvoxES (Evolution Strategies: EvoX backend)
 
 Uses EvoX's evolution strategy implementations. Similar structure to EvoxPSO but with different algorithmic families. Note: the EvoX backend is distinct from the pycma / cmaes / evosax CMA-family wrappers in the same `evolutionary/` package.
 
@@ -335,7 +335,7 @@ optimizer.optimize(
 | `num_evaluations` | `1` | Repeated evals per candidate (averaged). Each counts against budget. |
 | `max_iterations` | `None` | Total ask/tell cap across restarts. |
 
-**Rationale — repeated evaluations:** On noisy landscapes, averaging multiple evaluations per candidate gives the optimizer a more stable signal. Set `num_evaluations > 1` when evaluation noise is suspected.
+**Rationale: repeated evaluations:** On noisy landscapes, averaging multiple evaluations per candidate gives the optimizer a more stable signal. Set `num_evaluations > 1` when evaluation noise is suspected.
 
 ---
 
@@ -357,7 +357,7 @@ optimizer.optimize(
 | `n_restarts` | `1` | Independent restarts. |
 | `max_iterations` | `None` | Total ask/tell cap across restarts. |
 
-**Rationale — why include NGOpt?** It represents Nevergrad's best automatic guess for a given problem. Comparing it against hand-tuned algorithms reveals whether manual algorithm selection adds value.
+**Rationale: why include NGOpt?** It represents Nevergrad's best automatic guess for a given problem. Comparing it against hand-tuned algorithms reveals whether manual algorithm selection adds value.
 
 ---
 
@@ -365,11 +365,11 @@ optimizer.optimize(
 
 Ten CMA-family and evolution-strategy algorithms live in `src/dfbench/algorithms/evolutionary/` alongside the EvoX backend. Each class names its backend explicitly in `algorithm_str` so benchmark runs can be distinguished.
 
-**Required packages** (install with `uv add cma cmaes evosax`):
-- `pycma` >= 3.3 — for `PyCMA*` classes
-- `cmaes` >= 0.10 — for `CMAESCMA` and `CMAESSepCMA`
-- `evosax` >= 0.1.6 — for `Evosax*` classes
-- `jax` (already a dependency) — for `JAX*` classes
+**Required packages** (install with `uv add 'dfbench[evolution]'`):
+- `pycma` >= 3.3: for `PyCMA*` classes
+- `cmaes` >= 0.10: for `CMAESCMA` and `CMAESSepCMA`
+- `evosax` >= 0.1.6: for `Evosax*` classes
+- `jax` (already a dependency): for `JAX*` classes
 
 ```python
 from dfbench.algorithms import (
@@ -380,7 +380,7 @@ from dfbench.algorithms import (
 )
 ```
 
-#### PyCMACMAES (pycma — vanilla CMA-ES)
+#### PyCMACMAES (pycma: vanilla CMA-ES)
 
 ```python
 optimizer = PyCMACMAES(batch_size=50)
@@ -394,7 +394,7 @@ optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_iterations=500, random_seed
 | `sigma0` | `0.3·mean(ub−lb)` | Initial step size (optimize). |
 | `max_iterations` | `None` | Generation cap (optimize). |
 
-#### PyCMAActiveCMAES (pycma — aCMA-ES)
+#### PyCMAActiveCMAES (pycma: aCMA-ES)
 
 Identical to `PyCMACMAES` with `CMA_active=True`. Uses negative weight updates for unsuccessful directions.
 
@@ -403,7 +403,7 @@ optimizer = PyCMAActiveCMAES(batch_size=50)
 optimizer.optimize(obj, pop_size=50, random_seed=0)
 ```
 
-#### PyCMAIPOP (pycma — IPOP-CMA-ES)
+#### PyCMAIPOP (pycma: IPOP-CMA-ES)
 
 Restarts CMA-ES up to `max_restarts` times, doubling the population size each time.
 
@@ -419,7 +419,7 @@ optimizer.optimize(obj, pop_size=20, max_restarts=5, random_seed=0, max_iteratio
 | `max_restarts` | `9` | Maximum restarts (optimize). |
 | `max_iterations_per_restart` | `None` | Per-restart generation cap (optimize). |
 
-#### PyCMABIPOP (pycma — BIPOP-CMA-ES)
+#### PyCMABIPOP (pycma: BIPOP-CMA-ES)
 
 Alternates between large-population and small-population restarts following Hansen 2009.
 
@@ -428,7 +428,7 @@ optimizer = PyCMABIPOP(batch_size=20)
 optimizer.optimize(obj, pop_size=20, max_restarts=10, random_seed=0)
 ```
 
-#### CMAESCMA (cmaes package — full-covariance CMA-ES)
+#### CMAESCMA (cmaes package: full-covariance CMA-ES)
 
 Standard CMA-ES using the `cmaes.CMA` backend. The search is performed in the unit cube and mapped to physical bounds for objective evaluation.
 
@@ -444,7 +444,7 @@ optimizer.optimize(obj, pop_size=50, sigma0=0.3, max_iterations=500, random_seed
 | `sigma0` | `0.3` | Initial step size as a fraction of the unit cube (optimize). |
 | `max_no_improvement` | `None` | Stop on stagnation after N generations (optimize). |
 
-#### CMAESSepCMA (cmaes package — sep-CMA-ES)
+#### CMAESSepCMA (cmaes package: sep-CMA-ES)
 
 Diagonal covariance matrix; O(n²) instead of O(n³) per update.
 
@@ -459,7 +459,7 @@ optimizer.optimize(obj, pop_size=50, sigma0=0.5, max_no_improvement=100, random_
 | `pop_size` | library default | Population size (optimize). |
 | `max_no_improvement` | `None` | Stop on stagnation after N generations (optimize). |
 
-#### EvosaxMAES (evosax — MA-ES)
+#### EvosaxMAES (evosax: MA-ES)
 
 Matrix Adaptation ES via the evosax JAX library.
 
@@ -468,7 +468,7 @@ optimizer = EvosaxMAES(batch_size=64)
 optimizer.optimize(obj, pop_size=64, sigma0=0.3, max_iterations=1000, random_seed=0)
 ```
 
-#### EvosaxLMMAES (evosax — LM-MA-ES)
+#### EvosaxLMMAES (evosax: LM-MA-ES)
 
 Limited-memory MA-ES; O(n·m) storage where m is `memory_size`.
 
@@ -477,7 +477,7 @@ optimizer = EvosaxLMMAES(batch_size=64)
 optimizer.optimize(obj, pop_size=64, memory_size=10, random_seed=0)
 ```
 
-#### JAXOnePlusOneES (native JAX — (1+1)-ES)
+#### JAXOnePlusOneES (native JAX: (1+1)-ES)
 
 Single-parent ES with the 1/5 success rule. No optional dependencies.
 
@@ -486,7 +486,7 @@ optimizer = JAXOnePlusOneES()
 optimizer.optimize(obj, sigma0=0.3, sigma_min=1e-10, success_window=20, max_iterations=5000, random_seed=0)
 ```
 
-#### JAXMuLambdaES (native JAX — (μ,λ)-ES)
+#### JAXMuLambdaES (native JAX: (μ,λ)-ES)
 
 Comma-selection ES with isotropic Gaussian mutations and cumulative step-size adaptation. No optional dependencies.
 
@@ -552,9 +552,9 @@ optimizer.optimize(
 
 Model-based derivative-free trust-region solvers by M. J. D. Powell.  All run in **bounded physical space** with multistart restarts.  Each call solves a quadratic model in a shrinking trust region; convergence is local but very precise on smooth landscapes.
 
-**Required packages** (install with `uv add pdfo Py-BOBYQA`):
-- `pdfo` — for `PDFOUOBYQA`, `PDFONEWUOA`, `PDFOLINCOA`
-- `Py-BOBYQA` — for `PyBOBYQA`
+**Required packages** (install with `uv add 'dfbench[dfo]'`):
+- `pdfo`: for `PDFOUOBYQA`, `PDFONEWUOA`, `PDFOLINCOA`
+- `Py-BOBYQA`: for `PyBOBYQA`
 
 ```python
 from dfbench.algorithms import PDFOUOBYQA, PDFONEWUOA, PDFOLINCOA, PyBOBYQA
@@ -583,7 +583,7 @@ optimizer.optimize(objective=obj, random_seed=42)
 
 ---
 
-### SciPy Classics — Nelder-Mead & Powell
+### SciPy Classics: Nelder-Mead & Powell
 
 Two non-gradient SciPy classics, exposed as `dfbench` algorithms via the shared SciPy DFO wrapper.  Both run in **bounded physical space**.
 
@@ -604,7 +604,7 @@ from dfbench.algorithms import NelderMead, Powell
 
 ---
 
-## Global Search — BasinHopping & DualAnnealing
+## Global Search: BasinHopping & DualAnnealing
 
 SciPy's stochastic global optimizers, useful as rugged-landscape baselines.  Both wrap a local minimizer (defaults to L-BFGS-B) and explore via random perturbations.
 
@@ -642,7 +642,7 @@ optimizer.optimize(
 |----------------|---------|-------------|
 | `batch_size` | `100` | Samples per batch. |
 
-**Rationale — why include random search?** It serves as the baseline for all other algorithms. If a sophisticated method can't beat random search, something is wrong with its configuration or the problem is too easy to differentiate methods.
+**Rationale: why include random search?** It serves as the baseline for all other algorithms. If a sophisticated method can't beat random search, something is wrong with its configuration or the problem is too easy to differentiate methods.
 
 ---
 
@@ -699,9 +699,9 @@ optimizer.optimize(
 | `n_restarts` | `None` | Maximum trust-region restarts; `None` means restart until budget exhaustion. |
 
 **Trust region mechanics:**
-- After `success_tolerance` consecutive improvements → region **doubles** in size.
-- After `failure_tolerance` consecutive non-improvements → region **halves** in size.
-- When region shrinks below `length_min` → **restart** from scratch (re-initialize Sobol samples).
+- After `success_tolerance` consecutive improvements -> region **doubles** in size.
+- After `failure_tolerance` consecutive non-improvements -> region **halves** in size.
+- When region shrinks below `length_min` -> **restart** from scratch (re-initialize Sobol samples).
 - With `n_restarts=None`, these restarts are not capped separately; the objective budget is the stopping condition.
 
 ---
@@ -731,13 +731,13 @@ optimizer.optimize(
 | `k_neighbors` | `10` | Neighbors for kNN regression. |
 | `temperature` | `1.0` | Controls exploration vs exploitation. Higher = more exploration. |
 
-**Rationale — why kNN instead of GP?** GPs have $O(n^3)$ fitting cost, making them impractical for large training sets. kNN regression with inverse-distance weighting runs in $O(n)$ per query via JAX's `top_k`, scales to 100k+ candidates, and stays entirely on GPU.
+**Rationale: why kNN instead of GP?** GPs have $O(n^3)$ fitting cost, making them impractical for large training sets. kNN regression with inverse-distance weighting runs in $O(n)$ per query via JAX's `top_k`, scales to 100k+ candidates, and stays entirely on GPU.
 
 ---
 
 ### AxSAASBO (Sparse Axis-Aligned Subspace BO)
 
-Fully Bayesian GP with a sparsity-inducing half-Cauchy prior on lengthscales. Effective when only a few dimensions matter. Requires the `ax-platform` package.
+Fully Bayesian GP with a sparsity-inducing half-Cauchy prior on lengthscales. Effective when only a few dimensions matter. Requires the `dfbench[bo]` extra.
 
 Reference: Eriksson & Jankowiak, *High-Dimensional Bayesian Optimization with Sparse Axis-Aligned Subspaces*, UAI 2021.
 
@@ -788,14 +788,14 @@ optimizer.optimize(
 
 ---
 
-### BotorchqNEI (Noisy Expected Improvement)
+### BotorchQNEI (Noisy Expected Improvement)
 
 Uses `qNoisyExpectedImprovement` which accounts for observation noise in the acquisition function.
 
 Reference: Letham et al., *Noisy Expected Improvement*, NeurIPS 2019.
 
 ```python
-optimizer = BotorchqNEI()
+optimizer = BotorchQNEI()
 optimizer.optimize(
     objective=obj,
     max_iterations=50,
@@ -816,7 +816,7 @@ optimizer.optimize(
 
 ### BotorchqKG (Knowledge Gradient)
 
-Maximises the expected increase in posterior best after one more observation — a one-step Bayes-optimal lookahead.
+Maximises the expected increase in posterior best after one more observation, a one-step Bayes-optimal lookahead.
 
 Reference: Wu & Frazier, *The Parallel Knowledge Gradient Method*, NeurIPS 2016.
 
@@ -916,9 +916,9 @@ optimizer.optimize(
 
 ---
 
-### TuRBOLBFGS (TuRBO → L-BFGS)
+### TuRBOLBFGS (TuRBO -> L-BFGS)
 
-Two-phase hybrid: Phase 1 runs TuRBO in bounded space to locate a basin; Phase 2 runs Optax L-BFGS on the sigmoid objective internally for fast local convergence. The Objective stays in bounded mode throughout — Phase 2 results are logged via `log_evaluation` with bounded params.
+Two-phase hybrid: Phase 1 runs TuRBO in bounded space to locate a basin; Phase 2 runs Optax L-BFGS on the sigmoid objective internally for fast local convergence. The Objective stays in bounded mode throughout; Phase 2 results are logged via `log_evaluation` with bounded params.
 
 ```python
 optimizer = TuRBOLBFGS()
@@ -942,7 +942,7 @@ optimizer.optimize(
 
 ### HEBO (Heteroscedastic Evolutionary BO)
 
-Winner of the NeurIPS 2020 BBO challenge. Uses a heteroscedastic GP, input warping, and multi-objective acquisition. Requires the `HEBO` package.
+Winner of the NeurIPS 2020 BBO challenge. Uses a heteroscedastic GP, input warping, and multi-objective acquisition. Requires the `dfbench[bo]` extra.
 
 Reference: Cowen-Rivers et al., *An Empirical Study of Assumptions in Bayesian Optimisation*, 2020.
 
@@ -965,7 +965,7 @@ optimizer.optimize(
 
 ### SMAC (Sequential Model-based Algorithm Configuration)
 
-Random-forest-based surrogate with racing. The de-facto standard for hyperparameter optimisation. Requires the `smac` package.
+Random-forest-based surrogate with racing. The de-facto standard for hyperparameter optimisation. Requires the `dfbench[smac]` extra.
 
 Reference: Lindauer et al., *SMAC3*, JMLR 2022.
 
@@ -1024,7 +1024,7 @@ optimizer.optimize(
 - Cyclic $\beta$-annealing for stable training.
 - After training, BO seeds its GP with the encoded top training samples plus decoded Sobol latent samples, then uses batched `qLogEI` acquisition in the learned latent space.
 
-**Rationale — why compress to latent space?** High-dimensional BO suffers from the curse of dimensionality. The VAE learns which parameter combinations matter, projecting the search into a much lower-dimensional space where the GP surrogate is more effective.
+**Rationale: why compress to latent space?** High-dimensional BO suffers from the curse of dimensionality. The VAE learns which parameter combinations matter, projecting the search into a much lower-dimensional space where the GP surrogate is more effective.
 
 ---
 
@@ -1088,7 +1088,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, weight_decay=1e-4, random_s
 
 ### OptaxAdaBelief
 
-AdaBelief — adapts step sizes based on *belief* in the gradient ([Zhuang et al., 2020](https://arxiv.org/abs/2010.07468)).
+AdaBelief: adapts step sizes based on *belief* in the gradient ([Zhuang et al., 2020](https://arxiv.org/abs/2010.07468)).
 
 ```python
 optimizer = OptaxAdaBelief()
@@ -1121,7 +1121,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 
 ### OptaxAdaGrad
 
-Adaptive gradient method — per-parameter learning rates decay based on accumulated squared gradients ([Duchi et al., 2011](https://jmlr.org/papers/v12/duchi11a.html)).
+Adaptive gradient method: per-parameter learning rates decay based on accumulated squared gradients ([Duchi et al., 2011](https://jmlr.org/papers/v12/duchi11a.html)).
 
 ```python
 optimizer = OptaxAdaGrad()
@@ -1132,7 +1132,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 
 ### OptaxAdaDelta
 
-AdaDelta — learning-rate-free adaptive method using running averages ([Zeiler, 2012](https://arxiv.org/abs/1212.5701)).
+AdaDelta: learning-rate-free adaptive method using running averages ([Zeiler, 2012](https://arxiv.org/abs/1212.5701)).
 
 ```python
 optimizer = OptaxAdaDelta()
@@ -1143,7 +1143,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 
 ### OptaxAdaMax
 
-AdaMax — $L^\infty$ variant of Adam ([Kingma & Ba, 2015](https://arxiv.org/abs/1412.6980)).
+AdaMax: $L^\infty$ variant of Adam ([Kingma & Ba, 2015](https://arxiv.org/abs/1412.6980)).
 
 ```python
 optimizer = OptaxAdaMax()
@@ -1180,7 +1180,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 
 ### OptaxLion
 
-Evolved sign momentum optimizer — discovered via meta-learning ([Chen et al., 2023](https://arxiv.org/abs/2302.06675)).
+Evolved sign momentum optimizer: discovered via meta-learning ([Chen et al., 2023](https://arxiv.org/abs/2302.06675)).
 
 ```python
 optimizer = OptaxLion()
@@ -1228,7 +1228,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, weight_decay=1e-4, random_s
 
 ### OptaxRMSProp
 
-RMSProp — root mean square propagation ([Hinton, 2012](https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)).
+RMSProp: root mean square propagation ([Hinton, 2012](https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf)).
 
 ```python
 optimizer = OptaxRMSProp()
@@ -1239,7 +1239,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 
 ### OptaxRProp
 
-RProp — resilient backpropagation with sign-based updates ([Riedmiller & Braun, 1993](https://ieeexplore.ieee.org/document/298623)).
+RProp: resilient backpropagation with sign-based updates ([Riedmiller & Braun, 1993](https://ieeexplore.ieee.org/document/298623)).
 
 ```python
 optimizer = OptaxRProp()
@@ -1250,7 +1250,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 
 ### OptaxRAdam
 
-Rectified Adam — variance-rectified adaptive learning rate ([Liu et al., 2020](https://arxiv.org/abs/1908.03265)).
+Rectified Adam: variance-rectified adaptive learning rate ([Liu et al., 2020](https://arxiv.org/abs/1908.03265)).
 
 ```python
 optimizer = OptaxRAdam()
@@ -1293,7 +1293,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, eta=0.01, gamma=0.55, rando
 
 ### OptaxPolyakSGD
 
-Polyak step-size SGD — adapts step size using $\text{step} = (f(x) - f^*) / \lVert g \rVert^2$.
+Polyak step-size SGD: adapts step size using $\text{step} = (f(x) - f^*) / \lVert g \rVert^2$.
 
 > **Note:** Requires passing the current loss to `optimizer.update()`, so this algorithm uses a custom loop.
 
@@ -1311,7 +1311,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, f_min=0.0, random_seed=42)
 
 ### OptaxSAM
 
-Sharpness-Aware Minimization — seeks flat minima by perturbing towards the worst-case neighbourhood ([Foret et al., 2021](https://arxiv.org/abs/2010.01412)).
+Sharpness-Aware Minimization: seeks flat minima by perturbing towards the worst-case neighbourhood ([Foret et al., 2021](https://arxiv.org/abs/2010.01412)).
 
 > **Note:** Each SAM iteration uses **two** `value_and_grad` evaluations (one adversarial, one descent). This algorithm overrides the standard loop.
 
@@ -1329,7 +1329,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, rho=0.05, random_seed=42)
 
 ### OptaxSophia
 
-Sophia optimizer — lightweight second-order method using diagonal Hessian EMA with element-wise clipping ([Liu et al., 2023](https://arxiv.org/abs/2305.14342)).
+Sophia optimizer: lightweight second-order method using diagonal Hessian EMA with element-wise clipping ([Liu et al., 2023](https://arxiv.org/abs/2305.14342)).
 
 > Optax 0.2.4 does not include Sophia natively. A local `GradientTransformation` wrapper implements Sophia-G (squared-gradient Hessian approximation).
 
@@ -1342,14 +1342,14 @@ optimizer.optimize(objective=obj, learning_rate=1e-3, gamma=0.01, random_seed=42
 |----------------------|---------|-------------|
 | `b1` | `0.965` | First moment decay. |
 | `b2` | `0.99` | Hessian diagonal EMA decay. |
-| `gamma` | `0.01` | Clipping threshold — updates clipped to $[-1/\gamma, 1/\gamma]$. |
+| `gamma` | `0.01` | Clipping threshold: updates clipped to $[-1/\gamma, 1/\gamma]$. |
 | `weight_decay` | `0.0` | Decoupled weight decay. |
 
 ---
 
 ### OptaxLookahead
 
-Lookahead wrapper — slow-weight averaging around a fast inner optimizer ([Zhang et al., 2019](https://arxiv.org/abs/1907.08610)).
+Lookahead wrapper: slow-weight averaging around a fast inner optimizer ([Zhang et al., 2019](https://arxiv.org/abs/1907.08610)).
 
 > Uses `optax.LookaheadParams` internally to maintain fast and slow weights.
 
@@ -1375,7 +1375,7 @@ optimizer.optimize(
 
 ### OptaxScheduleFreeAdam
 
-Schedule-Free Adam — removes the need for an explicit LR schedule by maintaining two parameter sequences ([Defazio et al., 2024](https://arxiv.org/abs/2405.15682)).
+Schedule-Free Adam: removes the need for an explicit LR schedule by maintaining two parameter sequences ([Defazio et al., 2024](https://arxiv.org/abs/2405.15682)).
 
 ```python
 optimizer = OptaxScheduleFreeAdam()
@@ -1390,7 +1390,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, warmup_steps=200, random_se
 
 ### OptaxYogi
 
-Yogi optimizer — controls adaptive learning-rate increase more conservatively than Adam ([Zaheer et al., 2018](https://papers.nips.cc/paper/8186-adaptive-methods-for-nonconvex-optimization)).
+Yogi optimizer: controls adaptive learning-rate increase more conservatively than Adam ([Zaheer et al., 2018](https://papers.nips.cc/paper/8186-adaptive-methods-for-nonconvex-optimization)).
 
 ```python
 optimizer = OptaxYogi()
@@ -1401,7 +1401,7 @@ optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 
 ### OptaxNovoGrad
 
-NovoGrad — layer-wise gradient normalization optimizer ([Ginsburg et al., 2019](https://arxiv.org/abs/1905.11286)).
+NovoGrad: layer-wise gradient normalization optimizer ([Ginsburg et al., 2019](https://arxiv.org/abs/1905.11286)).
 
 ```python
 optimizer = OptaxNovoGrad()
@@ -1423,7 +1423,7 @@ OptaxOAdam().optimize(objective=obj, learning_rate=0.1, random_seed=42)
 
 ### OptaxSignSGD / OptaxSignum
 
-Sign-based optimizers — update with the sign of the gradient.
+Sign-based optimizers: update with the sign of the gradient.
 
 ```python
 OptaxSignSGD().optimize(objective=obj, learning_rate=0.1, random_seed=42)
@@ -1438,7 +1438,7 @@ OptaxSignum().optimize(objective=obj, learning_rate=0.1, momentum=0.9, random_se
 
 ### OptaxSM3
 
-SM3 — memory-efficient adaptive optimizer for sparse gradients ([Anil et al., 2019](https://arxiv.org/abs/1901.11150)).
+SM3: memory-efficient adaptive optimizer for sparse gradients ([Anil et al., 2019](https://arxiv.org/abs/1901.11150)).
 
 ```python
 optimizer = OptaxSM3()
@@ -1464,39 +1464,39 @@ optimizer.optimize(objective=obj, patience=500, random_seed=42)
 
 | Class | `algorithm_str` | Key property | Custom loop? |
 |-------|-----------------|--------------|:------------:|
-| `OptaxAdam` | `optax_adam` | Standard Adam | — |
-| `OptaxAdamW` | `optax_adamw` | Decoupled weight decay | — |
-| `OptaxAdaBelief` | `optax_adabelief` | Belief-based adaptation | — |
-| `OptaxAdafactor` | `optax_adafactor` | Memory-efficient factored | — |
-| `OptaxAMSGrad` | `optax_amsgrad` | Max past squared gradients | — |
-| `OptaxAdaGrad` | `optax_adagrad` | Per-param accumulated LR | — |
-| `OptaxAdaDelta` | `optax_adadelta` | LR-free adaptive | — |
-| `OptaxAdaMax` | `optax_adamax` | $L^\infty$ Adam | — |
-| `OptaxAdaMaxW` | `optax_adamaxw` | AdaMax + weight decay | — |
-| `OptaxAdan` | `optax_adan` | Nesterov momentum variant | — |
-| `OptaxLion` | `optax_lion` | Evolved sign momentum | — |
-| `OptaxLAMB` | `optax_lamb` | Layer-wise adaptive | — |
-| `OptaxNadam` | `optax_nadam` | Nesterov Adam | — |
-| `OptaxNadamW` | `optax_nadamw` | Nadam + weight decay | — |
-| `OptaxRMSProp` | `optax_rmsprop` | Root mean square prop | — |
-| `OptaxRProp` | `optax_rprop` | Resilient backprop | — |
-| `OptaxRAdam` | `optax_radam` | Rectified Adam | — |
-| `OptaxSGD` | `optax_sgd` | Vanilla SGD | — |
-| `OptaxSGDM` | `optax_sgdm` | SGD + momentum | — |
-| `OptaxNAG` | `optax_nag` | Nesterov accelerated | — |
-| `OptaxNoisySGD` | `optax_noisy_sgd` | Gaussian noise injection | — |
+| `OptaxAdam` | `optax_adam` | Standard Adam | - |
+| `OptaxAdamW` | `optax_adamw` | Decoupled weight decay | - |
+| `OptaxAdaBelief` | `optax_adabelief` | Belief-based adaptation | - |
+| `OptaxAdafactor` | `optax_adafactor` | Memory-efficient factored | - |
+| `OptaxAMSGrad` | `optax_amsgrad` | Max past squared gradients | - |
+| `OptaxAdaGrad` | `optax_adagrad` | Per-param accumulated LR | - |
+| `OptaxAdaDelta` | `optax_adadelta` | LR-free adaptive | - |
+| `OptaxAdaMax` | `optax_adamax` | $L^\infty$ Adam | - |
+| `OptaxAdaMaxW` | `optax_adamaxw` | AdaMax + weight decay | - |
+| `OptaxAdan` | `optax_adan` | Nesterov momentum variant | - |
+| `OptaxLion` | `optax_lion` | Evolved sign momentum | - |
+| `OptaxLAMB` | `optax_lamb` | Layer-wise adaptive | - |
+| `OptaxNadam` | `optax_nadam` | Nesterov Adam | - |
+| `OptaxNadamW` | `optax_nadamw` | Nadam + weight decay | - |
+| `OptaxRMSProp` | `optax_rmsprop` | Root mean square prop | - |
+| `OptaxRProp` | `optax_rprop` | Resilient backprop | - |
+| `OptaxRAdam` | `optax_radam` | Rectified Adam | - |
+| `OptaxSGD` | `optax_sgd` | Vanilla SGD | - |
+| `OptaxSGDM` | `optax_sgdm` | SGD + momentum | - |
+| `OptaxNAG` | `optax_nag` | Nesterov accelerated | - |
+| `OptaxNoisySGD` | `optax_noisy_sgd` | Gaussian noise injection | - |
 | `OptaxPolyakSGD` | `optax_polyak_sgd` | Polyak step-size | yes |
 | `OptaxSAM` | `optax_sam` | Sharpness-aware (2× grad) | yes |
-| `OptaxSophia` | `optax_sophia` | Diagonal Hessian clipping | — |
+| `OptaxSophia` | `optax_sophia` | Diagonal Hessian clipping | - |
 | `OptaxLookahead` | `optax_lookahead` | Slow-weight averaging | yes |
-| `OptaxScheduleFreeAdam` | `optax_schedule_free_adam` | Schedule-free | — |
-| `OptaxYogi` | `optax_yogi` | Conservative adaptive LR | — |
-| `OptaxNovoGrad` | `optax_novograd` | Layer-wise grad norm | — |
-| `OptaxOGD` | `optax_ogd` | Optimistic GD | — |
-| `OptaxOAdam` | `optax_oadam` | Optimistic Adam | — |
-| `OptaxSignSGD` | `optax_sign_sgd` | Sign of gradient | — |
-| `OptaxSignum` | `optax_signum` | Sign + momentum | — |
-| `OptaxSM3` | `optax_sm3` | Memory-efficient sparse | — |
+| `OptaxScheduleFreeAdam` | `optax_schedule_free_adam` | Schedule-free | - |
+| `OptaxYogi` | `optax_yogi` | Conservative adaptive LR | - |
+| `OptaxNovoGrad` | `optax_novograd` | Layer-wise grad norm | - |
+| `OptaxOGD` | `optax_ogd` | Optimistic GD | - |
+| `OptaxOAdam` | `optax_oadam` | Optimistic Adam | - |
+| `OptaxSignSGD` | `optax_sign_sgd` | Sign of gradient | - |
+| `OptaxSignum` | `optax_signum` | Sign + momentum | - |
+| `OptaxSM3` | `optax_sm3` | Memory-efficient sparse | - |
 | `OptaxLBFGS` | `optax_lbfgs` | Quasi-Newton (JIT loop) | yes |
 
 ---
@@ -1509,7 +1509,7 @@ optimizer.optimize(objective=obj, patience=500, random_seed=42)
 | `SAGD` | Gradient | Escapes local minima via stochastic ascent | Rugged landscapes |
 | `NAAdamGD` | Gradient | Noise-based exploration with annealing | Balancing exploration and exploitation |
 | `LBFGSGD` | Gradient | Second-order curvature | Smooth, well-conditioned problems |
-| `OptaxAdam` — `OptaxLBFGS` | Gradient | 34 Optax optimizers (see table above) | Systematic algorithm comparison |
+| `OptaxAdam`: `OptaxLBFGS` | Gradient | 34 Optax optimizers (see table above) | Systematic algorithm comparison |
 | `EvoxPSO` | Evolutionary | Swarm intelligence, many variants | Moderate-dimensional problems |
 | `EvoxES` | Evolutionary | Covariance adaptation (CMA-ES) | General black-box optimization |
 | `PyCMACMAES` / `CMAESCMA` / `CMAESSepCMA` | Evolutionary | CMA-ES backends with full or diagonal covariance | General black-box optimization |
@@ -1527,7 +1527,7 @@ optimizer.optimize(objective=obj, patience=500, random_seed=42)
 | `BasinHopping` / `DualAnnealing` | Global Search | SciPy stochastic global | Multimodal landscapes |
 | `AxSAASBO` | Surrogate | Sparse-axis subspace, fully Bayesian | High-dim with few active dims |
 | `BAxUS` | Surrogate | Adaptive expanding subspace | High-dim with unknown effective dim |
-| `BotorchqNEI` | Surrogate | Noise-aware acquisition | Noisy objectives |
+| `BotorchQNEI` | Surrogate | Noise-aware acquisition | Noisy objectives |
 | `BotorchqKG` | Surrogate | One-step Bayes-optimal lookahead | Small budgets, expensive evals |
 | `REMBO` | Surrogate | Fixed random embedding | Very high-dim, low effective dim |
 | `GEBO` | Surrogate | Gradient-enriched surrogate | Differentiable objectives |

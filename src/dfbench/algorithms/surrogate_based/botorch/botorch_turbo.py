@@ -11,7 +11,13 @@ Reference:
 
 import math
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from dataclasses import dataclass, field
 from botorch.models import SingleTaskGP
 from botorch.acquisition import qLogExpectedImprovement as qLogEI

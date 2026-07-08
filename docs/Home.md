@@ -1,4 +1,4 @@
-# Differometor Benchmark — Wiki
+# Differometor Benchmark: Wiki
 
 **dfbench** is a benchmarking framework for comparing optimization algorithms on gravitational-wave detector design problems built on top of the [Differometor](https://github.com/artificial-scientist-lab/Differometor) simulator.
 
@@ -31,11 +31,11 @@ OptimizationAlgorithm
          │
          ▼
    ┌───────────┐      records losses, params, grads, timestamps
-   │ Objective │ ──►  enforces time / eval budgets
-   └─────┬─────┘      bounded ↔ unbounded sigmoid transform
+   │ Objective │ ──>  enforces time / eval budgets
+   └─────┬─────┘      bounded <-> unbounded sigmoid transform
          │
          ▼
-  ContinuousProblem        (VoyagerProblem, VoyagerTuningProblem, UIFOProblem, …)
+  ContinuousProblem        (VoyagerProblem, VoyagerTuningProblem, UIFOProblem, ...)
          │
          ▼
   Differometor Simulator   (JAX-based interferometer physics)
