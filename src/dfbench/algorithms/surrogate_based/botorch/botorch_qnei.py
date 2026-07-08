@@ -45,7 +45,7 @@ except ImportError:
     _BOTORCH_AVAILABLE = False
 
 
-class BotorchqNEI(OptimizationAlgorithm):
+class BotorchQNEI(OptimizationAlgorithm):
     """Noisy Expected Improvement BO via BoTorch.
 
     Wraps ``qLogNoisyExpectedImprovement`` which conditions on the training data
@@ -65,7 +65,7 @@ class BotorchqNEI(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for BotorchqNEI. Install with: uv add 'dfbench[bo]'"
+                "BoTorch is required for BotorchQNEI. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE

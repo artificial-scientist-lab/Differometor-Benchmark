@@ -120,7 +120,7 @@ Each parameter corresponds to a `(component, property)` pair from the Voyager se
 | Difficulty | Moderate: lower-dimensional than `VoyagerProblem`, useful for quick prototyping |
 
 ```python
-problem = VoyagerTuningProblem(n_frequencies=100)
+problem = VoyagerTuningProblem(n_frequencies=50)
 ```
 
 ```python

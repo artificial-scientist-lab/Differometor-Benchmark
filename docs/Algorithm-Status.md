@@ -214,7 +214,7 @@ Coexists with `EvoxES` but uses a different backend; class names use `evosax_` p
 | GEBO | `GEBO` | Branch | `algorithm/bo-algorithms` | Gradient-Enhanced BO |
 | LineBO | `LineBO` | Branch | `algorithm/bo-algorithms` | Line-search BO |
 | qKG | `BotorchqKG` | Branch | `algorithm/bo-algorithms` | Knowledge Gradient |
-| qNEI | `BotorchqNEI` | Branch | `algorithm/bo-algorithms` | Noisy Expected Improvement |
+| qNEI | `BotorchQNEI` | Branch | `algorithm/bo-algorithms` | Noisy Expected Improvement |
 | REMBO | `REMBO` | Branch | `algorithm/bo-algorithms` | Random Embedding BO |
 | HEBO | `HEBO` | Branch | `algorithm/bo-algorithms` | Heteroscedastic BO |
 | SMAC | `SMAC` | Branch | `algorithm/bo-algorithms` | Sequential Model-based Config |

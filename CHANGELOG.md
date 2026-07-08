@@ -9,7 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 ### Changed
+- Documentation updated to reflect the combined `RunDataExporter` output directory (`{algo}_{hyper_param_str}`) and the `dfbench[extra]` groups referenced by `ImportError` messages. "Required packages" notes in `Algorithms.md` now point to the extras (`dfbench[evolution]`, `dfbench[dfo]`, `dfbench[bo]`, `dfbench[smac]`) instead of bare package names. `Installation.md` documents that HEBO is part of the `bo`/`all` extras and that optional backends import lazily.
 ### Fixed
+- Completed the `BotorchqNEI` -> `BotorchQNEI` rename started in the `algorithms/__init__.py` refactor. The class definition, subpackage `__init__.py` exports, tests, and scripts still referenced `BotorchqNEI`, so the `try/except ImportError: pass` guard silently swallowed the failure and `BotorchQNEI` was unimportable from `dfbench.algorithms`.
+- `VoyagerTuningProblem` still defaulted to `n_frequencies=100` after the "50 for all problems" change; aligned it with the other problems at `50`.
 
 ## [0.2.2] - 2026-07-08
 

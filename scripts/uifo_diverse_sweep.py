@@ -46,7 +46,7 @@ from dfbench.algorithms import (
     DualAnnealing,
     # Bayesian Optimization batch
     BAxUS,
-    BotorchqNEI,
+    BotorchQNEI,
     BotorchqKG,
     REMBO,
     GEBO,
@@ -105,7 +105,7 @@ ALGORITHMS = [
     DualAnnealing,
     # Bayesian Optimization batch
     BAxUS,
-    BotorchqNEI,
+    BotorchQNEI,
     BotorchqKG,
     REMBO,
     GEBO,

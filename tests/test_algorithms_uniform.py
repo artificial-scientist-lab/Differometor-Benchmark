@@ -39,7 +39,7 @@ from dfbench.algorithms import (
     BotorchBO,
     BotorchTuRBO,
     BotorchqKG,
-    BotorchqNEI,
+    BotorchQNEI,
     CMAESSepCMA,
     COBYLA,
     COBYQA,
@@ -299,7 +299,7 @@ REGISTRY: list[AlgoSpec] = [
         extra_kwargs=_botorch_kwargs,
     ),
     AlgoSpec(
-        BotorchqNEI,
+        BotorchQNEI,
         AlgorithmType.SURROGATE_BASED,
         unbounded=False,
         extra_kwargs=_botorch_kwargs,

@@ -23,7 +23,7 @@ from dfbench.algorithms import (
     RandomSearch,                            # generic, blackbox global search
     BasinHopping, DualAnnealing,             # SciPy global search
     BotorchBO, BotorchTuRBO,                 # surrogate-based (standard)
-    AxSAASBO, BAxUS, BotorchqNEI, BotorchqKG,  # structured BO
+    AxSAASBO, BAxUS, BotorchQNEI, BotorchqKG,  # structured BO
     REMBO, GEBO, LineBO, TuRBOLBFGS,            # geometry / hybrid BO
     HEBO, SMAC,                                  # external BO packages
     VAESampling,                              # generative
@@ -365,7 +365,7 @@ optimizer.optimize(
 
 Ten CMA-family and evolution-strategy algorithms live in `src/dfbench/algorithms/evolutionary/` alongside the EvoX backend. Each class names its backend explicitly in `algorithm_str` so benchmark runs can be distinguished.
 
-**Required packages** (install with `uv add cma cmaes evosax`):
+**Required packages** (install with `uv add 'dfbench[evolution]'`):
 - `pycma` >= 3.3: for `PyCMA*` classes
 - `cmaes` >= 0.10: for `CMAESCMA` and `CMAESSepCMA`
 - `evosax` >= 0.1.6: for `Evosax*` classes
@@ -552,7 +552,7 @@ optimizer.optimize(
 
 Model-based derivative-free trust-region solvers by M. J. D. Powell.  All run in **bounded physical space** with multistart restarts.  Each call solves a quadratic model in a shrinking trust region; convergence is local but very precise on smooth landscapes.
 
-**Required packages** (install with `uv add pdfo Py-BOBYQA`):
+**Required packages** (install with `uv add 'dfbench[dfo]'`):
 - `pdfo`: for `PDFOUOBYQA`, `PDFONEWUOA`, `PDFOLINCOA`
 - `Py-BOBYQA`: for `PyBOBYQA`
 
@@ -737,7 +737,7 @@ optimizer.optimize(
 
 ### AxSAASBO (Sparse Axis-Aligned Subspace BO)
 
-Fully Bayesian GP with a sparsity-inducing half-Cauchy prior on lengthscales. Effective when only a few dimensions matter. Requires the `ax-platform` package.
+Fully Bayesian GP with a sparsity-inducing half-Cauchy prior on lengthscales. Effective when only a few dimensions matter. Requires the `dfbench[bo]` extra.
 
 Reference: Eriksson & Jankowiak, *High-Dimensional Bayesian Optimization with Sparse Axis-Aligned Subspaces*, UAI 2021.
 
@@ -788,14 +788,14 @@ optimizer.optimize(
 
 ---
 
-### BotorchqNEI (Noisy Expected Improvement)
+### BotorchQNEI (Noisy Expected Improvement)
 
 Uses `qNoisyExpectedImprovement` which accounts for observation noise in the acquisition function.
 
 Reference: Letham et al., *Noisy Expected Improvement*, NeurIPS 2019.
 
 ```python
-optimizer = BotorchqNEI()
+optimizer = BotorchQNEI()
 optimizer.optimize(
     objective=obj,
     max_iterations=50,
@@ -942,7 +942,7 @@ optimizer.optimize(
 
 ### HEBO (Heteroscedastic Evolutionary BO)
 
-Winner of the NeurIPS 2020 BBO challenge. Uses a heteroscedastic GP, input warping, and multi-objective acquisition. Requires the `HEBO` package.
+Winner of the NeurIPS 2020 BBO challenge. Uses a heteroscedastic GP, input warping, and multi-objective acquisition. Requires the `dfbench[bo]` extra.
 
 Reference: Cowen-Rivers et al., *An Empirical Study of Assumptions in Bayesian Optimisation*, 2020.
 
@@ -965,7 +965,7 @@ optimizer.optimize(
 
 ### SMAC (Sequential Model-based Algorithm Configuration)
 
-Random-forest-based surrogate with racing. The de-facto standard for hyperparameter optimisation. Requires the `smac` package.
+Random-forest-based surrogate with racing. The de-facto standard for hyperparameter optimisation. Requires the `dfbench[smac]` extra.
 
 Reference: Lindauer et al., *SMAC3*, JMLR 2022.
 
@@ -1527,7 +1527,7 @@ optimizer.optimize(objective=obj, patience=500, random_seed=42)
 | `BasinHopping` / `DualAnnealing` | Global Search | SciPy stochastic global | Multimodal landscapes |
 | `AxSAASBO` | Surrogate | Sparse-axis subspace, fully Bayesian | High-dim with few active dims |
 | `BAxUS` | Surrogate | Adaptive expanding subspace | High-dim with unknown effective dim |
-| `BotorchqNEI` | Surrogate | Noise-aware acquisition | Noisy objectives |
+| `BotorchQNEI` | Surrogate | Noise-aware acquisition | Noisy objectives |
 | `BotorchqKG` | Surrogate | One-step Bayes-optimal lookahead | Small budgets, expensive evals |
 | `REMBO` | Surrogate | Fixed random embedding | Very high-dim, low effective dim |
 | `GEBO` | Surrogate | Gradient-enriched surrogate | Differentiable objectives |
