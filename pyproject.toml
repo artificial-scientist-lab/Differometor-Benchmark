@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "dfbench"
 version = "0.3.0"
-description = "Differometor Benchmark - Optimization algorithms and problem definitions"
+description = "dfbench: A Black-Box Optimization Framework for JAX-Differentiable Gravitational Wave Detector Discovery"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 license = "MIT"
