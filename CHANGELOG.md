@@ -9,10 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 ### Changed
-- Documentation updated to reflect the combined `RunDataExporter` output directory (`{algo}_{hyper_param_str}`) and the `dfbench[extra]` groups referenced by `ImportError` messages. "Required packages" notes in `Algorithms.md` now point to the extras (`dfbench[evolution]`, `dfbench[dfo]`, `dfbench[bo]`, `dfbench[smac]`) instead of bare package names. `Installation.md` documents that HEBO is part of the `bo`/`all` extras and that optional backends import lazily.
 ### Fixed
-- Completed the `BotorchqNEI` -> `BotorchQNEI` rename started in the `algorithms/__init__.py` refactor. The class definition, subpackage `__init__.py` exports, tests, and scripts still referenced `BotorchqNEI`, so the `try/except ImportError: pass` guard silently swallowed the failure and `BotorchQNEI` was unimportable from `dfbench.algorithms`.
-- `VoyagerTuningProblem` still defaulted to `n_frequencies=100` after the "50 for all problems" change; aligned it with the other problems at `50`.
 
 ## [0.2.2] - 2026-07-08
 
@@ -27,10 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `RunDataExporter.export` now falls back to `state.metadata.hyper_param_str` when the caller does not pass `hyper_param_str` explicitly.
 - Cleaned AI-like formatting artifacts across docstrings and documentation: em-dashes, en-dashes, unicode arrows, ellipses, bullets, and curly quotes replaced with plain ASCII. Mid-sentence dashes restructured into colons, semicolons, commas, or parenthetical clauses. Item-description separators changed to colons.
 - `algorithms/__init__.py` restructured: import groups wrapped in `try/except` by extra dependency (`dfo`, `scipy`, `evolution`, `bo`, `optax`, `smac`) so `import dfbench` no longer crashes when an optional extra is missing. Core algorithms with no optional dependencies import eagerly as before.
+- Documentation updated to reflect the combined `RunDataExporter` output directory (`{algo}_{hyper_param_str}`) and the `dfbench[extra]` groups referenced by `ImportError` messages. "Required packages" notes in `Algorithms.md` now point to the extras (`dfbench[evolution]`, `dfbench[dfo]`, `dfbench[bo]`, `dfbench[smac]`) instead of bare package names. `Installation.md` documents that HEBO is part of the `bo`/`all` extras and that optional backends import lazily.
 
 ### Fixed
 - `RunDataExporter.export` raised `TypeError: Object of type ArrayImpl is not JSON serializable` when `loss_history` contained JAX scalars. The exporter now converts each element via `np.asarray(x).tolist()` before passing to `json.dump`.
 - Guarded all previously unguarded imports of `optax`, `torch`, and `scipy` across all algorithm modules with `try/except` blocks that raise helpful `ImportError` messages pointing to the correct extra group.
+- Completed the `BotorchqNEI` -> `BotorchQNEI` rename started in the `algorithms/__init__.py` refactor. The class definition, subpackage `__init__.py` exports, tests, and scripts still referenced `BotorchqNEI`, so the `try/except ImportError: pass` guard silently swallowed the failure and `BotorchQNEI` was unimportable from `dfbench.algorithms`.
+- `VoyagerTuningProblem` still defaulted to `n_frequencies=100` after the "50 for all problems" change; aligned it with the other problems at `50`.
 
 ## [0.2.1] - 2026-07-07
 
