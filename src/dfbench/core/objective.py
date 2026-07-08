@@ -2904,6 +2904,11 @@ class Objective:
         self,
         hyper_param_str: str = "",
         hyper_param_str_in_filename: bool = True,
+        *,
+        write_parameters_json: bool = True,
+        write_losses_json: bool = True,
+        write_losses_png: bool = True,
+        write_sensitivity_png: bool = True,
     ) -> Path:
         """Output optimization results to human-readable files (plots + JSON).
 
@@ -2917,11 +2922,21 @@ class Objective:
         {algorithm_str}/{hyper_param_str}/`` by default (configurable via
         the exporter's ``root``).
 
+        Each artifact is independently optional; pass ``write_*`` as
+        ``False`` to skip that file. The output directory is still created
+        and returned regardless of which artifacts are written.
+
         Args:
             hyper_param_str: Hyperparameter string for directory naming
                 (e.g., "lr0.1_patience500").
             hyper_param_str_in_filename: Whether to include hyperparams in
                 filename.
+            write_parameters_json: Write the best-parameters JSON file.
+            write_losses_json: Write the loss-history JSON file.
+            write_losses_png: Write the loss-curve PNG plot.
+            write_sensitivity_png: Write the sensitivity PNG plot. Only
+                produced when the problem exposes sensitivity data; the
+                flag is an additional gate on top of that condition.
 
         Returns:
             Path to the output directory.
@@ -2932,4 +2947,8 @@ class Objective:
             problem=self._problem,
             hyper_param_str=hyper_param_str,
             hyper_param_str_in_filename=hyper_param_str_in_filename,
+            write_parameters_json=write_parameters_json,
+            write_losses_json=write_losses_json,
+            write_losses_png=write_losses_png,
+            write_sensitivity_png=write_sensitivity_png,
         )

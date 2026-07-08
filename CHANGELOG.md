@@ -11,6 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 ### Fixed
 
+## [0.2.2] - 2026-07-08
+
+### Added
+- All optional-dependency `ImportError` messages now point to the correct `uv add 'dfbench[<extra>]'` group instead of bare package names.
+- `hebo>=0.3.2` added to the `bo` and `all` extras in `pyproject.toml` (was missing entirely).
+- `Objective.output_to_files` and `RunDataExporter.export` accept four keyword-only boolean flags (`write_parameters_json`, `write_losses_json`, `write_losses_png`, `write_sensitivity_png`) to selectively skip individual artifacts. All default to `True`, preserving existing behavior. The output directory is still created and returned regardless of which artifacts are written.
+
+### Changed
+- Default `n_frequencies` lowered from 100 to 50 on all problems (`VoyagerProblem`, `ConstrainedVoyagerProblem`, `UIFOProblem`, `OpticalSetupProblem` base class). Reduces per-evaluation cost without changing the benchmark's discriminative power.
+- `RunDataExporter.output_dir` now combines algorithm and hyperparameter string into one directory (`{algo}_{hyper_param_str}`) instead of nesting them separately (`{algo}/{hyper_param_str}`), matching the checkpoint resolver's `algo_directory` convention.
+- `RunDataExporter.export` now falls back to `state.metadata.hyper_param_str` when the caller does not pass `hyper_param_str` explicitly.
+- Cleaned AI-like formatting artifacts across docstrings and documentation: em-dashes, en-dashes, unicode arrows, ellipses, bullets, and curly quotes replaced with plain ASCII. Mid-sentence dashes restructured into colons, semicolons, commas, or parenthetical clauses. Item-description separators changed to colons.
+- `algorithms/__init__.py` restructured: import groups wrapped in `try/except` by extra dependency (`dfo`, `scipy`, `evolution`, `bo`, `optax`, `smac`) so `import dfbench` no longer crashes when an optional extra is missing. Core algorithms with no optional dependencies import eagerly as before.
+
+### Fixed
+- `RunDataExporter.export` raised `TypeError: Object of type ArrayImpl is not JSON serializable` when `loss_history` contained JAX scalars. The exporter now converts each element via `np.asarray(x).tolist()` before passing to `json.dump`.
+- Guarded all previously unguarded imports of `optax`, `torch`, and `scipy` across all algorithm modules with `try/except` blocks that raise helpful `ImportError` messages pointing to the correct extra group.
+
 ## [0.2.1] - 2026-07-07
 
 ### Fixed

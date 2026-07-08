@@ -142,8 +142,16 @@ class RunDataExporter:
         hyper_param_str: str = "",
         hyper_param_str_in_filename: bool = True,
         print_summary: bool = True,
+        write_parameters_json: bool = True,
+        write_losses_json: bool = True,
+        write_losses_png: bool = True,
+        write_sensitivity_png: bool = True,
     ) -> Path:
         """Write JSON + PNG artifacts for ``state`` and return the dir.
+
+        Each artifact is independently optional; pass ``write_*`` as
+        ``False`` to skip that file. The output directory is still created
+        and returned regardless of which artifacts are written.
 
         Args:
             state: The run snapshot to export.
@@ -154,6 +162,13 @@ class RunDataExporter:
             hyper_param_str_in_filename: Include the hyperparameter string
                 in the filename suffix.
             print_summary: Print best params/loss and the output dir.
+            write_parameters_json: Write the best-parameters JSON file.
+            write_losses_json: Write the loss-history JSON file.
+            write_losses_png: Write the loss-curve PNG plot.
+            write_sensitivity_png: Write the sensitivity PNG plot. Only
+                produced when the problem exposes sensitivity data and
+                ``best_params`` is non-empty; the flag is an additional
+                gate on top of that condition.
         """
         problem_name = (
             getattr(problem, "name", None) or state.metadata.problem_name or "problem"
@@ -182,24 +197,31 @@ class RunDataExporter:
             print(f"Output directory: {out_dir}")
 
         # JSON: parameters
-        with open(out_dir / f"{prefix}_parameters{suffix}.json", "w") as f:
-            json.dump(
-                best_params.tolist() if best_params is not None else None,
-                f,
-                indent=4,
-            )
+        if write_parameters_json:
+            with open(out_dir / f"{prefix}_parameters{suffix}.json", "w") as f:
+                json.dump(
+                    best_params.tolist() if best_params is not None else None,
+                    f,
+                    indent=4,
+                )
 
         # JSON: losses
-        with open(out_dir / f"{prefix}_losses{suffix}.json", "w") as f:
-            json.dump(losses, f, indent=4)
+        if write_losses_json:
+            with open(out_dir / f"{prefix}_losses{suffix}.json", "w") as f:
+                json.dump(losses, f, indent=4)
 
         # PNG: loss curve
-        fig = plot_loss_curve(np.asarray(state.loss_history, dtype=object))
-        fig.savefig(out_dir / f"{prefix}_losses{suffix}.png")
-        plt.close(fig)
+        if write_losses_png:
+            fig = plot_loss_curve(np.asarray(state.loss_history, dtype=object))
+            fig.savefig(out_dir / f"{prefix}_losses{suffix}.png")
+            plt.close(fig)
 
         # PNG: sensitivity (optical problems only)
-        if _has_sensitivity(problem) and best_params is not None:
+        if (
+            write_sensitivity_png
+            and _has_sensitivity(problem)
+            and best_params is not None
+        ):
             sens_problem: ProblemView = problem  # type: ignore[assignment]
             sensitivities = sens_problem.calculate_sensitivity(best_params)
             target = getattr(sens_problem, "_target_sensitivities", None)

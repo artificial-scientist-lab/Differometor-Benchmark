@@ -566,7 +566,7 @@ if spec is not None:
     problem = build_problem_from_spec(ProblemSpec.from_dict(spec))
 ```
 
-### `output_to_files(hyper_param_str="", hyper_param_str_in_filename=True) -> Path`
+### `output_to_files(hyper_param_str="", hyper_param_str_in_filename=True, *, write_parameters_json=True, write_losses_json=True, write_losses_png=True, write_sensitivity_png=True) -> Path`
 
 Writes human-readable outputs via `RunDataExporter.export()`, which derives everything from a `RunState` snapshot (not a second write path):
 - JSON with best parameters (bounded space)
@@ -574,7 +574,9 @@ Writes human-readable outputs via `RunDataExporter.export()`, which derives ever
 - PNG plot of the loss curve
 - (For optical problems) PNG plot of the sensitivity curve vs. target
 
-Output directory (built by the exporter): `data/problem_output/{problem_name}/{algorithm_str}/{hyper_param_str}/`
+Output directory (built by the exporter): `data/problem_output/{problem_name}/{algorithm_str}_{hyper_param_str}/` (collapsing to just `{algorithm_str}` when there is no hyperparameter string). When `hyper_param_str` is not passed explicitly, it is read from the run state's `metadata.hyper_param_str`.
+
+Each artifact is independently optional; pass the corresponding `write_*` flag as `False` to skip that file. The output directory is still created and returned regardless of which artifacts are written. The `write_sensitivity_png` flag is an additional gate on top of the existing optical-problem condition; passing `True` does not force a sensitivity plot on a non-optical problem.
 
 ### `get_summary() -> dict`
 
