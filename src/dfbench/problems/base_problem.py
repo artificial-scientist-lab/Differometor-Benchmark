@@ -254,6 +254,12 @@ class OpticalSetupProblem(ContinuousProblem):
             allow_widen: If False (default), overrides may only narrow
                 existing bounds.
         """
+        eps = 1e-12
+        if "reflectivity" in property_bounds:
+            # avoid hitting bounds to prevent NaN gradients
+            # (perfectly transmitting or perfectly reflecting mirror)
+            property_bounds["reflectivity"][0] = eps
+            property_bounds["reflectivity"][1] = 1 - eps
         merged_bounds = {
             property_name: [float(bounds[0]), float(bounds[1])]
             for property_name, bounds in property_bounds.items()

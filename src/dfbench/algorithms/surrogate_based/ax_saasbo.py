@@ -8,9 +8,9 @@ Reference:
     Eriksson & Jankowiak, "High-Dimensional Bayesian Optimization with Sparse
     Axis-Aligned Subspaces", UAI 2021.
 
-Package strategy: Ax ``Models.FULLYBAYESIAN`` schedules SAAS-GP fitting and
-acquisition internally. We wrap the Ax ``Client`` (or ``GenerationStrategy``)
-so every evaluation still routes through the ``Objective`` wrapper.
+Package strategy: Ax ``Generators.SAASBO`` schedules SAAS-GP fitting and
+acquisition internally. We wrap Ax's generation strategy/client interface so
+every evaluation still routes through the ``Objective`` wrapper.
 
 Operates in **bounded** parameter space.
 """
@@ -32,9 +32,10 @@ from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
 
 try:
+    from ax.adapter.registry import Generators
+    from ax.generation_strategy.generation_strategy import GenerationStrategy
+    from ax.generation_strategy.generation_node import GenerationStep
     from ax.service.ax_client import AxClient
-    from ax.modelbridge.generation_strategy import GenerationStep, GenerationStrategy
-    from ax.modelbridge.registry import Models
     from ax.service.utils.instantiation import ObjectiveProperties
 
     _AX_AVAILABLE = True
@@ -72,8 +73,8 @@ class AxSAASBO(OptimizationAlgorithm):
         random_seed: int | None = None,
         n_initial: int = 10,
         max_iterations: int | None = None,
-        num_warmup: int = 256,
-        num_samples: int = 128,
+        num_warmup: int = 256,  # TODO: Deprecated
+        num_samples: int = 128,  # TODO: Deprecated
         **ax_kwargs,
     ) -> None:
         """Run SAASBO.
@@ -85,9 +86,12 @@ class AxSAASBO(OptimizationAlgorithm):
             n_initial: Sobol initialisation budget.
             max_iterations: Optional cap on BO iterations after initialisation.
                 When ``None`` the algorithm runs until ``obj.budget_exceeded``.
-            num_warmup: NUTS warm-up samples for the fully-Bayesian GP.
-            num_samples: NUTS posterior samples.
-            **ax_kwargs: Forwarded to the Ax model bridge.
+            num_warmup: Kept for API compatibility. Ax 1.2's
+                ``Generators.SAASBO`` does not accept this as a top-level
+                generation-step kwarg.
+            num_samples: Kept for API compatibility. Ax 1.2's
+                ``Generators.SAASBO`` manages posterior sampling internally.
+            **ax_kwargs: Forwarded as supported Ax SAASBO generator kwargs.
         """
         obj = objective
         problem = obj.problem
@@ -101,15 +105,11 @@ class AxSAASBO(OptimizationAlgorithm):
         # ── Ax client setup ───────────────────────────────────────────
         gs = GenerationStrategy(
             steps=[
-                GenerationStep(model=Models.SOBOL, num_trials=n_initial),
+                GenerationStep(generator=Generators.SOBOL, num_trials=n_initial),
                 GenerationStep(
-                    model=Models.FULLYBAYESIAN,
+                    generator=Generators.SAASBO,
                     num_trials=-1,
-                    model_kwargs={
-                        "num_samples": num_samples,
-                        "warmup_steps": num_warmup,
-                        **ax_kwargs,
-                    },
+                    generator_kwargs=ax_kwargs or None,
                 ),
             ]
         )
