@@ -1,14 +1,9 @@
 """Base class for gravitational wave detector optimization problems."""
 
-import json
-import os
 from abc import abstractmethod
-from datetime import datetime
-from typing import Callable, Mapping
+from typing import Any, Callable, Mapping
 
 import jax.numpy as jnp
-import matplotlib.pyplot as plt
-import numpy as np
 from jaxtyping import Array, Float
 
 from differometor.components import (
@@ -17,7 +12,7 @@ from differometor.components import (
     SOFT_SIDE_POWER_THRESHOLD,
 )
 
-from dfbench.core.problem import ContinuousProblem
+from dfbench.core.problem import ContinuousProblem, register_problem
 
 
 DEFAULT_SIGNAL_FLOOR = 1e-20
@@ -43,16 +38,50 @@ def relu_penalty(value, threshold):
 
 
 def zero_penalty(value, threshold):
-    """No penalty — disables power constraints."""
+    """No penalty: Ignores power constraints."""
     return jnp.zeros_like(value)
+
+
+# Registry of named penalty functions so they can be (de)serialised by name.
+_PENALTY_FUNCTIONS: dict[str, Callable] = {
+    "squashed_relu_penalty": squashed_relu_penalty,
+    "relu_penalty": relu_penalty,
+    "zero_penalty": zero_penalty,
+}
+
+
+def penalty_fn_to_name(fn: Callable | None) -> str | None:
+    """Return the registry name of a penalty function, or None for default."""
+    if fn is None:
+        return None
+    name = getattr(fn, "__name__", None)
+    if name is None or name not in _PENALTY_FUNCTIONS:
+        raise ValueError(
+            f"Cannot serialise power_penalty_fn {fn!r}: not a registered "
+            f"preset. Known: {sorted(_PENALTY_FUNCTIONS.keys())}."
+        )
+    return name
+
+
+def name_to_penalty_fn(name: str | None) -> Callable | None:
+    """Resolve a penalty-function name back to the callable, or None."""
+    if name is None:
+        return None
+    if name not in _PENALTY_FUNCTIONS:
+        raise ValueError(
+            f"Unknown power_penalty_fn name '{name}'. "
+            f"Known: {sorted(_PENALTY_FUNCTIONS.keys())}."
+        )
+    return _PENALTY_FUNCTIONS[name]
 
 
 def sensitivity_single_noise(noises, powers, frequencies):
     """Single-noise sensitivity model used by lightweight Voyager problems."""
     del frequencies
-    return noises[0] / powers[0]
+    return noises[0] / jnp.abs(powers[0])
 
 
+@register_problem
 class OpticalSetupProblem(ContinuousProblem):
     """Abstract base class for optical setup optimization problems.
 
@@ -64,10 +93,17 @@ class OpticalSetupProblem(ContinuousProblem):
     algorithms in the dfbench framework.
     """
 
+    #: Opt-in flag: subclasses that compute a power-constraint penalty set this
+    #: to ``True`` so :meth:`set_penalty_fn` and the Objective aux path know the
+    #: problem actually has a penalty contract. ``VoyagerProblem`` and
+    #: ``VoyagerTuningProblem`` leave it ``False`` because they have no power
+    #: constraints, even though they inherit the method.
+    _supports_power_penalty: bool = False
+
     def __init__(
         self,
         name: str,
-        n_frequencies: int = 100,
+        n_frequencies: int = 50,
         signal_floor: float = DEFAULT_SIGNAL_FLOOR,
     ):
         """Initialize the optimization problem.
@@ -75,7 +111,7 @@ class OpticalSetupProblem(ContinuousProblem):
         Args:
             name (str): Name of the problem, used for output file naming.
             n_frequencies (int): Number of frequency points for sensitivity calculation.
-                Defaults to 100.
+                Defaults to 50.
             signal_floor: Optional lower bound for detector signal
                 magnitudes before sensitivity normalization.
         """
@@ -98,6 +134,22 @@ class OpticalSetupProblem(ContinuousProblem):
         """Lower floor applied to detector signal magnitudes."""
         return self._signal_floor
 
+    @property
+    def power_thresholds(self) -> dict[str, float] | None:
+        """Per-group power thresholds, or ``None`` when the problem has no penalty path.
+
+        Returns a dict with keys ``"hard"``, ``"soft"``, ``"detector"`` mapping
+        to the constant threshold values used by :meth:`_compute_power_violations`.
+        Only meaningful on subclasses where ``_supports_power_penalty`` is ``True``.
+        """
+        if not self._supports_power_penalty:
+            return None
+        return {
+            "hard": float(HARD_SIDE_POWER_THRESHOLD),
+            "soft": float(SOFT_SIDE_POWER_THRESHOLD),
+            "detector": float(DETECTOR_POWER_THRESHOLD),
+        }
+
     def _compute_power_violations(self, powers):
         """Apply ``power_penalty_fn`` to each component group and concatenate."""
         fn = self._power_penalty_fn
@@ -105,6 +157,81 @@ class OpticalSetupProblem(ContinuousProblem):
         soft = fn(powers[1].squeeze(1), SOFT_SIDE_POWER_THRESHOLD)
         det = fn(powers[2].squeeze(1), DETECTOR_POWER_THRESHOLD)
         return jnp.concatenate([hard, det, soft], axis=0)
+
+    def _build_aux(self, powers, sensitivity_loss, penalty, violations):
+        """Build the per-eval aux diagnostics dict from a power-constraint eval.
+
+        Args:
+            powers: ``(hard, soft, detector)`` tuple of per-group power arrays
+                as returned by ``calculate_powers``.
+            sensitivity_loss: scalar sensitivity loss (the unpenalised objective).
+            penalty: scalar summed penalty contribution.
+            violations: ``(n_constraints,)`` array of per-constraint
+                penalty values, as returned by :meth:`_calculate_loss`.
+
+        Returns:
+            A dict pytree with leaves that vmapp cleanly:
+
+            - ``sensitivity_loss``: scalar float.
+            - ``penalty``: scalar float.
+            - ``is_feasible``: scalar bool, ``True`` iff every per-group power
+              is at or below its threshold. This is a physical check, independent
+              of the active ``power_penalty_fn`` preset.
+            - ``violations``: ``(n_constraints,)`` array.
+            - ``power_values``: dict with ``"hard"``, ``"soft"``, ``"detector"``
+              leaves holding the raw per-group power arrays.
+        """
+        hard, soft, det = powers
+        is_feasible = jnp.logical_and(
+            jnp.all(hard.squeeze(1) <= HARD_SIDE_POWER_THRESHOLD),
+            jnp.logical_and(
+                jnp.all(soft.squeeze(1) <= SOFT_SIDE_POWER_THRESHOLD),
+                jnp.all(det.squeeze(1) <= DETECTOR_POWER_THRESHOLD),
+            ),
+        )
+        return {
+            "sensitivity_loss": sensitivity_loss,
+            "penalty": penalty,
+            "is_feasible": is_feasible,
+            "violations": violations,
+            "power_values": {
+                "hard": hard,
+                "soft": soft,
+                "detector": det,
+            },
+        }
+
+    def set_penalty_fn(self, fn: Callable) -> None:
+        """Set the penalty function and rebuild the objective function.
+
+        Updates ``_power_penalty_fn`` and re-traces the JIT-compiled
+        ``objective_function`` so the new penalty takes effect.
+
+        Must be called before the problem is wrapped in a logging
+        ``Objective`` (or before ``Objective.start_logging()``).
+
+        Raises:
+            RuntimeError: If this problem does not opt into the power-penalty
+                contract (``_supports_power_penalty`` is ``False``). Subclasses
+                with a power-constraint path set that flag to ``True``.
+        """
+        if not self._supports_power_penalty:
+            raise RuntimeError(
+                f"{type(self).__name__} has no power-constraint path "
+                f"(_supports_power_penalty is False); set_penalty_fn is only "
+                f"supported on problems that compute power violations."
+            )
+        self._power_penalty_fn = fn
+        self._build_objective_function()
+
+    @abstractmethod
+    def _build_objective_function(self) -> None:
+        """(Re)build and assign the JIT-compiled ``objective_function``.
+
+        Subclasses define their closed-over objective here. Called both
+        from ``__init__`` and from ``set_penalty_fn`` so the compiled
+        function picks up the current ``_power_penalty_fn``.
+        """
 
     def _calculate_loss(self, sensitivities, reference_sensitivities, powers):
         """Calculate loss and penalties from sensitivities and power constraints."""
@@ -127,6 +254,12 @@ class OpticalSetupProblem(ContinuousProblem):
             allow_widen: If False (default), overrides may only narrow
                 existing bounds.
         """
+        eps = 1e-12
+        if "reflectivity" in property_bounds:
+            # avoid hitting bounds to prevent NaN gradients
+            # (perfectly transmitting or perfectly reflecting mirror)
+            property_bounds["reflectivity"][0] = eps
+            property_bounds["reflectivity"][1] = 1 - eps
         merged_bounds = {
             property_name: [float(bounds[0]), float(bounds[1])]
             for property_name, bounds in property_bounds.items()
@@ -223,9 +356,8 @@ class OpticalSetupProblem(ContinuousProblem):
         """List of (component, property) pairs to be optimized."""
         pass
 
-    # objective_function and sigmoid_objective_function are set as instance
-    # attributes by subclasses (as JIT-compiled callables), following the
-    # pattern defined in ContinuousProblem protocol.
+    # objective_function is set as an instance attribute by subclasses (as a
+    # JIT-compiled callable), following the ContinuousProblem protocol.
 
     @abstractmethod
     def calculate_sensitivity(
@@ -244,113 +376,22 @@ class OpticalSetupProblem(ContinuousProblem):
         """
         pass
 
-    def output_to_files(
-        self,
-        best_params: Float[Array, "{self.n_params}"] = None,
-        losses: Float[Array, "iterations"] = None,
-        population_losses: Float[Array, "iterations pop"] = None,
-        algorithm_str: str = "",
-        hyper_param_str: str = "",
-        hyper_param_str_in_filename: bool = True,
-    ) -> None:
-        """Output optimization results to files.
+    # --------- reconstructive spec ---------
 
-        Creates JSON files with parameters and losses, and PNG plots of
-        the optimization progress and final sensitivity curve.
+    def _base_spec(self) -> dict[str, Any]:
+        """Common optical-problem spec fields (subclass adds ``type`` + extras).
 
-        Args:
-            best_params: Best parameters found during optimization.
-            losses: Loss values over iterations/generations.
-            population_losses: All population losses (for genetic algorithms).
-            algorithm_str: Algorithm name for file naming.
-            hyper_param_str: Hyperparameter string for file naming.
-            hyper_param_str_in_filename: Whether to include hyperparameters in filename.
+        Encodes the penalty function by name so the dict is JSON-safe.
+        Subclasses append their own constructor args (n_frequencies,
+        bounds_overrides, topology, ...) and the ``"type"`` registry key.
         """
-        # Print best params and loss first
-        print(f"Parameters of the best solution : {best_params}")
-        print(
-            f"Fitness value of the best solution = {self.objective_function(best_params)}"
-        )
+        spec: dict[str, Any] = {
+            "n_frequencies": int(self._frequencies.shape[0]),
+            "power_penalty_fn": penalty_fn_to_name(self._power_penalty_fn),
+        }
+        return spec
 
-        # Prepare strings and timestamp
-        algorithm_str = f"_{algorithm_str.strip('_')}" if algorithm_str != "" else ""
-        hyper_param_str = (
-            f"_{hyper_param_str.strip('_')}" if hyper_param_str != "" else ""
-        )
-        timestamp = datetime.now().strftime("_%Y-%m-%d_%H-%M")
-
-        # Create output directory
-        output_path = os.path.join(
-            f"./data/problem_output/{self._name}/{algorithm_str.strip('_')}",
-            hyper_param_str.strip("_"),  # directory should not have leading underscore
-        )
-        os.makedirs(output_path, exist_ok=True)
-
-        # Send info to user
-        print(f"Output directory: {output_path}")
-
-        # Determine file name prefix and suffix
-        file_prefix = f"{self._name}{algorithm_str}{timestamp}"
-        file_suffix = hyper_param_str if hyper_param_str_in_filename else ""
-
-        # Output best parameters to JSON
-        with open(
-            os.path.join(output_path, f"{file_prefix}_parameters{file_suffix}.json"),
-            "w",
-        ) as f:
-            json.dump(best_params.tolist(), f, indent=4)
-
-        # Output historical losses to JSON
-        with open(
-            os.path.join(output_path, f"{file_prefix}_losses{file_suffix}.json"),
-            "w",
-        ) as f:
-            json.dump(losses.tolist(), f, indent=4)
-
-        is_genetic = population_losses is not None
-
-        plt.figure()
-        plt.plot(losses)
-        plt.xlabel("Generation" if is_genetic else "Iteration")
-        plt.ylabel("Best losses" if is_genetic else "Loss")
-        plt.axhline(0, color="red", linestyle="--")
-        plt.grid()
-        plt.tight_layout()
-        plt.savefig(os.path.join(output_path, f"{file_prefix}_losses{file_suffix}.png"))
-
-        if population_losses is not None:
-            plt.figure()
-            plt.plot(population_losses)
-            plt.xlabel("Generation")
-            plt.ylabel("All losses")
-            plt.axhline(0, color="red", linestyle="--")
-            plt.grid()
-            plt.tight_layout()
-            plt.savefig(
-                os.path.join(
-                    output_path, f"{file_prefix}_population_losses{file_suffix}.png"
-                )
-            )
-
-        ### Calculate the sensitivity of the best found setup ###
-        # -------------------------------------------------------#
-
-        sensitivities = self.calculate_sensitivity(best_params)
-
-        plt.figure()
-        plt.plot(self._frequencies, sensitivities, label="Optimized Sensitivity")
-
-        plt.plot(
-            self._frequencies, self._target_sensitivities, label="Target Sensitivity"
-        )
-
-        plt.xscale("log")
-        plt.yscale("log")
-        plt.xlabel("Frequency (Hz)")
-        plt.ylabel("Sensitivity [/sqrt(Hz)]")
-        plt.legend()
-        plt.grid()
-        plt.tight_layout()
-        plt.savefig(
-            os.path.join(output_path, f"{file_prefix}_sensitivity{file_suffix}.png")
-        )
+    @staticmethod
+    def _spec_to_penalty_fn(spec: dict[str, Any]) -> Callable | None:
+        """Resolve a ``power_penalty_fn`` name from a spec to the callable."""
+        return name_to_penalty_fn(spec.get("power_penalty_fn"))

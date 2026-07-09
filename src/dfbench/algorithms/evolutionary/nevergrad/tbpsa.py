@@ -1,11 +1,11 @@
-"""Nevergrad TBPSA — noise-robust baseline.
+"""Nevergrad TBPSA: noise-robust baseline.
 
 TBPSA (Test-Based Population-Size Adaptation) is a population-based
 derivative-free optimizer from Nevergrad designed for noisy objectives.
 It dynamically adapts its population size and is a good control for
 landscapes with evaluation noise.
 
-Operates in **bounded physical space** — bounds are passed to Nevergrad
+Operates in **bounded physical space**; bounds are passed to Nevergrad
 parametrization directly. Unbounded mode is not supported.
 
 This wrapper exposes ``num_evaluations`` (number of repeated evaluations
@@ -14,9 +14,7 @@ per candidate for noise averaging) as a first-class hyperparameter.
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import numpy as np
-from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
@@ -26,7 +24,7 @@ try:
     import nevergrad as ng
 except ImportError as exc:
     raise ImportError(
-        "Nevergrad is required for TBPSA. Install with: uv add nevergrad"
+        "Nevergrad is required for TBPSA. Install with: uv add 'dfbench[evolution]'"
     ) from exc
 
 
@@ -56,7 +54,7 @@ class NevergradTBPSA(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         random_seed: int | None = None,
         n_restarts: int = 1,
@@ -65,7 +63,7 @@ class NevergradTBPSA(OptimizationAlgorithm):
         """Run TBPSA optimization via Nevergrad.
 
         Args:
-            problem_objective: Pre-configured Objective for function evaluations.
+            objective: Pre-configured Objective for function evaluations.
             max_iterations: Cap on total ask/tell iterations across all restarts.
                 If None, runs until the Objective budget is exhausted.
             random_seed: Seed for reproducibility.
@@ -74,24 +72,19 @@ class NevergradTBPSA(OptimizationAlgorithm):
                 The averaged loss is reported to the optimizer. Each evaluation
                 counts against the Objective budget. Set >1 for noisy problems.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        if not hasattr(problem, "bounds"):
-            raise ValueError("TBPSA requires a bounded problem (problem.bounds).")
-
-        bounds = problem.bounds
+        bounds = obj.bounds
         lb = np.asarray(bounds[0], dtype=np.float64)
         ub = np.asarray(bounds[1], dtype=np.float64)
-        n_params = int(problem.n_params)
+        n_params = int(obj.n_params)
 
         budget_per_restart = max_iterations // n_restarts if max_iterations else None
 
         # JIT warmup
-        _warmup = jnp.zeros(n_params)
-        _ = obj.value(_warmup)
+        obj.warmup_value()
 
         obj.start_logging()
 

@@ -12,7 +12,13 @@ override ``optimize`` but still reuse the helpers.
 from __future__ import annotations
 
 import jax
-import optax
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for Optax* algorithms. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 import jax.numpy as jnp
 from jaxtyping import Array, Float
 
@@ -65,9 +71,7 @@ _NAN_PERTURB_BASE: float = 1e-10
 
 def _is_nonfinite(loss, grads) -> bool:
     """Return True if loss or any gradient entry is NaN or Inf."""
-    return bool(
-        not jnp.isfinite(loss) or not jnp.all(jnp.isfinite(grads))
-    )
+    return bool(not jnp.isfinite(loss) or not jnp.all(jnp.isfinite(grads)))
 
 
 class OptaxAlgorithm(OptimizationAlgorithm):
@@ -117,7 +121,7 @@ class OptaxAlgorithm(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         patience: int | None = None,
@@ -128,15 +132,15 @@ class OptaxAlgorithm(OptimizationAlgorithm):
         """Run a standard single-evaluation-per-step Optax loop.
 
         Args:
-            problem_objective: Pre-configured Objective.
-            init_params: Starting point.  ``None`` → random unbounded.
+            objective: Pre-configured Objective.
+            init_params: Starting point.  ``None`` -> random unbounded.
             random_seed: Seed for reproducibility.
             patience: Early-stop after this many evals without improvement.
             learning_rate: Passed to ``_make_optimizer``.
             grad_clip_norm: Max global gradient norm (None to disable).
             **kwargs: Forwarded to ``_make_optimizer``.
         """
-        obj = problem_objective
+        obj = objective
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         if init_params is None:
@@ -152,14 +156,12 @@ class OptaxAlgorithm(OptimizationAlgorithm):
         opt_state = optimizer.init(params)
 
         # JIT warmup
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
 
         obj.start_logging()
 
         nan_streak = 0
-        rng_key = jax.random.PRNGKey(
-            random_seed if random_seed is not None else 0
-        )
+        rng_key = jax.random.PRNGKey(random_seed if random_seed is not None else 0)
 
         while not obj.budget_exceeded:
             loss, grads = obj.value_and_grad(params)
@@ -176,9 +178,10 @@ class OptaxAlgorithm(OptimizationAlgorithm):
                     # Fallback: jump to best-known point or fresh random start
                     best = obj.best_params
                     if best is not None:
-                        params = best + jax.random.normal(
-                            sub_key, best.shape
-                        ) * _NAN_PERTURB_BASE
+                        params = (
+                            best
+                            + jax.random.normal(sub_key, best.shape) * _NAN_PERTURB_BASE
+                        )
                     else:
                         params = obj.random_params_unbounded()
                     opt_state = optimizer.init(params)
@@ -187,9 +190,7 @@ class OptaxAlgorithm(OptimizationAlgorithm):
                     # Escalating perturbation: starts at 1e-10 and doubles
                     # each consecutive miss (capped at 2**30 ≈ 1e9 growth).
                     scale = _NAN_PERTURB_BASE * (2 ** min(nan_streak, 30))
-                    params = params + jax.random.normal(
-                        sub_key, params.shape
-                    ) * scale
+                    params = params + jax.random.normal(sub_key, params.shape) * scale
                 continue
             # --------------------------------------------------------------
 

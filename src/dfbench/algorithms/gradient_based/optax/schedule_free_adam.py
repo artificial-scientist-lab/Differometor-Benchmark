@@ -1,13 +1,9 @@
 """Schedule-Free Adam optimizer (Optax contrib)."""
 
-import optax
-import optax.contrib
-
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
-    build_optimizer,
+    optax,
 )
-from dfbench.core.objective import Objective
 
 
 class OptaxScheduleFreeAdam(OptaxAlgorithm):

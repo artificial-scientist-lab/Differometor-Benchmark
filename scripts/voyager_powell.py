@@ -5,7 +5,7 @@ from dfbench.algorithms import Powell
 from dfbench.core.objective import Objective
 
 SEED = 42
-MAX_TIME = 6900  # seconds — leaves ~5 min for saving before the 2 h wall-time
+MAX_TIME = 6900  # seconds, leaves ~5 min for saving before the 2 h wall-time
 MAX_EVALS = 100_000
 
 problem = VoyagerProblem()

@@ -1,4 +1,4 @@
-"""SAASBO — Sparse Axis-Aligned Subspace BO via Ax/BoTorch.
+"""SAASBO: Sparse Axis-Aligned Subspace BO via Ax/BoTorch.
 
 Uses fully Bayesian GP inference with a sparsity-inducing half-Cauchy prior on
 lengthscales, making it effective in high-dimensional spaces where only a few
@@ -8,9 +8,9 @@ Reference:
     Eriksson & Jankowiak, "High-Dimensional Bayesian Optimization with Sparse
     Axis-Aligned Subspaces", UAI 2021.
 
-Package strategy: Ax ``Models.FULLYBAYESIAN`` schedules SAAS-GP fitting and
-acquisition internally. We wrap the Ax ``Client`` (or ``GenerationStrategy``)
-so every evaluation still routes through the ``Objective`` wrapper.
+Package strategy: Ax ``Generators.SAASBO`` schedules SAAS-GP fitting and
+acquisition internally. We wrap Ax's generation strategy/client interface so
+every evaluation still routes through the ``Objective`` wrapper.
 
 Operates in **bounded** parameter space.
 """
@@ -19,25 +19,23 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.core.utils import t2j
-from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
-    DEVICE,
-    DTYPE,
-    get_problem_bounds_torch,
-    evaluate_objective,
-    sobol_initial_samples,
-    unit_bounds_torch,
-)
 
 try:
+    from ax.adapter.registry import Generators
+    from ax.generation_strategy.generation_strategy import GenerationStrategy
+    from ax.generation_strategy.generation_node import GenerationStep
     from ax.service.ax_client import AxClient
-    from ax.modelbridge.generation_strategy import GenerationStep, GenerationStrategy
-    from ax.modelbridge.registry import Models
     from ax.service.utils.instantiation import ObjectiveProperties
 
     _AX_AVAILABLE = True
@@ -65,56 +63,52 @@ class AxSAASBO(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _AX_AVAILABLE:
             raise ImportError(
-                "Ax is required for AxSAASBO. Install with: "
-                "uv pip install 'ax-platform[botorch]'"
+                "Ax is required for AxSAASBO. Install with: uv add 'dfbench[bo]'"
             )
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
         max_iterations: int | None = None,
-        num_warmup: int = 256,
-        num_samples: int = 128,
+        num_warmup: int = 256,  # TODO: Deprecated
+        num_samples: int = 128,  # TODO: Deprecated
         **ax_kwargs,
     ) -> None:
         """Run SAASBO.
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded space).
             random_seed: Seed for reproducibility.
             n_initial: Sobol initialisation budget.
             max_iterations: Optional cap on BO iterations after initialisation.
                 When ``None`` the algorithm runs until ``obj.budget_exceeded``.
-            num_warmup: NUTS warm-up samples for the fully-Bayesian GP.
-            num_samples: NUTS posterior samples.
-            **ax_kwargs: Forwarded to the Ax model bridge.
+            num_warmup: Kept for API compatibility. Ax 1.2's
+                ``Generators.SAASBO`` does not accept this as a top-level
+                generation-step kwarg.
+            num_samples: Kept for API compatibility. Ax 1.2's
+                ``Generators.SAASBO`` manages posterior sampling internally.
+            **ax_kwargs: Forwarded as supported Ax SAASBO generator kwargs.
         """
-        obj = problem_objective
-        problem = obj.problem
-        dim = problem.n_params
+        obj = objective
+        dim = obj.n_params
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        bounds_torch = get_problem_bounds_torch(problem)
-        lb = np.asarray(problem.bounds[0])
-        ub = np.asarray(problem.bounds[1])
+        lb = np.asarray(obj.bounds[0])
+        ub = np.asarray(obj.bounds[1])
 
         # ── Ax client setup ───────────────────────────────────────────
         gs = GenerationStrategy(
             steps=[
-                GenerationStep(model=Models.SOBOL, num_trials=n_initial),
+                GenerationStep(generator=Generators.SOBOL, num_trials=n_initial),
                 GenerationStep(
-                    model=Models.FULLYBAYESIAN,
+                    generator=Generators.SAASBO,
                     num_trials=-1,
-                    model_kwargs={
-                        "num_samples": num_samples,
-                        "warmup_steps": num_warmup,
-                        **ax_kwargs,
-                    },
+                    generator_kwargs=ax_kwargs or None,
                 ),
             ]
         )
@@ -139,7 +133,7 @@ class AxSAASBO(OptimizationAlgorithm):
         )
 
         # ── JIT warmup ───────────────────────────────────────────────
-        _ = obj.vmap_value(jnp.zeros((1, dim)))
+        obj.warmup_vmap_value(batch_size=1)
 
         obj.start_logging()
 

@@ -1,4 +1,4 @@
-# Differometor Benchmark — Wiki
+# Differometor Benchmark: Wiki
 
 **dfbench** is a benchmarking framework for comparing optimization algorithms on gravitational-wave detector design problems built on top of the [Differometor](https://github.com/artificial-scientist-lab/Differometor) simulator.
 
@@ -14,6 +14,7 @@ The framework provides a standardised `Objective` wrapper that sits between ever
 | [Installation](Installation) | Environment setup with `uv` or `pip`, GPU support |
 | [Objective API Reference](Objective-API-Reference) | Complete reference for the `Objective` wrapper class |
 | [Problems](Problems) | Available optimization problems and how they work |
+| [Storage & Checkpointing](Storage-and-Checkpointing) | Modular checkpointing, storage backends, and run reconstruction (organizer-only; submitters do not need this, `Objective` handles saving internally) |
 | [Algorithms](Algorithms) | Catalogue of built-in algorithms and their parameters |
 | [Implementing a New Algorithm](Implementing-a-New-Algorithm) | Step-by-step tutorial for contributors |
 | [Benchmarking](Benchmarking) | Running benchmarks, metrics, and result analysis |
@@ -30,11 +31,11 @@ OptimizationAlgorithm
          │
          ▼
    ┌───────────┐      records losses, params, grads, timestamps
-   │ Objective │ ──►  enforces time / eval budgets
-   └─────┬─────┘      bounded ↔ unbounded sigmoid transform
+   │ Objective │ ──>  enforces time / eval budgets
+   └─────┬─────┘      bounded <-> unbounded sigmoid transform
          │
          ▼
-  ContinuousProblem        (VoyagerProblem, VoyagerTuningProblem, UIFOProblem, …)
+  ContinuousProblem        (VoyagerProblem, VoyagerTuningProblem, UIFOProblem, ...)
          │
          ▼
   Differometor Simulator   (JAX-based interferometer physics)
@@ -78,7 +79,7 @@ problem = VoyagerProblem()
 obj = Objective(problem, max_time=120, verbose=1)
 
 optimizer = AdamGD()
-obj = optimizer.optimize(problem_objective=obj, learning_rate=0.1, random_seed=42)
+optimizer.optimize(objective=obj, learning_rate=0.1, random_seed=42)
 
 print(obj.best_loss, obj.best_params_bounded)
 ```

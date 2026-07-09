@@ -1,14 +1,11 @@
-"""Section 5 (invariants) — Objective construction, evaluation, history,
+"""Section 5 (invariants): Objective construction, evaluation, history,
 budget, bounded/unbounded, reduced history, checkpointing, reset, summary.
 
-Tests 5.1–5.4, 5.13–5.59 (excluding randomness tests in test_objective_randomness).
+Tests 5.1-5.4, 5.13-5.59 (excluding randomness tests in test_objective_randomness).
 """
 
 from __future__ import annotations
 
-import math
-import os
-import tempfile
 import time
 
 import jax
@@ -17,11 +14,10 @@ import numpy as np
 import pytest
 
 from dfbench.core.objective import Objective
-from differometor.utils import sigmoid_bounding
 
 
 # ======================================================================
-# Construction & properties  (5.1–5.4)
+# Construction & properties  (5.1-5.4)
 # ======================================================================
 
 
@@ -34,15 +30,15 @@ class TestConstruction:
         assert obj.params_history == []
         assert obj.time_steps == []
 
-    def test_bounds_property(self, seeded_obj):
+    def test_bounds_property(self, seeded_obj, mock_problem):
         """5.2 bounds matches problem bounds."""
         np.testing.assert_array_equal(
-            np.array(seeded_obj.bounds), np.array(seeded_obj.problem.bounds)
+            np.array(seeded_obj.bounds), np.array(mock_problem.bounds)
         )
 
-    def test_n_params(self, seeded_obj):
+    def test_n_params(self, seeded_obj, mock_problem):
         """5.3 n_params matches problem."""
-        assert seeded_obj.n_params == seeded_obj.problem.n_params
+        assert seeded_obj.n_params == mock_problem.n_params
 
     def test_initial_state(self, mock_problem):
         """5.4 eval_count==0, best_loss is None, budget_exceeded is False."""
@@ -118,7 +114,7 @@ class TestWarmup:
 
 
 # ======================================================================
-# Evaluation: value, grad, value_and_grad  (5.13–5.18)
+# Evaluation: value, grad, value_and_grad  (5.13-5.18)
 # ======================================================================
 
 
@@ -189,11 +185,11 @@ class TestEvaluation:
         np.testing.assert_allclose(np.array(g_vg), np.array(g), atol=1e-6)
 
     def test_hessian_matches_problem_hessian(self):
-        """hessian() matches jax.hessian(problem.objective_function)."""
+        """hessian() matches jax.hessian of the bounded objective function."""
         h_obj = self.obj.hessian(self.params)
         self.obj.reset()
         self.obj.start_logging()
-        expected = jax.hessian(self.obj.problem.objective_function)(self.params)
+        expected = jax.hessian(self.obj.value_function(unbounded=False))(self.params)
         np.testing.assert_allclose(np.array(h_obj), np.array(expected), atol=1e-6)
 
     def test_value_grad_and_hessian_matches_separate_calls(self):
@@ -217,7 +213,7 @@ class TestEvaluation:
 
 
 # ======================================================================
-# Batched evaluation  (5.19–5.22)
+# Batched evaluation  (5.19-5.22)
 # ======================================================================
 
 
@@ -277,7 +273,7 @@ class TestBatchedEvaluation:
 
 
 # ======================================================================
-# History tracking  (5.23–5.30)
+# History tracking  (5.23-5.30)
 # ======================================================================
 
 
@@ -317,8 +313,8 @@ class TestHistoryTracking:
 
     def test_best_params_corresponds(self):
         """5.28 best_params corresponds to best_loss evaluation."""
-        # Evaluate best_params — should produce best_loss
-        loss_at_best = self.obj.problem.objective_function(self.obj.best_params)
+        # Evaluate best_params; should produce best_loss
+        loss_at_best = self.obj.value_function(unbounded=False)(self.obj.best_params)
         assert float(loss_at_best) == pytest.approx(float(self.obj.best_loss), abs=1e-6)
 
     def test_improvement_count(self):
@@ -334,8 +330,7 @@ class TestHistoryTracking:
         """Second-order history aligns with loss history when enabled."""
         obj = Objective(
             mock_problem,
-            save_grad_history=True,
-            save_hessian_history=True,
+            save=["grad", "hessian"],
             save_params_history=True,
         )
         obj.set_seed(42)
@@ -349,7 +344,7 @@ class TestHistoryTracking:
 
 
 # ======================================================================
-# Budget enforcement  (5.31–5.39)
+# Budget enforcement  (5.31-5.39)
 # ======================================================================
 
 
@@ -371,7 +366,7 @@ class TestBudgetEnforcement:
         for _ in range(3):
             obj.value(obj.random_params_bounded())
         history_len = len(obj.loss_history)
-        # One more call — should not be logged
+        # One more call; should not be logged
         obj.value(obj.random_params_bounded())
         assert len(obj.loss_history) == history_len
 
@@ -406,7 +401,7 @@ class TestBudgetEnforcement:
         obj.start_logging()
         obj.value(obj.random_params_bounded())  # count=1
         batch = obj.random_params_bounded(n_samples=5)
-        obj.vmap_value(batch)  # 5 evals, only 2 left → exceeds
+        obj.vmap_value(batch)  # 5 evals, only 2 left -> exceeds
         # eval_count should still increase
         assert obj.eval_count > 3
         # But loss_history should only have the first valid entries
@@ -421,7 +416,7 @@ class TestBudgetEnforcement:
         assert obj.evals_left == 9
 
     def test_evals_progress_fraction(self, mock_problem):
-        """5.38 evals_progress_fraction 0→1."""
+        """5.38 evals_progress_fraction 0->1."""
         obj = Objective(mock_problem, max_evals=4)
         assert obj.evals_progress_fraction == 0.0
         obj.set_seed(42)
@@ -430,7 +425,7 @@ class TestBudgetEnforcement:
         assert obj.evals_progress_fraction == pytest.approx(0.25)
 
     def test_time_progress_fraction(self, mock_problem):
-        """5.39 time_progress_fraction 0→1."""
+        """5.39 time_progress_fraction 0->1."""
         obj = Objective(mock_problem, max_time=1.0)
         assert obj.time_progress_fraction == 0.0
         obj.start_logging()
@@ -440,13 +435,13 @@ class TestBudgetEnforcement:
 
 
 # ======================================================================
-# Bounded / unbounded mode  (5.40–5.43)
+# Bounded / unbounded mode  (5.40-5.43)
 # ======================================================================
 
 
 class TestBoundedUnbounded:
     def test_bounded_uses_objective_function(self, mock_problem):
-        """5.40 unbounded=False → uses objective_function."""
+        """5.40 unbounded=False -> uses objective_function."""
         obj = Objective(mock_problem, unbounded=False)
         obj.set_seed(42)
         obj.start_logging()
@@ -455,14 +450,16 @@ class TestBoundedUnbounded:
         expected = mock_problem.objective_function(params)
         np.testing.assert_allclose(float(loss), float(expected), atol=1e-6)
 
-    def test_unbounded_uses_sigmoid_objective(self, mock_problem):
-        """5.41 unbounded=True → uses sigmoid_objective_function."""
+    def test_unbounded_maps_then_uses_objective_function(self, mock_problem):
+        """5.41 unbounded=True maps to bounds before objective_function."""
         obj = Objective(mock_problem, unbounded=True)
         obj.set_seed(42)
         obj.start_logging()
         params = obj.random_params_unbounded()
         loss = obj.value(params)
-        expected = mock_problem.sigmoid_objective_function(params)
+        expected = mock_problem.objective_function(
+            obj._map_unbounded_to_bounded(params)
+        )
         np.testing.assert_allclose(float(loss), float(expected), atol=1e-6)
 
     def test_best_params_bounded_in_unbounded_mode(self, mock_problem):
@@ -493,13 +490,13 @@ class TestBoundedUnbounded:
 
 
 # ======================================================================
-# Reduced history properties  (5.44–5.47)
+# Reduced history properties  (5.44-5.47)
 # ======================================================================
 
 
 class TestReducedHistory:
     def test_loss_history_reduced_scalar(self, seeded_obj):
-        """5.44 Scalar entries → identical to loss_history."""
+        """5.44 Scalar entries -> identical to loss_history."""
         seeded_obj.start_logging()
         for _ in range(3):
             seeded_obj.value(seeded_obj.random_params_bounded())
@@ -509,8 +506,8 @@ class TestReducedHistory:
             np.testing.assert_allclose(r, float(o), atol=1e-6)
 
     def test_loss_history_reduced_batched(self, mock_problem):
-        """5.44 Batched entries → returns nanmin."""
-        obj = Objective(mock_problem, save_batched_losses_history=True)
+        """5.44 Batched entries -> returns nanmin."""
+        obj = Objective(mock_problem, save=["batched_loss"])
         obj.set_seed(42)
         obj.start_logging()
         batch = obj.random_params_bounded(n_samples=5)
@@ -520,7 +517,7 @@ class TestReducedHistory:
         assert isinstance(reduced[0], float)
 
     def test_params_history_reduced(self, seeded_obj):
-        """5.45 Scalar entries → identical."""
+        """5.45 Scalar entries -> identical."""
         seeded_obj.start_logging()
         for _ in range(3):
             seeded_obj.value_and_grad(seeded_obj.random_params_bounded())
@@ -544,10 +541,7 @@ class TestReducedHistory:
         """Second-order reduced history returns one Hessian per logged batch."""
         obj = Objective(
             mock_problem,
-            save_grad_history=True,
-            save_hessian_history=True,
-            save_batched_losses_history=True,
-            save_batched_hessians_history=True,
+            save=["grad", "hessian", "batched_loss", "batched_hessian"],
         )
         obj.set_seed(42)
         obj.start_logging()
@@ -573,14 +567,14 @@ class TestReducedHistory:
 
 
 # ======================================================================
-# Eval type tracking  (5.48–5.49)
+# Eval type tracking  (5.48-5.49)
 # ======================================================================
 
 
 class TestEvalTypeTracking:
     def test_eval_type_counts(self, mock_problem):
         """5.48 Distinguishes value-only (1), grad-only (2), value+grad (3)."""
-        obj = Objective(mock_problem, save_eval_type_history=True)
+        obj = Objective(mock_problem, save=["eval_type"])
         obj.set_seed(42)
         obj.start_logging()
         p = obj.random_params_bounded()
@@ -594,7 +588,7 @@ class TestEvalTypeTracking:
 
     def test_eval_type_counts_include_hessians(self, mock_problem):
         """Eval type tracking distinguishes second-order call variants."""
-        obj = Objective(mock_problem, save_eval_type_history=True)
+        obj = Objective(mock_problem, save=["eval_type"])
         obj.set_seed(42)
         obj.start_logging()
         p = obj.random_params_bounded()
@@ -604,7 +598,7 @@ class TestEvalTypeTracking:
         obj.vmap_hessian(batch)
         obj.vmap_value_grad_and_hessian(batch)
         counts = obj.eval_type_counts
-        assert 8 in counts   # hessian-only
+        assert 8 in counts  # hessian-only
         assert 11 in counts  # value+grad+hessian
         assert 12 in counts  # batched hessian
         assert 15 in counts  # batched value+grad+hessian
@@ -622,7 +616,7 @@ class TestEvalTypeTracking:
 
 
 # ======================================================================
-# log_evaluation  (5.50–5.51)
+# log_evaluation  (5.50-5.51)
 # ======================================================================
 
 
@@ -631,8 +625,7 @@ class TestLogEvaluation:
         """5.50 log_evaluation updates histories like value_and_grad."""
         obj = Objective(
             mock_problem,
-            save_grad_history=True,
-            save_hessian_history=True,
+            save=["grad", "hessian"],
         )
         obj.set_seed(42)
         obj.start_logging()
@@ -677,7 +670,7 @@ class TestReset:
 
     def test_reset_clears_hessian_history(self, mock_problem):
         """Second-order history is also cleared by reset()."""
-        obj = Objective(mock_problem, save_hessian_history=True)
+        obj = Objective(mock_problem, save=["hessian"])
         obj.set_seed(42)
         obj.start_logging()
         obj.hessian(obj.random_params_bounded())
@@ -686,7 +679,7 @@ class TestReset:
 
 
 # ======================================================================
-# Checkpointing  (5.53–5.57)
+# Checkpointing  (5.53-5.57)
 # ======================================================================
 
 
@@ -720,14 +713,14 @@ class TestCheckpointing:
 
     def test_load_restores_hessian_history(self, mock_problem, tmp_path):
         """Checkpoint round-trip preserves Hessian history when enabled."""
-        obj = Objective(mock_problem, save_hessian_history=True, max_evals=100)
+        obj = Objective(mock_problem, save=["hessian"], max_evals=100)
         obj.set_seed(42)
         obj.start_logging()
         obj.hessian(obj.random_params_bounded())
         fpath = str(tmp_path / "checkpoint_hessian.npz")
         obj.save_run_data(filepath=fpath)
 
-        obj2 = Objective(mock_problem, save_hessian_history=True, max_evals=100)
+        obj2 = Objective(mock_problem, save=["hessian"], max_evals=100)
         obj2.load_run_data(fpath)
         assert len(obj2.hessian_history) == 1
         np.testing.assert_allclose(
@@ -760,6 +753,78 @@ class TestCheckpointing:
         obj.save_run_data(filepath=fpath)
         tmp_file = tmp_path / "atomic.tmp.npz"
         assert not tmp_file.exists(), ".tmp.npz should be removed after atomic replace"
+
+
+# ======================================================================
+# Storage configuration  (checkpoint_format / checkpoint_dir knobs)
+# ======================================================================
+
+
+class TestStorageConfig:
+    """The Objective exposes checkpoint_format / checkpoint_dir as the
+    user-facing storage knobs; no imports required for the common cases."""
+
+    def test_defaults(self, mock_problem):
+        obj = Objective(mock_problem)
+        assert obj.checkpoint_format == "npz"
+        assert obj.checkpoint_dir is None
+
+    def test_json_format_no_imports(self, mock_problem, tmp_path):
+        """A pypi user selects JSON with a string, no serializer import."""
+        obj = Objective(
+            mock_problem,
+            checkpoint_format="json",
+            checkpoint_dir=str(tmp_path),
+        )
+        assert obj.checkpoint_format == "json"
+        obj.set_seed(42)
+        obj.start_logging()
+        obj.value(obj.random_params_bounded())
+        path = obj.save_run_data(algorithm_name="test")
+        assert path.suffix == ".json"
+        assert path.exists()
+        # Round-trip through a fresh Objective with the same format.
+        obj2 = Objective(
+            mock_problem,
+            checkpoint_format="json",
+            checkpoint_dir=str(tmp_path),
+        )
+        obj2.load_run_data(path)
+        assert obj2.eval_count == obj.eval_count
+
+    def test_checkpoint_dir_redirects_artifacts(self, mock_problem, tmp_path):
+        """checkpoint_dir sends artifacts to the given path, not ./data."""
+        obj = Objective(mock_problem, checkpoint_dir=str(tmp_path))
+        obj.set_seed(42)
+        obj.start_logging()
+        obj.value(obj.random_params_bounded())
+        path = obj.save_run_data(algorithm_name="test")
+        # The checkpoint lives under tmp_path, not the default ./data/...
+        assert str(path).startswith(str(tmp_path))
+
+    def test_unknown_format_raises(self, mock_problem):
+        with pytest.raises(ValueError, match="Unknown checkpoint_format"):
+            Objective(mock_problem, checkpoint_format="xml")
+
+    def test_format_and_dir_survive_reset(self, mock_problem, tmp_path):
+        """reset() preserves the configured format and directory."""
+        obj = Objective(
+            mock_problem,
+            checkpoint_format="json",
+            checkpoint_dir=str(tmp_path),
+        )
+        obj.reset()
+        assert obj.checkpoint_format == "json"
+        assert obj.checkpoint_dir == str(tmp_path)
+
+    def test_reset_refreshes_timestamp(self, mock_problem):
+        """reset() produces a new timestamp so saves do not overwrite the
+        previous run's checkpoint at the cached path."""
+        obj = Objective(mock_problem)
+        ts_before = obj._timestamp
+        time.sleep(1.05)  # timestamp format has second resolution
+        obj.reset()
+        assert obj._timestamp != ts_before
 
 
 # ======================================================================

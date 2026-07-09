@@ -1,7 +1,4 @@
-import jax
 import jax.numpy as jnp
-import numpy as np
-from jax import random
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
@@ -16,7 +13,7 @@ class RandomSearch(OptimizationAlgorithm):
 
     Attributes:
         algorithm_str (str): Identifier string for this algorithm ("random_search").
-        algorithm_type (AlgorithmType): Type classification (EVOLUTIONARY).
+        algorithm_type (AlgorithmType): Type classification (GLOBAL_SEARCH).
         batch_size (int): Number of samples to evaluate in parallel per batch.
 
     Example:
@@ -26,13 +23,12 @@ class RandomSearch(OptimizationAlgorithm):
         >>> obj = Objective(problem, unbounded=False, max_time=120)
         >>> optimizer = RandomSearch(batch_size=1)
         >>> result = optimizer.optimize(
-        ...     problem_objective=obj,
-        ...     max_iterations=100,
+        ...     objective=obj,
         ... )
     """
 
     algorithm_str: str = "random_search"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.GLOBAL_SEARCH
 
     def __init__(
         self,
@@ -48,45 +44,29 @@ class RandomSearch(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
-        max_iterations: int | None = None,
+        objective: Objective,
+        init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
     ) -> None:
         """Run Random Search optimization.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
-            max_iterations: Maximum number of batches to evaluate. If None, runs until budget exceeded.
+            objective: The Objective instance wrapping the problem.
+            init_params: Initial parameters, accepted for the standard algorithm
+                contract but ignored by random search.
             random_seed (int | None): Random seed for reproducibility. Defaults to None.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
-        random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
-
-        # Get bounds
-        lower, upper = problem.bounds[0], problem.bounds[1]
+        self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         # Warmup JIT
         obj.warmup_vmap_value(batch_size=self.batch_size)
 
         obj.start_logging()
 
-        iteration = 0
         while not obj.budget_exceeded:
-            if max_iterations is not None and iteration >= max_iterations:
-                break
-
-            # Generate random samples
-            key, subkey = random.split(key)
-            random_params = random.uniform(
-                subkey,
-                shape=(self.batch_size, problem.n_params),
-                minval=lower,
-                maxval=upper,
-            )
+            random_params = jnp.atleast_2d(obj.random_params(n_samples=self.batch_size))
 
             # Evaluate batch
-            losses = obj.vmap_value(random_params)
-
-            iteration += 1
+            obj.vmap_value(random_params)

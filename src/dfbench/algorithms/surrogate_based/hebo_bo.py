@@ -1,4 +1,4 @@
-"""HEBO — Heteroscedastic Evolutionary Bayesian Optimization.
+"""HEBO: Heteroscedastic Evolutionary Bayesian Optimization.
 
 Uses the ``hebo`` package which won the NeurIPS 2020 BBO challenge. HEBO
 employs a heteroscedastic GP, input warping, and a multi-objective
@@ -31,7 +31,7 @@ except ImportError:
 
 
 class HEBO(OptimizationAlgorithm):
-    """HEBO — Heteroscedastic Evolutionary Bayesian Optimization.
+    """HEBO: Heteroscedastic Evolutionary Bayesian Optimization.
 
     Wraps the ``hebo`` package to work with the ``Objective`` protocol.
     HEBO internally uses a heteroscedastic GP with input warping and a
@@ -49,11 +49,11 @@ class HEBO(OptimizationAlgorithm):
 
     def __init__(self) -> None:
         if not _HEBO_AVAILABLE:
-            raise ImportError("HEBO is required. Install with: uv pip install HEBO")
+            raise ImportError("HEBO is required. Install with: uv add 'dfbench[bo]'")
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         batch_size: int = 1,
@@ -65,19 +65,18 @@ class HEBO(OptimizationAlgorithm):
         (``max_evals`` / ``max_time``).
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded). Currently unused.
             random_seed: Seed for reproducibility.
             batch_size: Candidates per suggestion.
             **hebo_kwargs: Forwarded to HEBO optimizer.
         """
-        obj = problem_objective
-        problem = obj.problem
-        dim = problem.n_params
+        obj = objective
+        dim = obj.n_params
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb = np.asarray(problem.bounds[0])
-        ub = np.asarray(problem.bounds[1])
+        lb = np.asarray(obj.bounds[0])
+        ub = np.asarray(obj.bounds[1])
 
         # Build HEBO design space
         params_spec = [
@@ -100,7 +99,7 @@ class HEBO(OptimizationAlgorithm):
         )
 
         # JIT warmup
-        _ = obj.vmap_value(jnp.zeros((1, dim)))
+        obj.warmup_vmap_value(batch_size=1)
         obj.start_logging()
 
         while not obj.budget_exceeded:

@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
-from scipy.optimize import minimize
+
+try:
+    from scipy.optimize import minimize
+except ImportError as exc:
+    raise ImportError(
+        "scipy is required for this algorithm. Install with:  uv add 'dfbench[scipy]'"
+    ) from exc
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
@@ -28,18 +33,18 @@ class NelderMead(OptimizationAlgorithm):
 
     Attributes:
         algorithm_str: ``"nelder_mead"``
-        algorithm_type: :attr:`AlgorithmType.EVOLUTIONARY`
+        algorithm_type: :attr:`AlgorithmType.DERIVATIVE_FREE`
     """
 
     algorithm_str: str = "nelder_mead"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(self) -> None:
         pass
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         xatol: float = 1e-8,
@@ -49,7 +54,7 @@ class NelderMead(OptimizationAlgorithm):
         """Run Nelder-Mead simplex optimization.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Starting point. If *None*, sampled uniformly in bounds.
             random_seed: Seed for reproducibility (controls initial point).
             xatol: Absolute parameter tolerance for convergence.
@@ -57,11 +62,9 @@ class NelderMead(OptimizationAlgorithm):
             adaptive: Adapt simplex parameters to dimensionality (recommended
                 for n > 1).
         """
-        obj = problem_objective
+        obj = objective
 
-        random_seed, _key = self.prepare(
-            obj, unbounded=False, random_seed=random_seed
-        )
+        random_seed, _key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         if init_params is None:
             params = obj.random_params_bounded()
@@ -69,7 +72,7 @@ class NelderMead(OptimizationAlgorithm):
             params = init_params
 
         # JIT warmup
-        _ = obj.value(params)
+        obj.warmup_value()
 
         obj.start_logging()
 

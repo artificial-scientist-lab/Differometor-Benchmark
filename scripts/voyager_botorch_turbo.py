@@ -14,13 +14,13 @@ obj = Objective(
     save_params_history=True,
 )
 
-optimizer = BotorchTuRBO()
+optimizer = BotorchTuRBO(batch_size=4)
 
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     max_iterations=200,
     n_initial=None,  # defaults to 2 * dim
-    batch_size=4,
+    acquisition_batch_size=4,
     random_seed=42,
 )
 

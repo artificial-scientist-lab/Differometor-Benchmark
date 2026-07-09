@@ -1,27 +1,26 @@
-"""Section 5 (randomness) — Objective seed & random sampling.
+"""Section 5 (randomness): Objective seed & random sampling.
 
-Tests 5.5–5.12: set_seed, random_params_bounded, random_params_unbounded.
+Tests 5.5-5.12: set_seed, random_params_bounded, random_params_unbounded.
 """
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-import pytest
 
 from dfbench.core.objective import Objective
 from differometor.utils import sigmoid_bounding
 
 
 class TestRandomParamsBoundedShape:
-    """5.5–5.6 Shape of random_params_bounded."""
+    """5.5-5.6 Shape of random_params_bounded."""
 
     def test_single_sample_shape(self, seeded_obj):
-        """5.5 n=1 → (n_params,)."""
+        """5.5 n=1 -> (n_params,)."""
         sample = seeded_obj.random_params_bounded(n_samples=1)
         assert sample.shape == (seeded_obj.n_params,)
 
     def test_batch_sample_shape(self, seeded_obj):
-        """5.6 n=10 → (10, n_params)."""
+        """5.6 n=10 -> (10, n_params)."""
         samples = seeded_obj.random_params_bounded(n_samples=10)
         assert samples.shape == (10, seeded_obj.n_params)
 
@@ -37,7 +36,7 @@ class TestRandomParamsBoundedBounds:
 
 
 class TestRandomParamsUnbounded:
-    """5.8–5.9 Unbounded sampling."""
+    """5.8-5.9 Unbounded sampling."""
 
     def test_finite(self, seeded_obj):
         """5.8 All values non-NaN, non-inf."""
@@ -47,7 +46,7 @@ class TestRandomParamsUnbounded:
     def test_sigmoid_round_trip(self, seeded_obj):
         """5.9 sigmoid_bounding recovers in-bounds points."""
         samples = seeded_obj.random_params_unbounded(n_samples=100)
-        bounds = seeded_obj.problem.bounds
+        bounds = seeded_obj.bounds
         bounded = jax.vmap(lambda x: sigmoid_bounding(x, bounds))(samples)
         lower, upper = bounds[0], bounds[1]
         assert jnp.all(bounded >= lower - 1e-6)
@@ -78,10 +77,10 @@ class TestRandomParamsUnbounded:
 
 
 class TestSeedReproducibility:
-    """5.10–5.11b Seed-based reproducibility."""
+    """5.10-5.11b Seed-based reproducibility."""
 
     def test_same_seed_same_output(self, mock_problem):
-        """5.10 Two separate instances, same seed → identical output."""
+        """5.10 Two separate instances, same seed -> identical output."""
         obj1 = Objective(mock_problem)
         obj1.set_seed(42)
 
@@ -103,7 +102,7 @@ class TestSeedReproducibility:
         assert not jnp.allclose(s1, s2), "Successive samples should differ"
 
     def test_different_seeds_differ(self, mock_problem):
-        """5.11b Different seeds → different samples."""
+        """5.11b Different seeds -> different samples."""
         obj1 = Objective(mock_problem)
         obj1.set_seed(42)
 

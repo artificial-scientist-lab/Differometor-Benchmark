@@ -21,12 +21,14 @@ Edit ``GLOBAL_MAX_EVALS``, ``POP_SIZE``, and ``RANDOM_SEED`` to taste.
 
 from __future__ import annotations
 
+from dfbench import Objective
+from dfbench.problems import VoyagerProblem
+from dfbench.algorithms.evolutionary.jax_es import JAXOnePlusOneES, JAXMuLambdaES
+
+
 MAX_EVALS = 100_000
 POP_SIZE = 50
 RANDOM_SEED = 42
-
-from dfbench import Objective
-from dfbench.problems import VoyagerProblem
 
 problem = VoyagerProblem()
 
@@ -52,7 +54,7 @@ try:
         (PyCMABIPOP(batch_size=POP_SIZE), {"pop_size": POP_SIZE, "max_restarts": 10}),
     ]
 except ImportError:
-    print("pycma not installed — skipping pycma algorithms.")
+    print("pycma not installed, skipping pycma algorithms.")
 
 # --- cmaes ---
 try:
@@ -60,7 +62,7 @@ try:
 
     configs.append((CMAESSepCMA(batch_size=POP_SIZE), {"pop_size": POP_SIZE}))
 except ImportError:
-    print("cmaes not installed — skipping CMAESSepCMA.")
+    print("cmaes not installed, skipping CMAESSepCMA.")
 
 # --- evosax ---
 try:
@@ -71,10 +73,9 @@ try:
         (EvosaxLMMAES(batch_size=POP_SIZE), {"pop_size": POP_SIZE}),
     ]
 except ImportError:
-    print("evosax not installed — skipping evosax algorithms.")
+    print("evosax not installed, skipping evosax algorithms.")
 
 # --- native JAX ---
-from dfbench.algorithms.evolutionary.jax_es import JAXOnePlusOneES, JAXMuLambdaES
 
 configs += [
     (JAXOnePlusOneES(), {}),
@@ -86,7 +87,7 @@ configs += [
 # ---------------------------------------------------------------------------
 
 for algo, opt_kwargs in configs:
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running {algo.algorithm_str} ...")
 
     obj = Objective(
@@ -98,7 +99,7 @@ for algo, opt_kwargs in configs:
     )
 
     algo.optimize(
-        problem_objective=obj,
+        objective=obj,
         random_seed=RANDOM_SEED,
         **opt_kwargs,
     )

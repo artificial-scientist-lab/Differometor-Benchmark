@@ -6,15 +6,13 @@ perturbs it with Gaussian noise, accepting the perturbation only if it improves
 the objective. It is one of the simplest derivative-free baselines and serves
 as a sanity-check control for rugged landscapes.
 
-Operates in **bounded physical space** — bounds are passed to the Nevergrad
+Operates in **bounded physical space**; bounds are passed to the Nevergrad
 parametrization directly. Unbounded mode is not supported.
 """
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import numpy as np
-from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
@@ -24,7 +22,7 @@ try:
     import nevergrad as ng
 except ImportError as exc:
     raise ImportError(
-        "Nevergrad is required for OnePlusOne. Install with: uv add nevergrad"
+        "Nevergrad is required for OnePlusOne. Install with: uv add 'dfbench[evolution]'"
     ) from exc
 
 
@@ -51,7 +49,7 @@ class NevergradOnePlusOne(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         random_seed: int | None = None,
         n_restarts: int = 1,
@@ -59,31 +57,26 @@ class NevergradOnePlusOne(OptimizationAlgorithm):
         """Run (1+1)-ES optimization via Nevergrad.
 
         Args:
-            problem_objective: Pre-configured Objective for function evaluations.
+            objective: Pre-configured Objective for function evaluations.
             max_iterations: Cap on total optimizer *ask/tell* iterations across
                 all restarts. If None, runs until the Objective budget is exhausted.
             random_seed: Seed for reproducibility.
             n_restarts: Number of independent restarts. Budget is split evenly.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        if not hasattr(problem, "bounds"):
-            raise ValueError("OnePlusOne requires a bounded problem (problem.bounds).")
-
-        bounds = problem.bounds
+        bounds = obj.bounds
         lb = np.asarray(bounds[0], dtype=np.float64)
         ub = np.asarray(bounds[1], dtype=np.float64)
-        n_params = int(problem.n_params)
+        n_params = int(obj.n_params)
 
         # Budget per restart
         budget_per_restart = max_iterations // n_restarts if max_iterations else None
 
         # JIT warmup
-        _warmup = jnp.zeros(n_params)
-        _ = obj.value(_warmup)
+        obj.warmup_value()
 
         obj.start_logging()
 

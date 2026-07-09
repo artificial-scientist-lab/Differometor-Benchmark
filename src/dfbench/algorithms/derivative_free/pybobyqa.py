@@ -1,4 +1,4 @@
-"""Py-BOBYQA — Bound Optimization BY Quadratic Approximation.
+"""Py: BOBYQA: Bound Optimization BY Quadratic Approximation.
 
 Py-BOBYQA is a flexible Python implementation of Powell's BOBYQA algorithm
 with modern enhancements for noisy objectives, automatic restarts, and
@@ -11,7 +11,7 @@ because BOBYQA handles box bounds natively and efficiently.
 Key features exposed:
   - ``rhobeg`` / ``rhoend``: trust-region radii (initial / final).
   - ``seek_global_minimum``: enables automatic soft restarts within the
-    evaluation budget — useful for multi-modal landscapes.
+    evaluation budget, useful for multi-modal landscapes.
   - ``objfun_has_noise``: enables the noisy-objective variant that uses
     regression models instead of interpolation, appropriate when the
     problem evaluation has stochastic components.
@@ -25,13 +25,12 @@ Reference:
     Cartis, C., Fiala, J., Marber, B., & Roberts, L. (2019).
     Improving the flexibility and robustness of model-based
     derivative-free optimization solvers. *ACM Transactions on
-    Mathematical Software (TOMS)*, 45(3), 1–41.
+    Mathematical Software (TOMS)*, 45(3), 1-41.
 """
 
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -40,7 +39,6 @@ from dfbench.algorithms.derivative_free._dfo_common import (
     dfo_objective_wrapper,
     multistart_loop,
     solver_bounds_np,
-    clip_to_bounds,
 )
 
 
@@ -68,7 +66,7 @@ class PyBOBYQA(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "pybobyqa"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,
@@ -90,7 +88,7 @@ class PyBOBYQA(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         max_iterations: int | None = None,
@@ -99,19 +97,19 @@ class PyBOBYQA(OptimizationAlgorithm):
             import pybobyqa
         except ImportError as exc:
             raise ImportError(
-                "Py-BOBYQA is required.  Install with: pip install Py-BOBYQA"
+                "Py-BOBYQA is required.  Install with: uv add 'dfbench[dfo]'"
             ) from exc
 
-        obj = problem_objective
+        obj = objective
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         lower, upper = solver_bounds_np(obj)
-        npt = self.npt  # None → Py-BOBYQA default (2n+1)
+        npt = self.npt  # None -> Py-BOBYQA default (2n+1)
 
         fun = dfo_objective_wrapper(obj)
 
         # JIT warmup
-        _ = obj.value(jnp.asarray(clip_to_bounds(np.zeros(obj.n_params), obj)))
+        obj.warmup_value()
 
         obj.start_logging()
 
@@ -164,7 +162,9 @@ class PyBOBYQA(OptimizationAlgorithm):
                 raise RuntimeError(f"Py-BOBYQA input error: {result.msg}")
 
         multistart_loop(
-            obj, key, _solve,
+            obj,
+            key,
+            _solve,
             n_restarts=self.n_restarts,
             init_params=init_params,
         )

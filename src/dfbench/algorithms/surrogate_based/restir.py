@@ -5,8 +5,13 @@ Implementation of a kNN-surrogate based optimization algorithm using JAX.
 
 import jax
 import jax.numpy as jnp
-import numpy as np
-import optax
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for this algorithm. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 from functools import partial
 from jaxtyping import Array, Float
 
@@ -42,7 +47,7 @@ def standardize_data(X_train, X_query=None):
 
 @partial(jax.jit, static_argnames=("k",))
 def knn_predict(X_train, y_train, X_query, k=10):
-    """Batched kNN regression in pure JAX - runs entirely on GPU.
+    """Batched kNN regression in pure JAX; runs entirely on GPU.
 
     Uses brute-force distance computation with inverse distance weighting.
     Optimized for cases where training set fits in memory.
@@ -74,7 +79,7 @@ def knn_predict(X_train, y_train, X_query, k=10):
 
 
 def knn_predict_batched(X_train, y_train, X_query, k=10, batch_size=50_000):
-    """Memory-safe batched kNN - stays in JAX, no copies.
+    """Memory-safe batched kNN; stays in JAX, no copies.
 
     For large query sets (M > 100k), process in chunks to avoid OOM.
 
@@ -140,7 +145,7 @@ class ReSTIR(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
@@ -161,7 +166,7 @@ class ReSTIR(OptimizationAlgorithm):
         for actual evaluation.
 
         Args:
-            problem_objective: Pre-configured Objective instance. Use this for all
+            objective: Pre-configured Objective instance. Use this for all
                 function evaluations - it handles tracking automatically.
             max_iterations: Maximum number of algorithm iterations (not evaluations).
                 If None, runs until budget is exceeded.
@@ -177,8 +182,7 @@ class ReSTIR(OptimizationAlgorithm):
             gd_learning_rate: Learning rate for Optax Adam updates during GD refinement.
         """
         # 1. Setup
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
@@ -214,7 +218,7 @@ class ReSTIR(OptimizationAlgorithm):
             X_train_scaled, mean, std = standardize_data(knn_reference_points)
             y_train = knn_reference_losses
 
-            # Always draw exactly n_total_samples candidates → fixed query shape → no JAX retrace
+            # Always draw exactly n_total_samples candidates -> fixed query shape -> no JAX retrace
             drawn_samples = obj.random_params_bounded(n_samples=n_total_samples)
             X_query_scaled = (drawn_samples - mean) / std
 
@@ -329,11 +333,10 @@ class ReSTIR(OptimizationAlgorithm):
                 replace=False,
             )
             selected_samples = sel_samples[final_idx]
-            selected_logits = weight_logits[final_idx]
 
             # Batched Adam GD refinement on all selected candidates
             if n_final_candidates > 0 and gd_steps > 0:
-                lower, upper = problem.bounds
+                lower, upper = obj.bounds
                 gd_samples = selected_samples
                 gd_optimizer = optax.adam(gd_learning_rate)
                 gd_opt_state = gd_optimizer.init(gd_samples)

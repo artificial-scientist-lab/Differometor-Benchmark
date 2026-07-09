@@ -5,7 +5,7 @@ from dfbench.algorithms import BasinHopping
 from dfbench.core.objective import Objective
 
 SEED = 42
-MAX_TIME = 6900  # seconds — leaves ~5 min for saving before the 2 h wall-time
+MAX_TIME = 6900  # seconds, leaves ~5 min for saving before the 2 h wall-time
 MAX_EVALS = 50_000  # global method; fewer evals are more meaningful
 
 problem = VoyagerProblem()

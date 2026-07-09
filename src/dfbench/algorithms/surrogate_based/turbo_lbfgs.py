@@ -1,4 +1,4 @@
-"""TuRBO→L-BFGS — Trust-region BO followed by local gradient refinement.
+"""TuRBO->L: BFGS: Trust-region BO followed by local gradient refinement.
 
 Runs a TuRBO phase (local trust-region Bayesian Optimization) to locate a
 promising basin, then hands off the best incumbent to the Optax L-BFGS
@@ -18,13 +18,24 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
-import torch
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for this algorithm. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.core.utils import t2j, inverse_sigmoid_bounding
+from dfbench.core.utils import inverse_sigmoid_bounding
 from dfbench.algorithms.surrogate_based.botorch.botorch_turbo import (
     BotorchTuRBO,
     TurboState,
@@ -36,17 +47,16 @@ from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     evaluate_objective,
     fit_gp,
     get_problem_bounds_torch,
-    sobol_initial_samples,
 )
 
 
 class TuRBOLBFGS(OptimizationAlgorithm):
-    """TuRBO→L-BFGS: trust-region BO + local gradient refinement.
+    """TuRBO->L-BFGS: trust-region BO + local gradient refinement.
 
-    Phase 1 — **TuRBO**: runs local trust-region BO in bounded parameter space
+    Phase 1 : **TuRBO**: runs local trust-region BO in bounded parameter space
     to find a promising region.
 
-    Phase 2 — **L-BFGS** (via Optax): takes the best incumbent from Phase 1,
+    Phase 2 : **L-BFGS** (via Optax): takes the best incumbent from Phase 1,
     maps it to unbounded (sigmoid) space internally, and runs L-BFGS for rapid
     local convergence. Results are logged back via ``log_evaluation`` using
     bounded params so the Objective stays in bounded mode throughout.
@@ -81,7 +91,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         # TuRBO phase
@@ -93,10 +103,10 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         lbfgs_patience: int = 200,
         **kwargs,
     ) -> None:
-        """Run TuRBO→L-BFGS.
+        """Run TuRBO->L-BFGS.
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
             turbo_iterations: Optional cap on BO iterations for the TuRBO phase.
@@ -109,9 +119,8 @@ class TuRBOLBFGS(OptimizationAlgorithm):
                 improvement.
             **kwargs: Additional TuRBO kwargs.
         """
-        obj = problem_objective
-        problem = obj.problem
-        dim = problem.n_params
+        obj = objective
+        dim = obj.n_params
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
@@ -123,14 +132,14 @@ class TuRBOLBFGS(OptimizationAlgorithm):
         # Phase 1: TuRBO
         # ════════════════════════════════════════════════════════════════
 
-        bounds_torch = get_problem_bounds_torch(problem, self.device, self.dtype)
+        bounds_torch = get_problem_bounds_torch(obj.bounds, self.device, self.dtype)
 
         turbo_engine = BotorchTuRBO()
         turbo_engine.device = self.device
         turbo_engine.dtype = self.dtype
 
         # JIT warmup (bounded)
-        _ = obj.vmap_value(jnp.zeros((1, dim)))
+        obj.warmup_vmap_value(batch_size=1)
 
         obj.start_logging()
 
@@ -157,7 +166,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
 
         state = TurboState(
             dim=dim,
-            batch_size=turbo_batch_size,
+            acquisition_batch_size=turbo_batch_size,
             best_value=train_Y.max().item(),
         )
 
@@ -179,7 +188,7 @@ class TuRBOLBFGS(OptimizationAlgorithm):
                 model=model,
                 X=train_X,
                 Y=train_Y_norm,
-                batch_size=turbo_batch_size,
+                acquisition_batch_size=turbo_batch_size,
                 acqf=turbo_acqf,
             )
 
@@ -215,13 +224,13 @@ class TuRBOLBFGS(OptimizationAlgorithm):
 
         best_bounded = jnp.asarray(obj.best_params_bounded)
 
-        # Map best bounded → unbounded
-        bounds_jax = jnp.asarray(problem.bounds)
+        # Map best bounded -> unbounded
+        bounds_jax = jnp.asarray(obj.bounds)
         params = inverse_sigmoid_bounding(best_bounded, bounds_jax)
 
-        # Build JIT-compiled L-BFGS step using the sigmoid objective,
-        # which lives entirely in unbounded space.
-        value_fn = problem.sigmoid_objective_function
+        # Build JIT-compiled L-BFGS step using an unlogged value function
+        # that maps from unbounded coordinates into problem bounds.
+        value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
 
         def _to_bounded(unbounded_params):

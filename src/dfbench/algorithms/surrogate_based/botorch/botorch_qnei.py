@@ -1,4 +1,4 @@
-"""qNEI — Noisy Expected Improvement via BoTorch.
+"""qNEI: Noisy Expected Improvement via BoTorch.
 
 Uses ``qLogNoisyExpectedImprovement`` (the numerically stable log variant)
 which accounts for observation noise in the acquisition function, making it
@@ -13,9 +13,14 @@ Operates in **bounded** parameter space.
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -41,7 +46,7 @@ except ImportError:
     _BOTORCH_AVAILABLE = False
 
 
-class BotorchqNEI(OptimizationAlgorithm):
+class BotorchQNEI(OptimizationAlgorithm):
     """Noisy Expected Improvement BO via BoTorch.
 
     Wraps ``qLogNoisyExpectedImprovement`` which conditions on the training data
@@ -61,15 +66,14 @@ class BotorchqNEI(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for BotorchqNEI. Install with: "
-                "uv pip install botorch"
+                "BoTorch is required for BotorchQNEI. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
@@ -81,7 +85,7 @@ class BotorchqNEI(OptimizationAlgorithm):
         """Run qNEI.
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
             n_initial: Sobol initialisation budget.
@@ -91,14 +95,13 @@ class BotorchqNEI(OptimizationAlgorithm):
             prune_baseline: Whether to prune the baseline set for qNEI.
             **bo_kwargs: Forwarded to ``optimize_acqf``.
         """
-        obj = problem_objective
-        problem = obj.problem
-        dim = problem.n_params
+        obj = objective
+        dim = obj.n_params
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        bounds = get_problem_bounds_torch(problem, self.device, self.dtype)
+        bounds = get_problem_bounds_torch(obj.bounds, self.device, self.dtype)
         u_bounds = unit_bounds_torch(dim, self.device, self.dtype)
 
         acqf_opts = {
@@ -115,7 +118,7 @@ class BotorchqNEI(OptimizationAlgorithm):
         }
 
         # JIT warmup
-        _ = obj.vmap_value(jnp.zeros((1, dim)))
+        obj.warmup_vmap_value(batch_size=1)
         obj.start_logging()
 
         # Initial Sobol

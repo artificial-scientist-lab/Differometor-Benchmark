@@ -18,7 +18,7 @@ the Objective for extra safety.
 
 Requires
 --------
-    cmaes >= 0.10  (``uv add cmaes``)
+    cmaes >= 0.10  (``uv add 'dfbench[evolution]'``)
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ try:
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
         "The 'cmaes' package is required for CMAESSepCMA. "
-        "Install it with:  uv add cmaes"
+        "Install it with:  uv add 'dfbench[evolution]'"
     ) from exc
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
@@ -78,7 +78,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: np.ndarray | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -89,7 +89,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
         """Run sep-CMA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean vector.  Sampled uniformly in bounds
                 when ``None``.
             random_seed: Seed for reproducibility.
@@ -105,15 +105,14 @@ class CMAESSepCMA(OptimizationAlgorithm):
                 improving the best loss seen by the Objective.  ``None``
                 disables stagnation stopping.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         width = ub_np - lb_np
-        n = problem.n_params
+        n = obj.n_params
 
         # The cmaes package has no per-coordinate sigma.  On problems where
         # bound widths span orders of magnitude (e.g. Voyager), running the
@@ -132,9 +131,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
         batch_size = self._batch_size
 
         # Bounds in unit space for cmaes' internal repair.
-        bounds_array = np.stack(
-            [np.zeros(n), np.ones(n)], axis=1
-        )  # (n, 2)
+        bounds_array = np.stack([np.zeros(n), np.ones(n)], axis=1)  # (n, 2)
 
         optimizer = SepCMA(
             mean=x0_unit,
@@ -146,7 +143,7 @@ class CMAESSepCMA(OptimizationAlgorithm):
         actual_pop = optimizer.population_size
 
         # JIT warmup before timing starts
-        _ = obj.vmap_value(jnp.zeros((min(batch_size, actual_pop), n)))
+        obj.warmup_vmap_value(batch_size=min(batch_size, actual_pop))
         obj.start_logging()
 
         iteration = 0
@@ -182,7 +179,9 @@ class CMAESSepCMA(OptimizationAlgorithm):
 
             # Optional stagnation stopping
             if max_no_improvement is not None:
-                current_best = float(obj.best_loss) if obj.best_loss is not None else float("inf")
+                current_best = (
+                    float(obj.best_loss) if obj.best_loss is not None else float("inf")
+                )
                 if current_best < prev_best:
                     prev_best = current_best
                     gens_without_improvement = 0

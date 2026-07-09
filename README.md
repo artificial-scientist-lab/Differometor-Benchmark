@@ -1,19 +1,14 @@
 # Differometor Benchmark
 
+[![image](https://img.shields.io/pypi/v/dfbench.svg)](https://pypi.python.org/pypi/dfbench)
+[![image](https://img.shields.io/pypi/l/dfbench)](https://pypi.python.org/pypi/dfbench)
+[![image](https://img.shields.io/pypi/pyversions/dfbench.svg)](https://pypi.python.org/pypi/dfbench)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Tests](https://img.shields.io/github/actions/workflow/status/artificial-scientist-lab/Differometor-Benchmark/tests.yaml?branch=main&label=tests&logo=github)](https://github.com/artificial-scientist-lab/Differometor-Benchmark/actions/workflows/tests.yaml)
+
 A benchmarking framework for optimization algorithms on gravitational-wave detector design problems, built on top of the [Differometor](https://github.com/artificial-scientist-lab/Differometor) simulator.
 
-> **For detailed documentation, see the [Wiki](docs/Home.md).**
-
----
-
-## Please Read
-I want to keep the process of implementing an algorithm as intuitive as possible. Questions (and ideas) help me figure out where unclarities come up.
-
-If you have *any* questions, don't hesitate to ask me via Slack (Laurin Sefa) or an Issue!
-
-
-
----
+> **For detailed documentation, see the [Wiki](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki).**
 
 ## TL;DR (I want to try my own algorithm)
 
@@ -53,7 +48,7 @@ obj.plot_loss()
 obj.save_run_to_file("my_run.npz")
 ```
 
-**A loss below 0 means your solution beats the real Voyager detector's sensitivity.** (On `VoyagerProblem` without physical constraints — you might be burning mirrors.)
+**A loss below 0 means your solution beats the real Voyager detector's sensitivity.** (On `VoyagerProblem` without physical constraints, you might be burning mirrors.)
 
 ### Evaluation Methods
 
@@ -75,8 +70,8 @@ The problems are JAX-based and differentiable up to second order. Use whichever 
 ```python
 from dfbench import t2j, j2t
 
-params_jax = t2j(params_torch)       # Torch → JAX
-losses_torch = j2t(obj.vmap_value(params_jax))  # JAX → Torch
+params_jax = t2j(params_torch)       # Torch -> JAX
+losses_torch = j2t(obj.vmap_value(params_jax))  # JAX -> Torch
 ```
 
 This adds negligible overhead compared to the objective function itself.
@@ -90,17 +85,32 @@ This adds negligible overhead compared to the objective function itself.
 | `ConstrainedVoyagerProblem` | ~25 ms/eval (A100) | The same setup but physically constrained. Loss < 0 very difficult. |
 | `UIFOProblem` | ~500 ms/eval (A100) | Full 3x3 UIFO setup (constrained). Loss < 0 hard but doable. |
 
-Both constrained problems accept a `power_penalty_fn(value, threshold)` callable to control how power-constraint violations are penalized.  Built-in presets: `squashed_relu_penalty` (default), `relu_penalty`, `zero_penalty`. Feel free to try own ones.
+Both constrained problems accept a `power_penalty_fn(value, threshold)` callable to control how power-constraint violations are penalized.  Built-in presets: `squashed_relu_penalty` (default), `relu_penalty`, `zero_penalty`. Feel free to try own ones. The penalty function can also be swapped after construction via `obj.set_penalty_fn(fn)` (before `obj.start_logging()`), which re-traces the objective so the change takes effect. The unconstrained Voyager problems reject this call because they have no power-constraint path.
+
+Constrained problems also expose aux diagnostics. `obj.value_aux(params)` and `obj.vmap_value_aux(batch)` return `(loss, aux)` where `aux` carries the loss decomposition, a physical `is_feasible` flag, per-constraint violations, and the raw per-group power arrays. Enable `save` tokens like `is_feasible`, `power_values`, or the `aux` alias and the standard `obj.value` / `obj.value_and_grad` loop records the enabled aux fields in the same forward pass, with no code change. See [Problems](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Problems) for the aux schema and [Objective API Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Objective-API-Reference) for the full method set.
 
 All problems also support `bounds_overrides` (e.g. `{"tuning": (0, 45)}`) to narrow default property bounds and `signal_floor` to floor detector signal magnitudes before sensitivity normalization. `signal_floor` defaults to `1e-20`. Use `problem.print_bounds()` to inspect effective bounds.
 
-See [Problems](docs/Problems.md) for details on loss computation, parameter meanings, and constraints.
+See [Problems](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Problems) for details on loss computation, parameter meanings, and constraints.
 
 ---
 
 ## Installation
 
-### With `uv` (recommended)
+### From PyPI
+
+```bash
+pip install dfbench                    # Core package and Differometor problems
+pip install "dfbench[optax,scipy]"      # Common local optimizers
+pip install "dfbench[evolution]"        # CMA, EvoX, Nevergrad, Evosax
+pip install "dfbench[bo]"               # BoTorch/Ax surrogate optimizers
+pip install "dfbench[dfo,smac]"         # Derivative-free and SMAC optimizers
+pip install "dfbench[all]"              # All optimizer backends
+pip install "dfbench[cuda13]"           # CUDA 13 JAX support
+pip install "dfbench[analysis]"         # Notebook/profiling tools
+```
+
+### From Source With `uv` (recommended for development)
 
 [uv](https://uv.dev/) handles virtual environments and dependency resolution automatically.
 
@@ -111,14 +121,14 @@ uv sync --group analysis                 # With analysis tools (profiling, noteb
 uv sync --group cuda13 --group analysis  # Everything
 ```
 
-### With `pip`
+### From Source With `pip`
 
 ```bash
-pip install -e .                     # Basic
-pip install -e ".[cuda13,analysis]"    # Everything
+pip install -e .                         # CPU-only editable install
+pip install -e ".[all,cuda13,analysis]"  # All backends, CUDA 13, and analysis extras
 ```
 
-See [Installation](docs/Installation.md) for GPU setup details and HPC notes.
+See [Installation](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Installation) for GPU setup details and HPC notes.
 
 ---
 
@@ -129,8 +139,8 @@ OptimizationAlgorithm.optimize()
          │
          ▼
    ┌───────────┐      records losses, params, grads, timestamps
-   │ Objective │ ──►  enforces time / eval budgets
-   └─────┬─────┘      bounded ↔ unbounded sigmoid transform
+   │ Objective │ ──>  enforces time / eval budgets
+   └─────┬─────┘      bounded <-> unbounded sigmoid transform
          │
          ▼
   ContinuousProblem        (VoyagerProblem, VoyagerTuningProblem, ConstrainedVoyagerProblem, UIFOProblem)
@@ -139,9 +149,9 @@ OptimizationAlgorithm.optimize()
   Differometor Simulator   (JAX-based interferometer physics)
 ```
 
-**Design Idea:** Algorithms never create their own `Objective`, they receive a pre-configured one. This lets the benchmark harness (or user script) control budgets, seeds, and history settings uniformly. The algorithm only has to implement its optimization logic.
+**Design Idea:** Algorithms never create their own `Objective`, they receive a pre-configured one. This lets the benchmark harness or user script control budgets, seeds, and history settings uniformly. The algorithm only has to implement its optimization logic.
 
-See [Architecture Overview](docs/Architecture-Overview.md) for full design details.
+See [Architecture Overview](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Architecture-Overview) for full design details.
 
 ---
 
@@ -150,18 +160,18 @@ See [Architecture Overview](docs/Architecture-Overview.md) for full design detai
 ```
 src/dfbench/
 ├── core/
-│   ├── problem.py        # ContinuousProblem ABC
+│   ├── problem.py        # ContinuousProblem ABC + ProblemSpec
 │   ├── algorithm.py       # OptimizationAlgorithm ABC + AlgorithmType enum
 │   ├── objective.py       # Objective wrapper (central piece)
-│   └── utils.py           # torch↔jax conversion, inverse sigmoid
+│   └── utils.py           # torch<->jax conversion, inverse sigmoid
 ├── algorithms/
-│   ├── derivative_free/   # OMADS + Powell DFO + SciPy (NelderMead, Powell)
-│   ├── global_search/     # SciPy BasinHopping, DualAnnealing
-│   ├── evolutionary/      # RandomSearch, EvoxPSO, EvoxES, Nevergrad, CMA family
+│   ├── derivative_free/   # OMADS, PDFO/Py-BOBYQA, NelderMead, Powell
+│   ├── global_search/     # RandomSearch, SciPy BasinHopping, DualAnnealing
+│   ├── evolutionary/      # EvoxPSO, EvoxES, Nevergrad, CMA family
 │   ├── gradient_based/
-│   │   ├── optax/         # 30 Optax-based optimizers (OptaxAdam, OptaxLAMB, …)
-│   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, …)
-│   │   ├── custom_jax.py  # Native-JAX custom/hybrid batch (SGLD, ASAM, GD→L-BFGS, …)
+│   │   ├── optax/         # 34 Optax-based optimizers (OptaxAdam, OptaxLAMB, ...)
+│   │   ├── scipy/         # 13 SciPy-based optimizers (BFGS, TNC, SLSQP, ...)
+│   │   ├── custom_jax.py  # Native-JAX custom/hybrid batch (SGLD, ASAM, GD->L-BFGS, ...)
 │   │   └── *.py           # Custom-loop algorithms (AdamGD, LBFGSGD, SAGD, NAAdamGD, OptaxLBFGS)
 │   ├── surrogate_based/
 │   │   ├── botorch/       # BotorchBO, BotorchTuRBO, BotorchqNEI, BotorchqKG,
@@ -198,7 +208,7 @@ obj = Objective(problem, max_time=120, max_evals=50000, verbose=1)
 # The algorithm receives the Objective and mutates it in place
 optimizer = AdamGD()
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,
     patience=1000,
     random_seed=42,
@@ -243,7 +253,7 @@ benchmark.print_summary(results)
 - `save_csv`: Writes a CSV with all metrics computed at evenly-spaced time points.
 - `save_run_data`: Persists raw loss/params/time histories to NPZ files for later re-evaluation.
 
-See [Benchmarking](docs/Benchmarking.md) for full configuration options and [Metrics Reference](docs/Metrics-Reference.md) for what gets computed.
+See [Benchmarking](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Benchmarking) for full configuration options and [Metrics Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Metrics-Reference) for what gets computed.
 
 ### Native-JAX Custom/Hybrid Batch
 
@@ -266,13 +276,13 @@ see `scripts/voyager_native_jax_custom_batch.py`.
 
 The interface is designed to make this as simple as possible. You write the optimization logic; `Objective` handles everything else (timing, logging, budget enforcement, file I/O).
 
-> **Full step-by-step tutorial:** [Implementing a New Algorithm](docs/Implementing-a-New-Algorithm.md)
+> **Full step-by-step tutorial:** [Implementing a New Algorithm](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Implementing-a-New-Algorithm)
 
 ### The Contract
 
 1. Subclass `OptimizationAlgorithm`
 2. Declare `algorithm_str` and `algorithm_type`
-3. Implement `optimize(problem_objective, ...) → None`
+3. Implement `optimize(objective, ...) -> None`
 4. Use `Objective` for all function evaluations
 5. The `Objective` is mutated in place, thereby no return is needed
 
@@ -295,7 +305,7 @@ class MyAlgorithm(OptimizationAlgorithm):
     """My optimization algorithm."""
 
     algorithm_str = "my_algorithm"
-    algorithm_type = AlgorithmType.EVOLUTIONARY  # or GRADIENT_BASED, SURROGATE_BASED, GENERATIVE
+    algorithm_type = AlgorithmType.GLOBAL_SEARCH  # match one of the algorithms/ subfolders
 
     def __init__(self, batch_size: int = 50) -> None:
         """Algorithm-level meta-parameters that don't change between runs."""
@@ -303,7 +313,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
@@ -311,8 +321,12 @@ class MyAlgorithm(OptimizationAlgorithm):
         **kwargs,
     ) -> None:
         # 1. Setup + seed all RNGs
-        obj = problem_objective
-        random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+        obj = objective
+        random_seed, key = self.prepare(
+            obj,
+            unbounded=False,
+            random_seed=random_seed,
+        )
         torch.manual_seed(random_seed)  # for frameworks beyond np/jax
 
         # 3. Initialize parameters
@@ -322,7 +336,7 @@ class MyAlgorithm(OptimizationAlgorithm):
             params = init_params
 
         # 4. JIT warmup (before start_logging, compilation time is free)
-        _ = obj.vmap_value(params)
+        obj.warmup_vmap_value(batch_size=self.batch_size)
 
         # 5. Start the clock
         obj.start_logging()
@@ -349,9 +363,9 @@ class MyAlgorithm(OptimizationAlgorithm):
 
 - **`__init__` takes only algorithm meta-parameters** (batch size, network architecture, etc.), not the problem, not the budget.
 - **`optimize()` receives a pre-configured `Objective`**, the algorithm does not create it.
-- **`prepare()`** configures `unbounded`, `algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. For PyTorch-based algorithms, call `torch.manual_seed(random_seed)` afterwards.
-- **Choose `unbounded`:** Set to `True` if your algorithm benefits from smooth unconstrained space (via sigmoid transform). Most evolutionary and surrogate methods use `False` (bounded space).
-- **JIT warmup before `start_logging()`**, compilation time doesn't count against the budget. The no-arg `warmup_*()` helpers run the matching path twice on deterministic params.
+- **`prepare()`** is called as `prepare(obj, unbounded, random_seed, algorithm_str=None, **kwargs)`. It configures the Objective space mode and algorithm identifier, seeds `np.random` and JAX, and returns `(random_seed, key)`. For PyTorch-based algorithms, call `torch.manual_seed(random_seed)` afterwards.
+- **Choose `unbounded`:** Set to `True` if your algorithm benefits from smooth unconstrained space (via sigmoid transform). Most evolutionary, derivative-free, global-search, and surrogate methods use `False` (bounded space).
+- **JIT warmup before `start_logging()`**, compilation time doesn't count against the budget. Use the matching `warmup_*()` helper; the single-point helpers take no arguments, while batched helpers take the batch size you will use during optimization.
 - **`budget_exceeded`** checks both time and eval limits, please use it as your loop condition.
 
 ### Evaluation Methods
@@ -384,6 +398,7 @@ while not obj.budget_exceeded:        # main loop condition
         break                          # early stopping
 
 # Random parameter generation
+params = obj.random_params()                      # active bounded/unbounded space
 params = obj.random_params_bounded()              # shape: (n_params,)
 batch = obj.random_params_bounded(n_samples=100)  # shape: (100, n_params)
 params = obj.random_params_unbounded()            # for unbounded space
@@ -396,7 +411,7 @@ obj.loss_history            # full loss history
 obj.time_steps              # elapsed time at each evaluation
 ```
 
-See [Objective API Reference](docs/Objective-API-Reference.md) for the complete interface.
+See [Objective API Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Objective-API-Reference) for the complete interface.
 
 ---
 
@@ -411,13 +426,13 @@ See [Objective API Reference](docs/Objective-API-Reference.md) for the complete 
 | `BFGS`, `LBFGSB`, `NonlinearCG`, `NewtonCG` | Gradient | Classical SciPy gradient and quasi-Newton methods |
 | `TrustNCG`, `TrustKrylov`, `TrustConstr`, `Dogleg`, `SR1` | Gradient | Trust-region and constrained SciPy methods |
 | `TNC`, `SLSQP`, `COBYQA`, `COBYLA` | Gradient | Bounded physical-space SciPy solvers |
-| `RandomSearch` | Evolutionary | Unbiased baseline, no hyperparameters |
 | `EvoxPSO` | Evolutionary | Swarm intelligence, many variants (CLPSO, CSO, ...) |
 | `EvoxES` | Evolutionary | CMA-ES, OpenES, XNES, and more (EvoX backend) |
 | `PyCMACMAES` | Evolutionary | Vanilla CMA-ES (pycma backend) |
 | `PyCMAActiveCMAES` | Evolutionary | Active CMA-ES with negative weight updates (pycma) |
 | `PyCMAIPOP` | Evolutionary | IPOP-CMA-ES: increasing-population restarts (pycma) |
 | `PyCMABIPOP` | Evolutionary | BIPOP-CMA-ES: bi-population restart strategy (pycma) |
+| `CMAESCMA` | Evolutionary | Full-covariance CMA-ES (cmaes package) |
 | `CMAESSepCMA` | Evolutionary | sep-CMA-ES with diagonal covariance (cmaes package) |
 | `EvosaxMAES` | Evolutionary | Matrix Adaptation ES (evosax backend) |
 | `EvosaxLMMAES` | Evolutionary | Limited-Memory MA-ES for high dimensions (evosax) |
@@ -426,6 +441,7 @@ See [Objective API Reference](docs/Objective-API-Reference.md) for the complete 
 | `OmadsMADS`, `OmadsOrthoMADS` | Derivative-Free | MADS / OrthoMADS direct search (OMADS) |
 | `PDFOUOBYQA`, `PDFONEWUOA`, `PDFOLINCOA`, `PyBOBYQA` | Derivative-Free | Powell-style trust-region DFO (PDFO + Py-BOBYQA) |
 | `NelderMead`, `Powell` | Derivative-Free | SciPy classical simplex / direction-set search |
+| `RandomSearch` | Global Search | Unbiased, derivative-free global search baseline, no hyperparameters |
 | `BasinHopping`, `DualAnnealing` | Global Search | SciPy stochastic global optimization |
 | `NevergradOnePlusOne`, `NevergradTBPSA`, `NevergradNGOpt` | Evolutionary | Nevergrad rugged-landscape baselines |
 | `BotorchBO` | Surrogate | Sample-efficient Bayesian Optimization |
@@ -438,7 +454,7 @@ See [Objective API Reference](docs/Objective-API-Reference.md) for the complete 
 | `ReSTIR` | Surrogate | GPU-native kNN surrogate, scales to 100k+ candidates |
 | `VAESampling` | Generative | Latent-space compression + BO |
 
-See [Algorithms](docs/Algorithms.md) for hyperparameter details and usage examples.
+See [Algorithms](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Algorithms) for hyperparameter details and usage examples.
 
 ---
 
@@ -447,14 +463,14 @@ See [Algorithms](docs/Algorithms.md) for hyperparameter details and usage exampl
 Execution scripts in `./scripts/`:
 - `voyager_adam_gd.py`: single-algorithm run
 - `voyager_benchmark.py`: full benchmark with multiple algorithms
-- `voyager_cma_family.py`: all nine CMA-family algorithms on VoyagerProblem
+- `voyager_cma_family.py`: all ten CMA-family algorithms on VoyagerProblem
 - `voyager_scipy_benchmark.py`: SciPy gradient / trust / constrained batch
 
 Reference implementations worth reading:
 - `gradient_based/adam_gd.py`: gradient-based pattern (custom loop)
 - `gradient_based/optax/adam.py`: Optax wrapper pattern (minimal subclass)
 - `gradient_based/scipy/_common.py`: shared SciPy wrapper, caching, and budget handling
-- `evolutionary/random_search.py`: simplest batched example
+- `global_search/random_search.py`: simplest batched example
 - `evolutionary/evox_es.py`: wrapping an external library (EvoX/PyTorch)
 - `evolutionary/pycma_cmaes.py`: wrapping pycma (ask/tell, restart strategies)
 - `evolutionary/jax_es.py`: native JAX ES without external library
@@ -468,13 +484,13 @@ For in-depth documentation beyond this README:
 
 | Page | Content |
 |------|---------|
-| [Architecture Overview](docs/Architecture-Overview.md) | Design, module map, data-flow diagrams |
-| [Objective API Reference](docs/Objective-API-Reference.md) | Complete `Objective` class reference |
-| [Problems](docs/Problems.md) | Loss computation, parameter meanings, constraints |
-| [Algorithms](docs/Algorithms.md) | All built-in algorithms with hyperparameters |
-| [Implementing a New Algorithm](docs/Implementing-a-New-Algorithm.md) | Full step-by-step contributor tutorial |
-| [Benchmarking](docs/Benchmarking.md) | Running benchmarks, saving/loading results |
-| [Metrics Reference](docs/Metrics-Reference.md) | Every benchmark metric explained |
-| [Utilities & Helpers](docs/Utilities-and-Helpers.md) | `t2j`/`j2t`, CLI config, inverse sigmoid |
-| [Installation](docs/Installation.md) | Environment setup, GPU support, HPC notes |
-| [FAQ](docs/FAQ.md) | Common pitfalls and troubleshooting |
+| [Architecture Overview](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Architecture-Overview) | Design, module map, data-flow diagrams |
+| [Objective API Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Objective-API-Reference) | Complete `Objective` class reference |
+| [Problems](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Problems) | Loss computation, parameter meanings, constraints |
+| [Algorithms](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Algorithms) | All built-in algorithms with hyperparameters |
+| [Implementing a New Algorithm](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Implementing-a-New-Algorithm) | Full step-by-step contributor tutorial |
+| [Benchmarking](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Benchmarking) | Running benchmarks, saving/loading results |
+| [Metrics Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Metrics-Reference) | Every benchmark metric explained |
+| [Utilities & Helpers](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Utilities-and-Helpers) | `t2j`/`j2t`, CLI config, inverse sigmoid |
+| [Installation](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Installation) | Environment setup, GPU support, HPC notes |
+| [FAQ](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/FAQ) | Common pitfalls and troubleshooting |

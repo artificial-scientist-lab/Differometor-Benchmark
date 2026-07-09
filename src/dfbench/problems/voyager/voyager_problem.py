@@ -7,15 +7,17 @@ from jaxtyping import Array, Float
 
 from differometor.setups import voyager
 from differometor.simulate import run, run_build_step, simulate
-from differometor.utils import calculate_sensitivities, sigmoid_bounding, update_setup
+from differometor.utils import calculate_sensitivities, update_setup
 
 from ..base_problem import (
     DEFAULT_SIGNAL_FLOOR,
     OpticalSetupProblem,
     sensitivity_single_noise,
+    register_problem,
 )
 
 
+@register_problem
 class VoyagerProblem(OpticalSetupProblem):
     """Voyager optimization with single-noise sensitivity.
 
@@ -26,7 +28,7 @@ class VoyagerProblem(OpticalSetupProblem):
 
     def __init__(
         self,
-        n_frequencies: int = 100,
+        n_frequencies: int = 50,
         bounds_overrides: dict[str, tuple[float, float]] | None = None,
         signal_floor: float = DEFAULT_SIGNAL_FLOOR,
     ):
@@ -34,7 +36,7 @@ class VoyagerProblem(OpticalSetupProblem):
 
         Args:
             n_frequencies (int): Number of frequency points for sensitivity calculation.
-                Defaults to 100.
+                Defaults to 50.
             bounds_overrides: Optional property-level bound overrides.
                 Example: {"tuning": (0, 45)}.
                 Overrides must narrow default bounds.
@@ -50,6 +52,7 @@ class VoyagerProblem(OpticalSetupProblem):
 
         # use a predefined Voyager setup with one noise detector and two signal detectors
         self._setup, component_property_pairs = voyager()
+        self._bounds_overrides = bounds_overrides
 
         # run the simulation with the frequency as the changing parameter
         carrier, signal, noise, detector_ports, *_ = run(
@@ -64,7 +67,7 @@ class VoyagerProblem(OpticalSetupProblem):
             True,
             signal_floor,
         )
-        target_loss = jnp.sum(jnp.log10(self._target_sensitivities))
+        self._target_loss = jnp.sum(jnp.log10(self._target_sensitivities))
 
         ### Start from random parameters and optimize the sensitivity ###
         # ---------------------------------------------------------------#
@@ -122,7 +125,14 @@ class VoyagerProblem(OpticalSetupProblem):
         ).T
 
         # abstract for pure objective_function
-        bounds = self._bounds
+        self._build_objective_function()
+
+    def _build_objective_function(self) -> None:
+        """(Re)build the JIT-compiled objective function.
+
+        Re-tracing picks up the current ``_power_penalty_fn`` so that
+        ``set_penalty_fn`` takes effect on subsequent evaluations.
+        """
 
         @jax.jit
         def objective_function(
@@ -139,37 +149,13 @@ class VoyagerProblem(OpticalSetupProblem):
                 sensitivity_single_noise,
                 self._frequencies,
                 True,
-                signal_floor,
+                self._signal_floor,
             )
 
             # loss relative to target loss => loss < 0 is better than voyager setup
-            return jnp.sum(jnp.log10(sensitivities)) - target_loss
+            return jnp.sum(jnp.log10(sensitivities)) - self._target_loss
 
         self.objective_function = objective_function
-
-        @jax.jit
-        def sigmoid_objective_function(
-            optimized_parameters: Float[Array, "{self.n_params}"],
-        ) -> Float:
-            optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
-            carrier, signal, noise = simulate(
-                **{
-                    **self._simulation_arrays,
-                    "optimized_parameters": optimized_parameters,
-                }
-            )
-            sensitivities = calculate_sensitivities(
-                [(carrier, signal, noise, self._detector_ports)],
-                sensitivity_single_noise,
-                self._frequencies,
-                True,
-                signal_floor,
-            )
-
-            # loss relative to target loss => loss < 0 is better than voyager setup
-            return jnp.sum(jnp.log10(sensitivities)) - target_loss
-
-        self.sigmoid_objective_function = sigmoid_objective_function
 
     @property
     def optimization_pairs(self) -> list[tuple]:
@@ -214,3 +200,13 @@ class VoyagerProblem(OpticalSetupProblem):
         )
 
         return sensitivities
+
+    def to_spec(self) -> dict:
+        """Return a serializable spec sufficient to rebuild this problem."""
+        spec = self._base_spec()
+        spec["type"] = "VoyagerProblem"
+        if self._bounds_overrides:
+            spec["bounds_overrides"] = {
+                k: [float(v[0]), float(v[1])] for k, v in self._bounds_overrides.items()
+            }
+        return spec

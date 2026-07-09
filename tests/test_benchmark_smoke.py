@@ -1,24 +1,20 @@
-"""Section 9 — Benchmark orchestration smoke tests with mock algorithm/problem.
+"""Section 9: Benchmark orchestration smoke tests with mock algorithm/problem.
 
-Tests 9.1–9.14.
+Tests 9.1-9.14.
 """
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
-import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from dfbench.benchmark.benchmark import (
     AlgorithmConfig,
-    AggregateMetric,
     Benchmark,
     BenchmarkResult,
     RunData,
-    SingleMetric,
 )
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
@@ -34,8 +30,8 @@ class _DummyAlgorithm(OptimizationAlgorithm):
     def __init__(self):
         pass
 
-    def optimize(self, problem_objective, init_params=None, random_seed=None, **kwargs):
-        obj = problem_objective
+    def optimize(self, objective, init_params=None, random_seed=None, **kwargs):
+        obj = objective
         seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         obj.start_logging()
         while not obj.budget_exceeded:
@@ -141,7 +137,7 @@ class TestRunDataFromObjective:
 
 
 # ======================================================================
-# Benchmark.run() smoke tests (9.5–9.8)
+# Benchmark.run() smoke tests (9.5-9.8)
 # ======================================================================
 
 
@@ -205,7 +201,7 @@ class TestBenchmarkRun:
 
 
 # ======================================================================
-# Save / Load (9.9–9.12)
+# Save / Load (9.9-9.12)
 # ======================================================================
 
 
@@ -222,7 +218,7 @@ class TestBenchmarkSaveLoad:
             n_time_samples=3,
             random_seed=42,
         )
-        results = bm.run(save_csv=False, save_run_data=True, output_dir=str(tmp_path))
+        _ = bm.run(save_csv=False, save_run_data=True, output_dir=str(tmp_path))
         npz_files = list(tmp_path.rglob("*.npz"))
         assert len(npz_files) > 0
 
@@ -263,7 +259,7 @@ class TestBenchmarkCSV:
             random_seed=42,
         )
         bm.run(save_csv=True)
-        csv_files = list(tmp_path.rglob("*.csv")) + list(Path("data").rglob("*.csv"))
+        csv_files = list(tmp_path.rglob("*.csv")) + list(Path("data").rglob("*.csv"))  # noqa: F841, check next line
         # Just verify it doesn't crash; exact path depends on implementation
         # The CSV writing code is exercised regardless
 

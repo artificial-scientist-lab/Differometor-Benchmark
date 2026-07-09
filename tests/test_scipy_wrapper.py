@@ -5,21 +5,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from dfbench.algorithms import BFGS, TrustConstr, TrustNCG
+from dfbench.algorithms import BFGS, TrustNCG
 from dfbench.algorithms.gradient_based.scipy._common import (
     SciPyConfig,
     SciPyObjectiveAdapter,
 )
 from dfbench.core.objective import Objective
-from tests.conftest import QuadraticProblem
-
-
-class ConstrainedQuadraticProblem(QuadraticProblem):
-    """Mock problem exposing unsupported constraint metadata."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.constraints = [{"type": "ineq", "fun": lambda x: 1.0}]
 
 
 class TestSciPyObjectiveAdapter:
@@ -28,7 +19,7 @@ class TestSciPyObjectiveAdapter:
             mock_problem,
             unbounded=True,
             max_evals=10,
-            save_grad_history=True,
+            save=["grad"],
         )
         adapter = SciPyObjectiveAdapter(
             obj,
@@ -52,7 +43,7 @@ class TestSciPyObjectiveAdapter:
             mock_problem,
             unbounded=True,
             max_evals=10,
-            save_grad_history=True,
+            save=["grad"],
         )
         adapter = SciPyObjectiveAdapter(
             obj,
@@ -77,13 +68,6 @@ class TestSciPyObjectiveAdapter:
         assert len(obj.loss_history) == 1
         assert len(obj.grad_history) == 1
         np.testing.assert_allclose(hessp, hessp_cached, atol=1e-6)
-
-    def test_constraints_fail_loudly(self):
-        obj = Objective(ConstrainedQuadraticProblem(), max_evals=10)
-        algo = TrustConstr()
-
-        with pytest.raises(NotImplementedError, match="box constraints"):
-            algo.optimize(obj, random_seed=0, maxiter=1)
 
 
 class TestSciPyAlgorithmsBehavior:

@@ -1,4 +1,4 @@
-"""LineBO — Line Bayesian Optimization via BoTorch.
+"""LineBO: Line Bayesian Optimization via BoTorch.
 
 Restricts each BO iteration to a 1-D line through the ambient space.  The
 line direction rotates between random directions and the gradient at the
@@ -16,15 +16,18 @@ Operates in **bounded** parameter space.
 
 from __future__ import annotations
 
-import jax
-import jax.numpy as jnp
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.core.utils import t2j
 from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     DEVICE,
     DTYPE,
@@ -32,14 +35,12 @@ from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     fit_gp,
     get_problem_bounds_torch,
     sobol_initial_samples,
-    unit_bounds_torch,
 )
 
 try:
     from botorch.acquisition import qLogExpectedImprovement as qLogEI
     from botorch.optim import optimize_acqf
-    from botorch.generation import gen_candidates_scipy
-    from botorch.utils.transforms import normalize, unnormalize
+    from botorch.utils.transforms import normalize
 
     _BOTORCH_AVAILABLE = True
 except ImportError:
@@ -66,7 +67,7 @@ class LineBO(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for LineBO. Install with: uv pip install botorch"
+                "BoTorch is required for LineBO. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE
@@ -95,7 +96,7 @@ class LineBO(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
@@ -106,7 +107,7 @@ class LineBO(OptimizationAlgorithm):
         """Run LineBO.
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded).
             random_seed: Seed for reproducibility.
             n_initial: Initial Sobol samples in full ambient space.
@@ -115,17 +116,16 @@ class LineBO(OptimizationAlgorithm):
             line_samples: Number of 1-D Sobol points sampled along each line.
             **bo_kwargs: Extra kwargs for acquisition optimisation.
         """
-        obj = problem_objective
-        problem = obj.problem
-        D = problem.n_params
+        obj = objective
+        D = obj.n_params
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        bounds = get_problem_bounds_torch(problem, self.device, self.dtype)
+        bounds = get_problem_bounds_torch(obj.bounds, self.device, self.dtype)
 
         # JIT warmup
-        _ = obj.vmap_value(jnp.zeros((1, D)))
+        obj.warmup_vmap_value(batch_size=1)
         obj.start_logging()
 
         # Initial Sobol in full ambient space
@@ -174,7 +174,7 @@ class LineBO(OptimizationAlgorithm):
                 1, scramble=True, seed=random_seed + iteration
             )
             T = sobol_1d.draw(line_samples).to(self.device, self.dtype).squeeze(-1)
-            T = T * (t_hi - t_lo) + t_lo  # map [0,1]→[t_lo, t_hi]
+            T = T * (t_hi - t_lo) + t_lo  # map [0,1]->[t_lo, t_hi]
 
             X_line = center.unsqueeze(0) + T.unsqueeze(-1) * d.unsqueeze(0)
             X_line = torch.clamp(X_line, 0.0, 1.0)

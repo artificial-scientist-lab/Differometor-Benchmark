@@ -1,4 +1,4 @@
-"""L-BFGS optimizer (Optax) — canonical implementation for this batch.
+"""L-BFGS optimizer (Optax): canonical implementation for this batch.
 
 This wraps ``optax.lbfgs()`` following the same JIT-compiled pattern as
 the existing ``LBFGSGD`` class but registered under the ``optax_*`` naming
@@ -9,7 +9,13 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
-import optax
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for OptaxLBFGS. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
@@ -53,7 +59,7 @@ class OptaxLBFGS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         patience: int | None = None,
@@ -65,14 +71,13 @@ class OptaxLBFGS(OptimizationAlgorithm):
         any additional internal line-search probes used by Optax.
 
         Args:
-            problem_objective: Pre-configured Objective.
-            init_params: Starting point.  ``None`` → random unbounded.
+            objective: Pre-configured Objective.
+            init_params: Starting point.  ``None`` -> random unbounded.
             random_seed: Seed for reproducibility.
             patience: Early-stop after this many evals without improvement.
             **lbfgs_kwargs: Forwarded to ``optax.lbfgs()``.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 
@@ -81,7 +86,7 @@ class OptaxLBFGS(OptimizationAlgorithm):
         else:
             params = init_params
 
-        value_fn = problem.sigmoid_objective_function
+        value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
 
         optimizer = optax.lbfgs(**lbfgs_kwargs)
@@ -91,8 +96,12 @@ class OptaxLBFGS(OptimizationAlgorithm):
         def _step(params, opt_state):
             loss, grads = value_and_grad_fn(params)
             updates, new_opt_state = optimizer.update(
-                grads, opt_state, params,
-                value=loss, grad=grads, value_fn=value_fn,
+                grads,
+                opt_state,
+                params,
+                value=loss,
+                grad=grads,
+                value_fn=value_fn,
             )
             new_params = jnp.asarray(optax.apply_updates(params, updates))
             return new_params, new_opt_state, loss, grads

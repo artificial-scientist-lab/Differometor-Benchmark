@@ -33,7 +33,7 @@ distinct ``algorithm_str`` values so runs can be compared in benchmarks.
 
 Requires
 --------
-    evosax >= 0.2  (``uv add evosax``)
+    evosax >= 0.2  (``uv add 'dfbench[evolution]'``)
 """
 
 from __future__ import annotations
@@ -47,8 +47,7 @@ try:
     from evosax.algorithms import MA_ES, LM_MA_ES
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "evosax is required for Evosax* algorithms. "
-        "Install it with:  uv add evosax"
+        "evosax is required for Evosax* algorithms. Install it with:  uv add 'dfbench[evolution]'"
     ) from exc
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
@@ -117,8 +116,10 @@ def _run_evosax_loop(
 
         # Evaluate in chunks of batch_size
         n_pop = x_clipped.shape[0]
-        chunks = [obj.vmap_value(x_clipped[i : i + batch_size])
-                  for i in range(0, n_pop, batch_size)]
+        chunks = [
+            obj.vmap_value(x_clipped[i : i + batch_size])
+            for i in range(0, n_pop, batch_size)
+        ]
         fitness = jnp.concatenate(chunks)
 
         # NaN/Inf escape hatch: replace any non-finite fitness with a large
@@ -178,7 +179,7 @@ class EvosaxMAES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -188,7 +189,7 @@ class EvosaxMAES(OptimizationAlgorithm):
         """Run MA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
@@ -196,16 +197,15 @@ class EvosaxMAES(OptimizationAlgorithm):
             pop_size: Population size lambda.  Defaults to 20.
             max_iterations: Maximum CMA generations.  ``None`` = unlimited.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         lb_jnp = jnp.asarray(lb_np)
         ub_jnp = jnp.asarray(ub_np)
-        n = problem.n_params
+        n = obj.n_params
 
         sigma = float(sigma0 if sigma0 is not None else np.mean(0.3 * (ub_np - lb_np)))
 
@@ -217,20 +217,29 @@ class EvosaxMAES(OptimizationAlgorithm):
             mean0 = jnp.clip(jnp.asarray(init_params), lb_jnp, ub_jnp)
         else:
             rng, mean_rng = jax.random.split(rng)
-            mean0 = jax.random.uniform(mean_rng, shape=(n,), minval=lb_jnp, maxval=ub_jnp)
+            mean0 = jax.random.uniform(
+                mean_rng, shape=(n,), minval=lb_jnp, maxval=ub_jnp
+            )
 
         rng, init_rng = jax.random.split(rng)
         state = strategy.init(init_rng, mean0, es_params)
 
         # JIT warmup before timing starts
         batch_size = self._batch_size
-        _ = obj.vmap_value(jnp.zeros((min(batch_size, pop_size), n)))
+        obj.warmup_vmap_value(batch_size=min(batch_size, pop_size))
         obj.start_logging()
 
         rng, loop_rng = jax.random.split(rng)
         _run_evosax_loop(
-            strategy, es_params, state, obj, lb_jnp, ub_jnp, loop_rng,
-            max_iterations, batch_size,
+            strategy,
+            es_params,
+            state,
+            obj,
+            lb_jnp,
+            ub_jnp,
+            loop_rng,
+            max_iterations,
+            batch_size,
         )
 
 
@@ -274,7 +283,7 @@ class EvosaxLMMAES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -285,7 +294,7 @@ class EvosaxLMMAES(OptimizationAlgorithm):
         """Run LM-MA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
@@ -296,16 +305,15 @@ class EvosaxLMMAES(OptimizationAlgorithm):
                 (approximately ``4 + floor(3*ln(n))``).
             max_iterations: Maximum generations.  ``None`` = unlimited.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         lb_jnp = jnp.asarray(lb_np)
         ub_jnp = jnp.asarray(ub_np)
-        n = problem.n_params
+        n = obj.n_params
 
         sigma = float(sigma0 if sigma0 is not None else np.mean(0.3 * (ub_np - lb_np)))
 
@@ -320,17 +328,26 @@ class EvosaxLMMAES(OptimizationAlgorithm):
             mean0 = jnp.clip(jnp.asarray(init_params), lb_jnp, ub_jnp)
         else:
             rng, mean_rng = jax.random.split(rng)
-            mean0 = jax.random.uniform(mean_rng, shape=(n,), minval=lb_jnp, maxval=ub_jnp)
+            mean0 = jax.random.uniform(
+                mean_rng, shape=(n,), minval=lb_jnp, maxval=ub_jnp
+            )
 
         rng, init_rng = jax.random.split(rng)
         state = strategy.init(init_rng, mean0, es_params)
 
         batch_size = self._batch_size
-        _ = obj.vmap_value(jnp.zeros((min(batch_size, pop_size), n)))
+        obj.warmup_vmap_value(batch_size=min(batch_size, pop_size))
         obj.start_logging()
 
         rng, loop_rng = jax.random.split(rng)
         _run_evosax_loop(
-            strategy, es_params, state, obj, lb_jnp, ub_jnp, loop_rng,
-            max_iterations, batch_size,
+            strategy,
+            es_params,
+            state,
+            obj,
+            lb_jnp,
+            ub_jnp,
+            loop_rng,
+            max_iterations,
+            batch_size,
         )

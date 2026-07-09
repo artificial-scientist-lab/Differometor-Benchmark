@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
 from enum import Enum
+import random
 import secrets
 
 import jax
-import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 
@@ -17,15 +17,18 @@ class AlgorithmType(Enum):
 
     Values:
         GRADIENT_BASED: Algorithms using gradient information (e.g., Adam, SA-GD).
-        EVOLUTIONARY: Population-based algorithms (e.g., PSO, Random Search).
+        EVOLUTIONARY: Population-based algorithms (e.g., PSO).
+        DERIVATIVE_FREE: Direct-search and local derivative-free algorithms.
+        GLOBAL_SEARCH: Stochastic global-search algorithms.
         SURROGATE_BASED: Algorithms using surrogate models (e.g., Bayesian Optimization).
-        DIFFUSION_BASED: Generative diffusion-based optimization (experimental).
+        GENERATIVE: Generative-model-based optimization algorithms.
     """
 
     GRADIENT_BASED = "gradient_based"
     EVOLUTIONARY = "evolutionary"
     SURROGATE_BASED = "surrogate_based"
-    DIFFUSION_BASED = "diffusion_based"
+    GLOBAL_SEARCH = "global_search"
+    DERIVATIVE_FREE = "derivative_free"
     GENERATIVE = "generative"
 
 
@@ -44,8 +47,8 @@ class OptimizationAlgorithm(ABC):
 
     Note:
         All algorithms must implement:
-        - `__init__(problem, ...)`: Initialize with a problem instance
-        - `optimize(...)`: Run optimization and return an Objective instance
+        - `__init__(...)`: Initialize algorithm-specific meta-parameters
+        - `optimize(...)`: Run optimization and mutate the provided Objective
 
         The returned Objective contains all run data:
         - `best_params`, `best_params_bounded`: Best parameters found
@@ -72,7 +75,7 @@ class OptimizationAlgorithm(ABC):
     @abstractmethod
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         **kwargs,
@@ -82,12 +85,12 @@ class OptimizationAlgorithm(ABC):
         Subclasses must override this method and implement their algorithm-specific logic
         in step 6 (main optimization loop).
 
-        The Objective instance is mutated in place — all logged data (losses, params,
+        The Objective instance is mutated in place; all logged data (losses, params,
         gradients, timestamps) is recorded directly into it. There is no return value;
         the caller already holds the reference.
 
         Args:
-            problem_objective: Pre-configured Objective instance for function evaluations.
+            objective: Pre-configured Objective instance for function evaluations.
             init_params: Initial parameters. If None, initialized randomly.
             random_seed: Random seed for reproducibility. If None, uses system entropy.
             **kwargs: Algorithm-specific hyperparameters (learning_rate, patience, etc.).
@@ -98,8 +101,7 @@ class OptimizationAlgorithm(ABC):
                 ``max_evals`` on the Objective and should not be added.
         """
         # 1. Setup references
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         # 2. Setup objective and resolve/apply random seed
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
@@ -117,20 +119,21 @@ class OptimizationAlgorithm(ABC):
                 obj.random_params_unbounded()
             )  # If unbounded = True was given to prepare()
             # Batched optimization
-            batched_params = obj.random_params_bounded(
+            batched_params = obj.random_params_bounded(  # noqa: F841, just for convention in the algorithm code
                 n_samples=10
             )  # Use self.batch_size from __init__() here
         else:
-            params = init_params
+            params = init_params  # noqa: F841, just for convention in the algorithm code
 
-        # 4. JIT warmup (optional but recommended, else much time is lost during the first evaluation)
-        _ = obj.value(params)
-        _ = obj.value_and_grad(params)  # For gradientients and loss
-        _ = obj.grad(params)  # Loss won't get logged
-        # Or for batched:
-        _ = obj.vmap_value()
-        _ = obj.vmap_value_and_grad()
-        _ = obj.vmap_grad()
+        # 4. JIT warmup (optional but recommended, else much time is lost during
+        # the first evaluation). Warm up only the paths your algorithm will use.
+        obj.warmup_value()  # loss-only single-point evaluation
+        obj.warmup_value_and_grad()  # single-point loss + gradient
+        obj.warmup_grad()  # gradient-only single-point evaluation
+        # Or for batched algorithms:
+        obj.warmup_vmap_value(batch_size=10)
+        obj.warmup_vmap_value_and_grad(batch_size=10)
+        obj.warmup_vmap_grad(batch_size=10)
 
         # 5. Start logging
         obj.start_logging()
@@ -145,7 +148,7 @@ class OptimizationAlgorithm(ABC):
             ...  # --------- Looped algorithm logic here ---------
             # Loss printing is also done by the Objective. The frequency can be set in its __init__().
 
-        # 7. Done — the Objective instance now contains all logged data.
+        # 7. Done. The Objective instance now contains all logged data.
         # What data is logged is decided by the user initializing the Objective.
         # Plotting and saving to file can be done afterwards by calling methods on the Objective.
         # If automatic file saving was enabled by the user, the data is already saved to file and can be loaded from there as well.
@@ -155,8 +158,8 @@ class OptimizationAlgorithm(ABC):
         self,
         obj: Objective,
         unbounded: bool,
-        algorithm_str: str | None = None,
         random_seed: int | None = None,
+        algorithm_str: str | None = None,
         **kwargs,
     ) -> tuple[int, jax.Array]:
         """Set up the Objective and resolve/apply the random seed.
@@ -168,9 +171,9 @@ class OptimizationAlgorithm(ABC):
         Args:
             obj (Objective): The Objective instance to set up.
             unbounded (bool): Whether the algorithm needs unbounded parameter space.
-            algorithm_str (str | None): Optional algorithm identifier. If None, uses self.algorithm_str.
             random_seed (int | None): Seed for reproducibility. If None, one is generated
                 via system entropy and stored in self._random_seed.
+            algorithm_str (str | None): Optional algorithm identifier. If None, uses self.algorithm_str.
             **kwargs: Additional Objective attributes to set.
 
         Returns:
@@ -191,6 +194,7 @@ class OptimizationAlgorithm(ABC):
             random_seed = secrets.randbits(32)
         self._random_seed = random_seed
         obj.set_seed(random_seed)
+        random.seed(random_seed)
         np.random.seed(random_seed)
         key = jax.random.PRNGKey(random_seed)
         print(f"Random seed: {random_seed}")

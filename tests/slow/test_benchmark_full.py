@@ -1,18 +1,15 @@
-"""Section 13 — End-to-end benchmark integration (needs srun).
+"""Section 13: End-to-end benchmark integration (needs srun).
 
-Marked @slow — must be run via srun on the cluster.
+Marked @slow; must be run via srun on the cluster.
 """
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
 
 import numpy as np
 import pytest
 
 from dfbench.benchmark.benchmark import AlgorithmConfig, Benchmark
-from dfbench.core.objective import Objective
 
 
 pytestmark = pytest.mark.slow

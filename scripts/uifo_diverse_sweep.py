@@ -3,12 +3,6 @@ import logging
 import sys
 import warnings
 
-# Silence BoTorch / GPyTorch / Ax / SMAC warning spam.
-warnings.filterwarnings("ignore")
-logging.captureWarnings(True)
-for _name in ("py.warnings", "botorch", "gpytorch", "linear_operator",
-              "ax", "smac", "ConfigSpace"):
-    logging.getLogger(_name).setLevel(logging.ERROR)
 
 from dfbench.problems import UIFOProblem
 from dfbench import Objective
@@ -52,13 +46,28 @@ from dfbench.algorithms import (
     DualAnnealing,
     # Bayesian Optimization batch
     BAxUS,
-    BotorchqNEI,
+    BotorchQNEI,
     BotorchqKG,
     REMBO,
     GEBO,
     LineBO,
     TuRBOLBFGS,
 )
+
+# Silence BoTorch / GPyTorch / Ax / SMAC warning spam.
+warnings.filterwarnings("ignore")
+logging.captureWarnings(True)
+for _name in (
+    "py.warnings",
+    "botorch",
+    "gpytorch",
+    "linear_operator",
+    "ax",
+    "smac",
+    "ConfigSpace",
+):
+    logging.getLogger(_name).setLevel(logging.ERROR)
+
 
 ALGORITHMS = [
     # Nevergrad baselines
@@ -96,7 +105,7 @@ ALGORITHMS = [
     DualAnnealing,
     # Bayesian Optimization batch
     BAxUS,
-    BotorchqNEI,
+    BotorchQNEI,
     BotorchqKG,
     REMBO,
     GEBO,
@@ -108,11 +117,13 @@ ALGORITHMS = [
 
 parser = argparse.ArgumentParser(
     description="UIFO sweep over the diverse set of algorithms merged into main "
-                "(MADS, Nevergrad, CMA family, JAX custom/hybrid, Powell DFO, "
-                "SciPy classics + global search, Bayesian Optimization batch).",
+    "(MADS, Nevergrad, CMA family, JAX custom/hybrid, Powell DFO, "
+    "SciPy classics + global search, Bayesian Optimization batch).",
 )
 parser.add_argument(
-    "-a", "--algo", required=True,
+    "-a",
+    "--algo",
+    required=True,
     help=f"Algorithm index (0-{len(ALGORITHMS) - 1}), or 'list' to print the table.",
 )
 parser.add_argument("-s", "--seed", type=int, default=0, help="Run seed (0-24).")

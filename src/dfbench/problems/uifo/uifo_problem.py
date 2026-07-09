@@ -1,37 +1,33 @@
 """UIFO (Uniform Interferometer Field Optimization) problems with power constraints."""
 
-import copy
-
 import jax
-import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
 from differometor.setups import uifo, constrain_inter_grid_cell_spaces
 from differometor.simulate import run_setups, simulate, run_build_step
 from differometor.utils import (
-    sigmoid_bounding,
     sensitivity_qamplfreq_noise,
     calculate_sensitivities,
     calculate_powers,
 )
 
-from ..base_problem import DEFAULT_SIGNAL_FLOOR, OpticalSetupProblem
+from ..base_problem import DEFAULT_SIGNAL_FLOOR, OpticalSetupProblem, register_problem
 
 
 # ---------------------------------------------------------------------------
 # Topology string encoding
 # ---------------------------------------------------------------------------
-# Interior cells: 2 component types × 4 orientations = 8 options → A–H
-#   A–D = beamsplitter     (left, right, top, bottom)
-#   E–H = directional_beamsplitter (left, right, top, bottom)
+# Interior cells: 2 component types × 4 orientations = 8 options -> A-H
+#   A-D = beamsplitter     (left, right, top, bottom)
+#   E-H = directional_beamsplitter (left, right, top, bottom)
 #
-# Boundary cells: 4 component types → L, S, D, H
+# Boundary cells: 4 component types -> L, S, D, H
 #   L = laser, S = squeezer, D = detector, H = balanced_homodyne
 #
 # Format: "<interior_chars>-<boundary_chars>"
 #   Interior chars: row-major order of the size×size interior grid
 #   Boundary chars: row-major order of all boundary positions (edges only,
-#                   no corners), scanning top row → left/right cols → bottom row
+#                   no corners), scanning top row -> left/right cols -> bottom row
 #
 # Example for size=3:
 #   Interior positions (row-major): 11,12,13,21,22,23,31,32,33
@@ -167,6 +163,7 @@ def topology_from_string(
     return centers, boundaries
 
 
+@register_problem
 class UIFOProblem(OpticalSetupProblem):
     """UIFO (Quasi-Universal Interferometer) optimization problem.
 
@@ -175,16 +172,16 @@ class UIFOProblem(OpticalSetupProblem):
 
     There are three ways to specify the topology (mutually exclusive):
 
-    1. **topology_seed** — Generate a random topology deterministically from a seed.
+    1. **topology_seed** | Generate a random topology deterministically from a seed.
        This is the simplest way to get started::
 
            UIFOProblem(size=3, topology_seed=42)
 
-    2. **topology string** — A compact encoding of the grid layout::
+    2. **topology string** | A string encoding of the grid layout::
 
            UIFOProblem(size=3, topology="AECGCCHEG-SLLSSHLLLLS")
 
-    3. **centers + boundaries dicts** — Explicit component placement::
+    3. **centers + boundaries dicts** | Explicit component placement::
 
            UIFOProblem(
                size=3,
@@ -194,17 +191,19 @@ class UIFOProblem(OpticalSetupProblem):
 
     The topology string uses single-character codes:
 
-    - **Interior cells** (beamsplitters): A–D = beamsplitter (left/right/top/bottom),
-      E–H = directional_beamsplitter (left/right/top/bottom)
+    - **Interior cells** (beamsplitters): A-D = beamsplitter (left/right/top/bottom),
+      E-H = directional_beamsplitter (left/right/top/bottom)
     - **Boundary cells**: L = laser, S = squeezer, D = detector, H = balanced_homodyne
     - Format: ``"<interior_chars>-<boundary_chars>"`` in row-major order.
     """
 
+    _supports_power_penalty = True
+
     def __init__(
         self,
         size: int = 3,
-        n_frequencies: int = 100,
-        topology_seed: int | None = 42,
+        n_frequencies: int = 50,
+        topology_seed: int | None = None,
         topology: str | None = None,
         centers: dict[str, tuple[str, str]] | None = None,
         boundaries: dict[str, str] | None = None,
@@ -215,9 +214,9 @@ class UIFOProblem(OpticalSetupProblem):
         """Initialize the UIFO optimization problem.
 
         Args:
-            size: Grid size (e.g., 3 for 3×3, 5 for 5×5). Defaults to 3.
-            n_frequencies: Number of frequency points. Defaults to 100.
-            topology_seed: Seed for random topology generation. Defaults to 42.
+            size: Grid size (e.g., 3 for 3x3, 5 for 5x5). Defaults to 3.
+            n_frequencies: Number of frequency points. Defaults to 50.
+            topology_seed: Seed for random topology generation. Defaults to ``None``.
                 Pass ``None`` (with no ``topology`` or ``centers``/``boundaries``)
                 to generate a random topology.  Mutually exclusive
                 with ``topology`` and ``centers``/``boundaries``.
@@ -239,13 +238,15 @@ class UIFOProblem(OpticalSetupProblem):
                 magnitudes before sensitivity normalization.
         """
         # --- Validate topology specification (exactly one path) ---
-        has_seed = topology_seed is not None and topology_seed != 42
+        has_seed = topology_seed is not None
         has_string = topology is not None
-        has_dicts = centers is not None or boundaries is not None
+        has_dicts = (
+            centers is not None or boundaries is not None
+        )  # Handled by ValueError below
 
         n_specified = sum([has_seed, has_string, has_dicts])
         if n_specified == 0:
-            # No topology specified — generate a truly random one
+            # No topology specified; generate a truly random one
             topology_seed = int(np.random.randint(0, 2**31))
             has_seed = True
         elif n_specified > 1:
@@ -282,6 +283,7 @@ class UIFOProblem(OpticalSetupProblem):
         self._size = size
         self._topology_seed = topology_seed
         self._topology_string = None  # computed lazily or set below
+        self._bounds_overrides = bounds_overrides
 
         ### Calculate the target sensitivity using Voyager reference ###
         # -------------------------------------------------------------#
@@ -402,9 +404,6 @@ class UIFOProblem(OpticalSetupProblem):
             upper_bounds.append(property_bounds[property_name][1])
         self._bounds = np.array([lower_bounds, upper_bounds])
 
-        # abstract for pure objective_function
-        bounds = self._bounds
-
         # build the three modulation setups and store as instance attributes
         self._q_arrays, *self._q_metadata = run_build_step(
             self._setup[0],
@@ -425,91 +424,77 @@ class UIFOProblem(OpticalSetupProblem):
             self._optimization_pairs,
         )
 
-        @jax.jit
-        def sigmoid_objective_function(
-            optimized_parameters: Float[Array, "{self.n_params}"],
-        ) -> Float:
-            optimized_parameters = sigmoid_bounding(optimized_parameters, bounds)
+        self._build_objective_function()
 
-            # simulate the three modulation setups
-            q_results = simulate(
-                **{**self._q_arrays, "optimized_parameters": optimized_parameters}
-            )
-            ampl_results = simulate(
-                **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
-            )
-            freq_results = simulate(
-                **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
-            )
-            results = [
-                (*q_results, *self._q_metadata),
-                (*ampl_results, *self._ampl_metadata),
-                (*freq_results, *self._freq_metadata),
-            ]
+        # Compute and cache topology string
+        self._topology_string = topology_to_string(
+            self._centers, self._boundaries, size
+        )
 
-            # calculate the sensitivities taking into account the three noise sources
-            sensitivities = calculate_sensitivities(
-                results,
-                self._sensitivity_function,
-                self._frequencies,
-                self._homodyne,
-                signal_floor,
-            )
+    def _eval_core(self, optimized_parameters):
+        """Shared evaluation body for the UIFO objective.
 
-            # calculate the light power at all components within the setup
-            powers = calculate_powers(q_results[0], *self._q_metadata)
+        Runs the three modulation simulations, computes sensitivities and
+        per-group powers, then the loss tuple. Used by both
+        ``objective_function`` and ``objective_function_aux`` so the two
+        stay in sync after ``_build_objective_function`` re-traces them.
+        """
+        q_results = simulate(
+            **{**self._q_arrays, "optimized_parameters": optimized_parameters}
+        )
+        ampl_results = simulate(
+            **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
+        )
+        freq_results = simulate(
+            **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
+        )
+        results = [
+            (*q_results, *self._q_metadata),
+            (*ampl_results, *self._ampl_metadata),
+            (*freq_results, *self._freq_metadata),
+        ]
 
-            # calculate the loss taking into account power violations
-            sensitivity_loss, penalty, _ = self._calculate_loss(
-                sensitivities, self._target_sensitivities, powers
-            )
+        sensitivities = calculate_sensitivities(
+            results,
+            self._sensitivity_function,
+            self._frequencies,
+            self._homodyne,
+            self._signal_floor,
+        )
+        powers = calculate_powers(q_results[0], *self._q_metadata)
+        sensitivity_loss, penalty, violations = self._calculate_loss(
+            sensitivities, self._target_sensitivities, powers
+        )
+        return powers, sensitivity_loss, penalty, violations
 
-            return sensitivity_loss + penalty
+    def _build_objective_function(self) -> None:
+        """(Re)build the JIT-compiled objective and aux objective.
+
+        Re-tracing picks up the current ``_power_penalty_fn`` so that
+        ``set_penalty_fn`` takes effect on subsequent evaluations. Both
+        the plain and the aux variant close over the same ``_eval_core``
+        call so their results agree up to the returned aux dict.
+        """
 
         @jax.jit
         def objective_function(
             optimized_parameters: Float[Array, "{self.n_params}"],
         ) -> Float:
-            # simulate the three modulation setups
-            q_results = simulate(
-                **{**self._q_arrays, "optimized_parameters": optimized_parameters}
-            )
-            ampl_results = simulate(
-                **{**self._ampl_arrays, "optimized_parameters": optimized_parameters}
-            )
-            freq_results = simulate(
-                **{**self._freq_arrays, "optimized_parameters": optimized_parameters}
-            )
-            results = [
-                (*q_results, *self._q_metadata),
-                (*ampl_results, *self._ampl_metadata),
-                (*freq_results, *self._freq_metadata),
-            ]
-
-            # calculate the sensitivities taking into account the three noise sources
-            sensitivities = calculate_sensitivities(
-                results,
-                self._sensitivity_function,
-                self._frequencies,
-                self._homodyne,
-                signal_floor,
-            )
-
-            # calculate the light power at all components within the setup
-            powers = calculate_powers(q_results[0], *self._q_metadata)
-
-            # calculate the loss taking into account power violations
-            sensitivity_loss, penalty, _ = self._calculate_loss(
-                sensitivities, self._target_sensitivities, powers
-            )
-
+            _, sensitivity_loss, penalty, _ = self._eval_core(optimized_parameters)
             return sensitivity_loss + penalty
 
-        self.sigmoid_objective_function = sigmoid_objective_function
-        self.objective_function = objective_function
+        @jax.jit
+        def objective_function_aux(
+            optimized_parameters: Float[Array, "{self.n_params}"],
+        ) -> tuple[Float, dict]:
+            powers, sensitivity_loss, penalty, violations = self._eval_core(
+                optimized_parameters
+            )
+            aux = self._build_aux(powers, sensitivity_loss, penalty, violations)
+            return sensitivity_loss + penalty, aux
 
-        # Compute and cache topology string
-        self._topology_string = topology_to_string(self._centers, self._boundaries, size)
+        self.objective_function = objective_function
+        self.objective_function_aux = objective_function_aux
 
     @property
     def optimization_pairs(self) -> list[tuple]:
@@ -560,6 +545,24 @@ class UIFOProblem(OpticalSetupProblem):
                 self._power_penalty_fn, "__name__", str(self._power_penalty_fn)
             ),
         }
+
+    def to_spec(self) -> dict:
+        """Return a serializable spec sufficient to rebuild this problem.
+
+        Reconstruction uses the explicit ``topology_string`` (deterministic,
+        independent of the RNG used to generate the topology) plus ``size``,
+        so an equivalent problem can be rebuilt in any process without
+        relying on the original seed.
+        """
+        spec = self._base_spec()
+        spec["type"] = "UIFOProblem"
+        spec["size"] = int(self._size)
+        spec["topology"] = str(self._topology_string)
+        if self._bounds_overrides:
+            spec["bounds_overrides"] = {
+                k: [float(v[0]), float(v[1])] for k, v in self._bounds_overrides.items()
+            }
+        return spec
 
     def calculate_sensitivity(
         self,

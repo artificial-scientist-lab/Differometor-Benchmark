@@ -5,9 +5,13 @@ Simulated annealing gradient descent based on https://arxiv.org/abs/2107.07558
 import math
 
 import jax
-import jax.numpy as jnp
-import numpy as np
-import optax
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for this algorithm. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
@@ -125,7 +129,7 @@ class SAGD(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
@@ -147,7 +151,7 @@ class SAGD(OptimizationAlgorithm):
         the number of gradient steps.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             init_params: Initial parameters. If None, initialized via
                 obj.random_params_unbounded(). Defaults to None.
             random_seed: Random seed for reproducibility. If None,
@@ -164,8 +168,7 @@ class SAGD(OptimizationAlgorithm):
             lr_decay: Learning rate decay factor per iteration. Defaults to 1.0.
             **adam_kwargs: Additional keyword arguments passed to optax.adam().
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, rng_key = self.prepare(
             obj, unbounded=True, random_seed=random_seed

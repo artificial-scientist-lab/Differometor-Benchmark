@@ -1,7 +1,7 @@
-// Algorithm Status Table — Data
+// Algorithm Status Table: Data
 // ============================================================================
 // EDIT THIS FILE to add, move, or remove algorithms.
-// The rendering logic lives in template.typ — you should not need to touch it.
+// The rendering logic lives in template.typ; you should not need to touch it.
 // ============================================================================
 
 #import "template.typ": algorithm-status-table
@@ -24,8 +24,6 @@
   [PSO#super[\*\*]], [CLPSO#super[\*\*]], [CSO#super[\*\*]],
   [DMSPSOEL#super[\*\*]], [FSPSO#super[\*\*]],
   [SLPSOGS#super[\*\*]], [SLPSOUS#super[\*\*]],
-  // Standalone
-  [Random Search],
 )
 
 #let finished-dfo = ()
@@ -55,7 +53,7 @@
   [Trust-Krylov], [Trust-NCG], [Nonlinear CG],
   [COBYLA#sub[scipy]], [COBYQA],
   // Custom JAX
-  [SGLD], [ASAM], [Adam→L-BFGS],
+  [SGLD], [ASAM], [Adam->L-BFGS],
   [Entropy-SGD], [SGHMC], [ARC],
   [OGD], [OAdam], [Perturbed GD],
   [Noisy Adam], [GD w/ Restarts],
@@ -91,6 +89,8 @@
   [PDFO UOBYQA], [Py-BOBYQA],
   // SciPy non-grad
   [Basin Hopping], [Dual Annealing],
+  // Standalone Global Search
+  [Random Search],
   // MADS (Mesh Adaptive Direct Search)
   [OMADS MADS], [OMADS OrthoMADS],
   // Future branch
@@ -116,13 +116,13 @@
 #let planned-generative = ()
 
 // ===========================================================================
-// Render — you normally don't need to change anything below this line.
+// Render: you normally don't need to change anything below this line.
 // ===========================================================================
 
 #algorithm-status-table(
   footnotes: [
-    #super[\*]via `EvoxES(variant=…)` #h(1em)
-    #super[\*\*]via `EvoxPSO(variant=…)` #h(1em)
+    #super[\*]via `EvoxES(variant=...)` #h(1em)
+    #super[\*\*]via `EvoxPSO(variant=...)` #h(1em)
   ],
 
   categories: (

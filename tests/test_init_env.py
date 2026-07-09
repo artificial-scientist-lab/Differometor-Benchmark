@@ -1,14 +1,12 @@
-"""Section 11 — Environment initialization.
+"""Section 11: Environment initialization.
 
-Tests 11.1–11.2.
+Tests 11.1-11.2.
 """
 
 from __future__ import annotations
 
 import os
 import importlib
-
-import pytest
 
 
 class TestMplConfigDir:

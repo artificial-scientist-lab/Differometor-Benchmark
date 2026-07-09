@@ -17,7 +17,7 @@ obj = Objective(
 optimizer = SAGD()
 
 optimizer.optimize(
-    problem_objective=obj,
+    objective=obj,
     learning_rate=0.1,
     patience=1000,
     random_seed=42,

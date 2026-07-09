@@ -11,13 +11,13 @@ Voyager), the CMA search runs in the unit cube ``[0, 1]^n`` and candidates
 are mapped to physical bounds (``lb + u * (ub - lb)``) only at evaluation
 time, so a single scalar ``sigma`` is a sensible step for every coordinate.
 
-Unbounded mode is not supported by this backend — the algorithms expect a
+Unbounded mode is not supported by this backend; the algorithms expect a
 finite domain and will raise ``ValueError`` during ``optimize()`` if the
 Objective has been configured in unbounded mode prior to this call.
 
 Requires
 --------
-    pycma >= 3.3  (``uv add cma``)
+    pycma >= 3.3  (``uv add 'dfbench[evolution]'``)
 """
 
 from __future__ import annotations
@@ -31,8 +31,7 @@ try:
     import cma
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "pycma is required for PyCMA* algorithms. "
-        "Install it with:  uv add cma"
+        "pycma is required for PyCMA* algorithms. Install it with:  uv add 'dfbench[evolution]'"
     ) from exc
 
 from dfbench.core.algorithm import OptimizationAlgorithm, AlgorithmType
@@ -188,7 +187,7 @@ class PyCMACMAES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: np.ndarray | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -198,7 +197,7 @@ class PyCMACMAES(OptimizationAlgorithm):
         """Run CMA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean vector.  Sampled uniformly in bounds
                 when ``None``.
             random_seed: Seed for reproducibility.
@@ -208,15 +207,14 @@ class PyCMACMAES(OptimizationAlgorithm):
             max_iterations: Maximum number of CMA generations.  ``None``
                 means unlimited (budget and convergence govern stopping).
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         width = ub_np - lb_np
-        n = problem.n_params
+        n = obj.n_params
 
         # Build the initial mean in unit-cube coordinates.
         if init_params is None:
@@ -232,7 +230,7 @@ class PyCMACMAES(OptimizationAlgorithm):
 
         # JIT warmup before timing starts
         warmup_bs = min(self._batch_size, pop_size)
-        _ = obj.vmap_value(jnp.zeros((warmup_bs, n)))
+        obj.warmup_vmap_value(batch_size=warmup_bs)
 
         obj.start_logging()
 
@@ -285,7 +283,7 @@ class PyCMAActiveCMAES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: np.ndarray | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -295,7 +293,7 @@ class PyCMAActiveCMAES(OptimizationAlgorithm):
         """Run active CMA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean vector.  Sampled uniformly in bounds
                 when ``None``.
             random_seed: Seed for reproducibility.
@@ -304,15 +302,14 @@ class PyCMAActiveCMAES(OptimizationAlgorithm):
                 ``4 + floor(3·ln n)``.
             max_iterations: Maximum CMA generations.  ``None`` = unlimited.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         width = ub_np - lb_np
-        n = problem.n_params
+        n = obj.n_params
 
         # Build the initial mean in unit-cube coordinates.
         if init_params is None:
@@ -327,7 +324,7 @@ class PyCMAActiveCMAES(OptimizationAlgorithm):
         opts = _build_opts(n, pop_size, active=True)
 
         warmup_bs = min(self._batch_size, pop_size)
-        _ = obj.vmap_value(jnp.zeros((warmup_bs, n)))
+        obj.warmup_vmap_value(batch_size=warmup_bs)
         obj.start_logging()
 
         es = cma.CMAEvolutionStrategy(x0_unit.tolist(), sigma, opts)
@@ -380,7 +377,7 @@ class PyCMAIPOP(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: np.ndarray | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -391,7 +388,7 @@ class PyCMAIPOP(OptimizationAlgorithm):
         """Run IPOP-CMA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean for the *first* run.  Subsequent
                 restarts always use fresh random points.
             random_seed: Seed for reproducibility.
@@ -406,15 +403,14 @@ class PyCMAIPOP(OptimizationAlgorithm):
             max_iterations_per_restart: Cap on CMA generations per restart
                 (independent of the overall budget).  ``None`` = unlimited.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         width = ub_np - lb_np
-        n = problem.n_params
+        n = obj.n_params
 
         base_pop = pop_size or _default_pop_size(n)
         # sigma is a dimensionless fraction of the unit cube.
@@ -422,7 +418,7 @@ class PyCMAIPOP(OptimizationAlgorithm):
 
         # JIT warmup
         warmup_bs = min(self._batch_size, base_pop)
-        _ = obj.vmap_value(jnp.zeros((warmup_bs, n)))
+        obj.warmup_vmap_value(batch_size=warmup_bs)
         obj.start_logging()
 
         cur_pop = base_pop
@@ -463,9 +459,9 @@ class PyCMABIPOP(OptimizationAlgorithm):
 
     After the first run, BIPOP alternates between two regimes:
 
-    * **Large population** – population size is doubled each time this regime
+    * **Large population**: population size is doubled each time this regime
       is entered, and the initial step size is reset to ``sigma0``.
-    * **Small population** – population size is drawn uniformly at random
+    * **Small population**: population size is drawn uniformly at random
       from the range ``[base_pop, large_pop // 2]``; initial step size is
       drawn from ``sigma0 × 10^U(−2, 0)``.
 
@@ -498,7 +494,7 @@ class PyCMABIPOP(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: np.ndarray | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -509,7 +505,7 @@ class PyCMABIPOP(OptimizationAlgorithm):
         """Run BIPOP-CMA-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean for the first run only.
             random_seed: Seed for reproducibility.
             sigma0: Base step size.  Defaults to ``0.3`` (dimensionless fraction of the unit cube; search runs in ``[0, 1]^n`` and is mapped to physical bounds at evaluation).
@@ -521,22 +517,21 @@ class PyCMABIPOP(OptimizationAlgorithm):
             max_iterations_per_restart: Per-restart generation cap.
                 ``None`` = unlimited.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
         width = ub_np - lb_np
-        n = problem.n_params
+        n = obj.n_params
 
         base_pop = pop_size or _default_pop_size(n)
         # sigma is a dimensionless fraction of the unit cube.
         sigma_base = sigma0 if sigma0 is not None else 0.3
 
         warmup_bs = min(self._batch_size, base_pop)
-        _ = obj.vmap_value(jnp.zeros((warmup_bs, n)))
+        obj.warmup_vmap_value(batch_size=warmup_bs)
         obj.start_logging()
 
         large_pop = base_pop  # grows each large-regime restart
@@ -573,7 +568,7 @@ class PyCMABIPOP(OptimizationAlgorithm):
             else:
                 # Large-population regime
                 large_restarts += 1
-                large_pop = base_pop * (2 ** large_restarts)
+                large_pop = base_pop * (2**large_restarts)
                 pop_size = large_pop
                 sigma = sigma_base
                 x0_unit = np.random.uniform(0.0, 1.0, size=n)

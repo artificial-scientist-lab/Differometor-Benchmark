@@ -1,4 +1,4 @@
-"""BAxUS — Bayesian Optimization in Adaptively Expanding Subspaces via Ax.
+"""BAxUS: Bayesian Optimization in Adaptively Expanding Subspaces via Ax.
 
 BAxUS iteratively expands a low-dimensional subspace embedding, starting from
 a small dimensionality and growing it only when needed, combining the benefits
@@ -17,21 +17,24 @@ Operates in **bounded** parameter space.
 
 from __future__ import annotations
 
-import jax.numpy as jnp
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
-from dfbench.core.utils import t2j
 from dfbench.algorithms.surrogate_based.botorch._botorch_common import (
     DEVICE,
     DTYPE,
     get_problem_bounds_torch,
     evaluate_objective,
     fit_gp,
-    sobol_initial_samples,
     unit_bounds_torch,
 )
 
@@ -39,7 +42,7 @@ try:
     from botorch.acquisition import qLogExpectedImprovement as qLogEI
     from botorch.optim import optimize_acqf
     from botorch.generation import gen_candidates_scipy
-    from botorch.utils.transforms import normalize, unnormalize
+    from botorch.utils.transforms import normalize
 
     _BOTORCH_AVAILABLE = True
 except ImportError:
@@ -67,7 +70,7 @@ class BAxUS(OptimizationAlgorithm):
     def __init__(self) -> None:
         if not _BOTORCH_AVAILABLE:
             raise ImportError(
-                "BoTorch is required for BAxUS. Install with: uv pip install botorch"
+                "BoTorch is required for BAxUS. Install with: uv add 'dfbench[bo]'"
             )
         self.device = DEVICE
         self.dtype = DTYPE
@@ -105,7 +108,7 @@ class BAxUS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
@@ -119,7 +122,7 @@ class BAxUS(OptimizationAlgorithm):
         (``max_evals`` / ``max_time``).
 
         Args:
-            problem_objective: Objective wrapper (mutated in place).
+            objective: Objective wrapper (mutated in place).
             init_params: Optional starting point (bounded space). Currently unused.
             random_seed: Seed for reproducibility.
             n_initial: Sobol samples in each new subspace.
@@ -129,16 +132,14 @@ class BAxUS(OptimizationAlgorithm):
                 Defaults to ``max(dim // 2, 5)``.
             **bo_kwargs: Extra kwargs for acquisition optimisation.
         """
-        obj = problem_objective
-        problem = obj.problem
-        D = problem.n_params
+        obj = objective
+        D = obj.n_params
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
         rng = torch.Generator(device="cpu").manual_seed(random_seed)
 
-        bounds = get_problem_bounds_torch(problem, self.device, self.dtype)
-        unit_bds = unit_bounds_torch(D, self.device, self.dtype)
+        bounds = get_problem_bounds_torch(obj.bounds, self.device, self.dtype)
 
         if d_init is None:
             d_init = min(5, D)
@@ -153,7 +154,7 @@ class BAxUS(OptimizationAlgorithm):
         }
 
         # JIT warmup
-        _ = obj.vmap_value(jnp.zeros((1, D)))
+        obj.warmup_vmap_value(batch_size=1)
         obj.start_logging()
 
         d_e = d_init

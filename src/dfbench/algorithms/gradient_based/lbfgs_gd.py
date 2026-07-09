@@ -1,6 +1,12 @@
 import jax
 import jax.numpy as jnp
-import optax
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for this algorithm. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.objective import Objective
@@ -66,7 +72,7 @@ class LBFGSGD(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         patience: int | None = None,
@@ -87,7 +93,7 @@ class LBFGSGD(OptimizationAlgorithm):
         downstream time-based analysis.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             init_params: Initial parameters. If None, initialize randomly
                 (using random_seed) in unbounded space.
             random_seed: Seed for reproducibility. If None, uses system
@@ -95,8 +101,7 @@ class LBFGSGD(OptimizationAlgorithm):
             patience: Stop after this many iterations without improvement.
             **lbfgs_kwargs: Passed to ``optax.lbfgs()``.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
@@ -105,9 +110,9 @@ class LBFGSGD(OptimizationAlgorithm):
         else:
             params = init_params
 
-        # Build the JIT-compiled step using the sigmoid objective directly,
-        # since optax.lbfgs needs the raw value function for line-search.
-        value_fn = problem.sigmoid_objective_function
+        # Build the JIT-compiled step using an unlogged value function,
+        # since optax.lbfgs needs a raw callable for line-search.
+        value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
 
         optimizer = optax.lbfgs(**lbfgs_kwargs)

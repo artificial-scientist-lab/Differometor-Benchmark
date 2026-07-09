@@ -2,7 +2,7 @@
 
 The test suite lives under `tests/`. It is organised so that the things
 that should hold for *every* algorithm are checked once, in one place,
-against every algorithm — and everything else is a focused module that
+against every algorithm, and everything else is a focused module that
 exercises a specific piece of code.
 
 This page documents the conventions we follow when writing or extending
@@ -32,7 +32,7 @@ excluded from the default `pytest` run and intended for the cluster.
 
 `tests/test_algorithms_uniform.py` is the single source of truth for the
 contract every `OptimizationAlgorithm` must satisfy. It is driven by a
-registry — one `AlgoSpec` per algorithm — and parametrises the same
+registry (one `AlgoSpec` per algorithm) and parametrises the same
 set of checks over every entry.
 
 For each algorithm the suite verifies:
@@ -53,14 +53,16 @@ For each algorithm the suite verifies:
 * for algorithms that work in native bounded space, the raw
   `obj.best_params` also lies inside the box.
 
-A small subset of algorithms — the ones whose internal RNG is fully
-captured by the seed we pass in — are additionally checked for
+A small subset of algorithms (the ones whose internal RNG is fully
+captured by the seed we pass in) are additionally checked for
 reproducibility (same seed, same loss trajectory).
 
 ### Adding a new algorithm
 
 Append one entry to `REGISTRY` in
 [tests/test_algorithms_uniform.py](../tests/test_algorithms_uniform.py).
+Use the `AlgorithmType` matching the algorithm's `src/dfbench/algorithms/`
+subfolder.
 All tests then run against your algorithm automatically:
 
 ```python
@@ -71,7 +73,7 @@ REGISTRY: list[AlgoSpec] = [
 ```
 
 If your algorithm needs extra kwargs to make progress under a small
-budget (BoTorch is the canonical example — it counts iterations, not
+budget (BoTorch is the canonical example: it counts iterations, not
 evaluations), pass an `extra_kwargs` builder:
 
 ```python
@@ -83,8 +85,8 @@ AlgoSpec(
 )
 ```
 
-If your algorithm is reproducibly broken in the current environment —
-e.g. an upstream torch/JAX bug rather than your code — register it with
+If your algorithm is reproducibly broken in the current environment
+(e.g. an upstream torch/JAX bug rather than your code), register it with
 an `xfail` reason. Do not add `pytest.mark.xfail` decorators on the
 tests themselves; the decorators belong on the registry entry, where
 they describe the algorithm rather than the test.
@@ -120,7 +122,7 @@ A few conventions that make the suite predictable.
 The mock problem in `tests/conftest.py` is a 2-parameter quadratic with
 sigmoid bounding. It is fast, deterministic, and has a known optimum at
 the origin. Use it for everything except integration tests that
-explicitly need a real problem (Voyager, UIFO, …); those go under
+explicitly need a real problem (Voyager, UIFO, ...); those go under
 `tests/slow/` and are run on the cluster.
 
 ```python
@@ -147,7 +149,7 @@ a handful of steps.
 Tests in the uniform suite assert things every `OptimizationAlgorithm`
 should satisfy. Tests in algorithm-specific files assert things unique
 to that algorithm. If you find yourself writing the same assertion
-against several algorithms, lift it into the uniform suite — that is
+against several algorithms, lift it into the uniform suite; that is
 the whole point.
 
 ### Failure messages should identify the algorithm
@@ -190,7 +192,7 @@ uniform algorithm tests account for most of that time.
 
 xfails are recorded with a one-line reason that explains *what* is
 broken and *where* the bug lives. We use `strict=False` so a passing
-xfail does not break CI — when the upstream bug is fixed, the next
+xfail does not break CI. When the upstream bug is fixed, the next
 person who notices the `XPASS` removes the mark.
 
 We do not use xfail to silence flakiness. If a test is flaky, the test
@@ -214,20 +216,21 @@ tests/test_bo_batch.py tests/test_dfo_algorithms.py`.
 
 The non-pass results all have a single root cause each:
 
-* **11 xfailed — all `EvoxES`.** The 11 uniform-suite test cases applied
+* **11 xfailed: all `EvoxES`.** The 11 uniform-suite test cases applied
   to `EvoxES` are all marked xfail because the default variant
   (CMA-ES) trips a `torch.compile` / dynamo aliasing bug inside
   `evox` on torch >= 2.6. The bug is upstream; the other `EvoxES`
   variants are exercised in their own dedicated tests.
 * **15 skipped** = **12 + 3**:
-  * **12** are `ARCJAX` across the same uniform-suite tests — `ARCJAX`
+  * **12** are `ARCJAX` across the same uniform-suite tests; `ARCJAX`
     is intentionally exposed but raises `NotImplementedError`. Its
     expected-failure behaviour is covered in
     `tests/test_custom_jax_batch.py` instead.
   * **3** are in `tests/test_bo_batch.py`, gated on optional
     dependencies that are not installed in the default environment:
     `ax-platform` (for `AxSAASBO`), `HEBO`, and `SMAC3`. Installing
-    those packages re-enables the corresponding tests.
+    the corresponding `dfbench` extras (`dfbench[bo]` for AxSAASBO/HEBO,
+    `dfbench[smac]` for SMAC) re-enables the tests.
 
 There are no unexpected failures; every skip and xfail carries an
 explanatory reason in the registry / `pytest.mark.skipif`.

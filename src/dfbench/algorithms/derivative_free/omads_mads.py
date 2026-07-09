@@ -10,7 +10,7 @@ They are suited for rugged-landscape local exploration, not global
 black-box optimization.
 
 Requires:
-    OMADS >= 2408.0 (``pip install OMADS``)
+    OMADS >= 2408.0 (``uv add 'dfbench[dfo]'``)
 
 Note:
     OMADS has a known attribute-name mismatch with recent ``samplersLib``
@@ -30,7 +30,7 @@ from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
 
 # ---------------------------------------------------------------------------
-# OMADS compatibility shim — fix attribute name mismatch in samplersLib
+# OMADS compatibility shim: fix attribute name mismatch in samplersLib
 # ---------------------------------------------------------------------------
 
 _OMADS_IMPORT_ERROR: str | None = None
@@ -61,7 +61,7 @@ def _check_omads_available() -> None:
         raise ImportError(
             f"OMADS is required for MADS/OrthoMADS algorithms but could not be "
             f"imported: {_OMADS_IMPORT_ERROR}\n"
-            f"Install with: pip install OMADS"
+            f"Install with: uv add 'dfbench[dfo]'"
         )
 
 
@@ -102,11 +102,10 @@ def _run_omads(
     """
     _check_omads_available()
 
-    problem = obj.problem
-    bounds = problem.bounds  # (2, n_params)
+    bounds = obj.bounds  # (2, n_params)
     lower = np.array(bounds[0], dtype=np.float64)
     upper = np.array(bounds[1], dtype=np.float64)
-    n_params = problem.n_params
+    n_params = obj.n_params
 
     # Starting point: use best_params if available, else random bounded point
     if obj.best_params is not None:
@@ -115,8 +114,8 @@ def _run_omads(
         init = obj.random_params_bounded()
         baseline = np.array(init, dtype=np.float64).tolist()
 
-    # OMADS budget — set generously; Objective budget is the real limiter.
-    omads_budget = obj._max_evals if obj._max_evals is not None else 1_000_000
+    # OMADS budget: set generously; Objective budget is the real limiter.
+    omads_budget = obj.max_evals if obj.max_evals is not None else 1_000_000
 
     # --- blackbox callable ---------------------------------------------------
 
@@ -138,7 +137,7 @@ def _run_omads(
         for k in range(_MAX_NAN_STREAK):
             if obj.budget_exceeded:
                 break
-            scale = _NAN_PERTURB_BASE * (2 ** k)
+            scale = _NAN_PERTURB_BASE * (2**k)
             perturbed = np.clip(cur + rng.normal(size=cur.shape) * scale, lower, upper)
             loss = float(obj.value(jnp.asarray(perturbed, dtype=jnp.float32)))
             if np.isfinite(loss):
@@ -240,12 +239,12 @@ class OmadsMADS(OptimizationAlgorithm):
         >>> problem = VoyagerProblem()
         >>> obj = Objective(problem, max_evals=500, verbose=1, print_every=50)
         >>> optimizer = OmadsMADS(psize_init=1.0, tol=1e-9, ns=4)
-        >>> optimizer.optimize(problem_objective=obj, random_seed=42)
+        >>> optimizer.optimize(objective=obj, random_seed=42)
         >>> print(f"Best loss: {obj.best_loss:.6f}")
     """
 
     algorithm_str: str = "omads_mads"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,
@@ -267,7 +266,7 @@ class OmadsMADS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         max_iterations: int | None = None,
@@ -276,7 +275,7 @@ class OmadsMADS(OptimizationAlgorithm):
         """Run MADS optimization (search + poll).
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Ignored (OMADS manages its own starting point from
                 Objective's best_params or a random bounded sample).
             random_seed: Random seed for reproducibility. If None, generated.
@@ -284,12 +283,11 @@ class OmadsMADS(OptimizationAlgorithm):
                 Objective's ``max_evals`` / ``max_time``.
             **kwargs: Unused.
         """
-        obj = problem_objective
+        obj = objective
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         # JIT warmup
-        warmup_params = obj.random_params_bounded()
-        _ = obj.value(warmup_params)
+        obj.warmup_value()
 
         obj.start_logging()
 
@@ -324,12 +322,12 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
         >>> problem = VoyagerProblem()
         >>> obj = Objective(problem, max_evals=500, verbose=1, print_every=50)
         >>> optimizer = OmadsOrthoMADS(psize_init=1.0, tol=1e-9)
-        >>> optimizer.optimize(problem_objective=obj, random_seed=42)
+        >>> optimizer.optimize(objective=obj, random_seed=42)
         >>> print(f"Best loss: {obj.best_loss:.6f}")
     """
 
     algorithm_str: str = "omads_orthomads"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,
@@ -348,7 +346,7 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         max_iterations: int | None = None,
@@ -357,7 +355,7 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
         """Run OrthoMADS optimization (poll only).
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Ignored (OMADS manages its own starting point from
                 Objective's best_params or a random bounded sample).
             random_seed: Random seed for reproducibility. If None, generated.
@@ -365,12 +363,11 @@ class OmadsOrthoMADS(OptimizationAlgorithm):
                 Objective's ``max_evals`` / ``max_time``.
             **kwargs: Unused.
         """
-        obj = problem_objective
+        obj = objective
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         # JIT warmup
-        warmup_params = obj.random_params_bounded()
-        _ = obj.value(warmup_params)
+        obj.warmup_value()
 
         obj.start_logging()
 

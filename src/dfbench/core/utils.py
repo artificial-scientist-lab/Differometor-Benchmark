@@ -3,11 +3,17 @@
 Provides torch<->jax conversion utilities and other helpers.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import jax
 import jax.numpy as jnp
 import numpy as np
-import torch
 from jaxtyping import Float
+
+if TYPE_CHECKING:
+    import torch
 
 
 def t2j(tensor: torch.Tensor) -> jax.Array:
@@ -20,6 +26,8 @@ def j2t(arr: jax.Array) -> torch.Tensor:
 
     Creates a writable copy to avoid PyTorch warnings about non-writable arrays.
     """
+    import torch
+
     return torch.from_numpy(np.array(arr))
 
 
@@ -37,7 +45,7 @@ def inverse_sigmoid_bounding(
         bounds: Shape (2, n_params) array where bounds[0] is lower and bounds[1] is upper.
 
     Returns:
-        Unbounded parameters suitable for use with sigmoid_objective_function.
+        Unbounded parameters suitable for Objective's unbounded mode.
     """
     normalised = (bounded_params - bounds[0]) / (bounds[1] - bounds[0])
     normalised = jnp.clip(normalised, 1e-7, 1.0 - 1e-7)

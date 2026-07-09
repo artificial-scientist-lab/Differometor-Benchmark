@@ -33,23 +33,22 @@ configs = [
     ),
     # Surrogate-based
     AlgorithmConfig(
-        BotorchBO(),
-        {"n_initial": 10, "batch_size": 3, "max_iterations": 20},
+        BotorchBO(batch_size=3),
+        {"n_initial": 10, "acquisition_batch_size": 3, "max_iterations": 20},
         name="BoTorch-BO",
     ),
     AlgorithmConfig(
-        BotorchTuRBO(),
-        {"n_initial": 10, "batch_size": 3, "max_iterations": 20},
+        BotorchTuRBO(batch_size=3),
+        {"n_initial": 10, "acquisition_batch_size": 3, "max_iterations": 20},
         name="TuRBO",
     ),
     # Generative
     AlgorithmConfig(
-        VAESampling(),
+        VAESampling(batch_size=3),
         {
             "n_initial": 10,
             "vae_training_samples": 100,
             "vae_epochs": 50,
-            "batch_size": 3,
         },
         name="VAE-Sampling",
     ),

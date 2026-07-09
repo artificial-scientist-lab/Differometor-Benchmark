@@ -1,14 +1,8 @@
-"""LINCOA — LINearly Constrained Optimization Algorithm (via PDFO).
+"""LINCOA: LINearly Constrained Optimization Algorithm (via PDFO).
 
 LINCOA is a derivative-free trust-region method by M. J. D. Powell that
-handles *bound constraints* and *linear inequality constraints* natively.
-
-When the problem exposes only box bounds (the common case in this benchmark),
-LINCOA automatically uses them.  If the problem also exposes linear
-constraints via ``problem.linear_constraints`` (returning a dict with keys
-``A_ub``, ``b_ub`` for ``A_ub @ x <= b_ub``), those are forwarded to the
-solver as well.  Problems without any constraints are also supported —
-LINCOA will behave like a bounded NEWUOA.
+handles *bound constraints* natively.  Problems without any constraints are
+also supported - LINCOA will behave like a bounded NEWUOA.
 
 Defaults are conservative and benchmark-oriented: bounded physical space,
 one restart, ``rhobeg`` derived from the bound range.
@@ -16,13 +10,12 @@ one restart, ``rhobeg`` derived from the bound range.
 Reference:
     Powell, M. J. D. (2015). On fast trust region methods for quadratic
     models with linear constraints. *Mathematical Programming Computation*,
-    7(3), 237–267.
+    7(3), 237-267.
 """
 
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -31,7 +24,6 @@ from dfbench.algorithms.derivative_free._dfo_common import (
     dfo_objective_wrapper,
     multistart_loop,
     solver_bounds_np,
-    clip_to_bounds,
 )
 
 
@@ -51,7 +43,7 @@ class PDFOLINCOA(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "pdfo_lincoa"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,
@@ -67,7 +59,7 @@ class PDFOLINCOA(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         max_iterations: int | None = None,
@@ -76,34 +68,30 @@ class PDFOLINCOA(OptimizationAlgorithm):
             import pdfo
         except ImportError as exc:
             raise ImportError(
-                "PDFO is required for LINCOA.  Install with: pip install pdfo"
+                "PDFO is required for LINCOA.  Install with: uv add 'dfbench[dfo]'"
             ) from exc
-        from scipy.optimize import LinearConstraint, Bounds  # noqa: E402
+        from scipy.optimize import Bounds  # noqa: E402
 
-        obj = problem_objective
+        obj = objective
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         lower, upper = solver_bounds_np(obj)
-        radius_init = self.radius_init if self.radius_init is not None else float(0.1 * np.mean(upper - lower))
+        radius_init = (
+            self.radius_init
+            if self.radius_init is not None
+            else float(0.1 * np.mean(upper - lower))
+        )
         npt = self.npt if self.npt is not None else 2 * obj.n_params + 1
 
         fun = dfo_objective_wrapper(obj)
         bounds = Bounds(lb=lower, ub=upper)
 
-        # Build constraint list: always include bounds; add linear if available.
+        # This batch only supports box bounds; problems with linear
+        # constraint metadata are not handled here.
         constraints: list = []
-        problem = obj.problem
-        if hasattr(problem, "linear_constraints"):
-            lc = problem.linear_constraints  # type: ignore[attr-defined]
-            if lc is not None:
-                A_ub = np.asarray(lc["A_ub"], dtype=np.float64)
-                b_ub = np.asarray(lc["b_ub"], dtype=np.float64)
-                constraints.append(
-                    LinearConstraint(A_ub, ub=b_ub)
-                )
 
         # JIT warmup
-        _ = obj.value(jnp.asarray(clip_to_bounds(np.zeros(obj.n_params), obj)))
+        obj.warmup_value()
 
         obj.start_logging()
 
@@ -133,7 +121,9 @@ class PDFOLINCOA(OptimizationAlgorithm):
             )
 
         multistart_loop(
-            obj, key, _solve,
+            obj,
+            key,
+            _solve,
             n_restarts=self.n_restarts,
             init_params=init_params,
         )

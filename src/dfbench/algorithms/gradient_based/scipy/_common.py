@@ -9,9 +9,15 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 from jaxtyping import Array, Float
-from scipy.optimize import BFGS as ScipyBFGS
-from scipy.optimize import Bounds
-from scipy.optimize import minimize
+
+try:
+    from scipy.optimize import BFGS as ScipyBFGS
+    from scipy.optimize import Bounds
+    from scipy.optimize import minimize
+except ImportError as exc:
+    raise ImportError(
+        "scipy is required for SciPy* algorithms. Install with:  uv add 'dfbench[scipy]'"
+    ) from exc
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
@@ -42,7 +48,7 @@ class SciPyObjectiveAdapter:
         self.obj = obj
         self.config = config
 
-        func = obj._func
+        func = obj.value_function(unbounded=config.unbounded)
         grad_fn = jax.grad(func)
 
         self._value_fn = jax.jit(func)
@@ -89,32 +95,21 @@ class SciPyObjectiveAdapter:
         """Return SciPy bounds in physical space when requested."""
         if not self.config.use_bounds:
             return None
-        problem_bounds = np.asarray(self.obj.problem.bounds, dtype=float)
+        problem_bounds = np.asarray(self.obj.bounds, dtype=float)
         return Bounds(problem_bounds[0], problem_bounds[1], keep_feasible=True)
 
     @property
     def constraints(self) -> tuple:
-        """Return supported SciPy constraints or fail loudly."""
-        problem = self.obj.problem
-        for attr_name in (
-            "scipy_constraints",
-            "constraints",
-            "linear_constraints",
-            "nonlinear_constraints",
-        ):
-            if not hasattr(problem, attr_name):
-                continue
-            value = getattr(problem, attr_name)
-            if value not in (None, (), [], {}):
-                raise NotImplementedError(
-                    "Problem exposes constraint metadata via "
-                    f"'{attr_name}', but this batch only supports box constraints."
-                )
+        """Return supported SciPy constraints.
+
+        This batch only supports box bounds; problems with constraint
+        metadata are not handled here.
+        """
         return ()
 
     def warmup(self) -> None:
         """Warm up the exact JAX paths this SciPy adapter will use."""
-        params = jnp.asarray(self.obj._deterministic_warmup_params()[0])
+        params = jnp.asarray(self.obj.random_params_bounded())
         self._warmup_twice(self._value_fn, params)
 
         if self._value_and_grad_fn is not None:
@@ -315,7 +310,7 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
 
     def _run_scipy_minimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None,
         random_seed: int | None,
         tol: float | None,
@@ -323,7 +318,7 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
         *,
         hessian_update_strategy: object | None = None,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         self.prepare(
             obj, unbounded=self.scipy_config.unbounded, random_seed=random_seed
         )
@@ -379,9 +374,9 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
                 self._last_result = None
                 return
 
-            # Budget not yet exhausted — restart with alternating strategy:
-            #   even restarts → perturb best-known point (exploit basin)
-            #   odd restarts  → fresh random point (explore new basin)
+            # Budget not yet exhausted; restart with alternating strategy:
+            #   even restarts -> perturb best-known point (exploit basin)
+            #   odd restarts  -> fresh random point (explore new basin)
             if not obj.budget_exceeded:
                 restart_count += 1
                 if restart_count % 2 == 0:

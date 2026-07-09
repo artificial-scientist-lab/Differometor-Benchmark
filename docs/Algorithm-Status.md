@@ -18,7 +18,7 @@
 
 ---
 
-## `EvoxES` — Multi-Algorithm Wrapper (on `main`)
+## `EvoxES`: Multi-Algorithm Wrapper (on `main`)
 
 `EvoxES` is a single class that wraps **12 distinct EvoX evolution strategies** selectable via its `variant` parameter.
 Each variant is a separate algorithm from the EvoX library.
@@ -38,7 +38,7 @@ Each variant is a separate algorithm from the EvoX library.
 | `GuidedES` | Guided Evolution Strategy | ES |
 | `ESMC` | Evolution Strategy with Monte Carlo | ES |
 
-## `EvoxPSO` — Multi-Algorithm Wrapper (on `main`)
+## `EvoxPSO`: Multi-Algorithm Wrapper (on `main`)
 
 `EvoxPSO` is a single class that wraps **7 distinct EvoX PSO variants** selectable via its `variant` parameter.
 
@@ -52,10 +52,10 @@ Each variant is a separate algorithm from the EvoX library.
 | `SLPSOGS` | Social Learning PSO with Gaussian Sampling |
 | `SLPSOUS` | Social Learning PSO with Uniform Sampling |
 
-## `EvosaxES` — Multi-Algorithm Wrapper (on `algorithm/evo-algorithms`)
+## `EvosaxES`: Multi-Algorithm Wrapper (on `algorithm/evo-algorithms`)
 
 `EvosaxES` is a separate evosax-backed wrapper (pure JAX, JIT-friendly) that wraps **14 variants**.
-Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
+Coexists with `EvoxES` but uses a different backend; class names use `evosax_` prefix.
 
 | Variant | Full Name | Type |
 |---------|-----------|------|
@@ -129,7 +129,7 @@ Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
 |-----------|-----------|--------|--------|-------|
 | SGLD | `SGLDJAX` | Branch | `algorithm/jax-algorithms` | Stochastic Gradient Langevin Dynamics |
 | ASAM | `ASAMJAX` | Branch | `algorithm/jax-algorithms` | Adaptive Sharpness-Aware Minimization |
-| Adam→L-BFGS Switch | `AdamToLBFGSJAX` | Branch | `algorithm/jax-algorithms` | Hybrid warm-start strategy |
+| Adam->L-BFGS Switch | `AdamToLBFGSJAX` | Branch | `algorithm/jax-algorithms` | Hybrid warm-start strategy |
 | Entropy-SGD | `EntropySGDJAX` | Branch | `algorithm/jax-algorithms` | |
 | SGHMC | `SGHMCJAX` | Branch | `algorithm/jax-algorithms` | Stochastic Gradient Hamiltonian MC |
 | ARC | `ARCJAX` | Branch | `algorithm/jax-algorithms` | Adaptive Regularization with Cubics |
@@ -146,7 +146,6 @@ Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
 |-----------|-----------|--------|--------|-------|
 | EvoX ES (12 variants) | `EvoxES` | **Finished** | `main` | See variant table above |
 | EvoX PSO (7 variants) | `EvoxPSO` | **Finished** | `main` | See variant table above |
-| Random Search | `RandomSearch` | **Finished** | `main` | Baseline |
 | Evosax ES (14 variants) | `EvosaxES` | Branch | `algorithm/evo-algorithms` | See variant table above |
 | DE | `DE` | Branch | `algorithm/evo-algorithms` | Differential Evolution (custom impl) |
 | JADE | `JADE` | Branch | `algorithm/evo-algorithms` | Adaptive DE |
@@ -167,6 +166,7 @@ Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
 | Nevergrad NGOpt | `NevergradNGOpt` | Branch | `algorithm/nevergrad-algorithms` | |
 | Nevergrad OnePlusOne | `NevergradOnePlusOne` | Branch | `algorithm/nevergrad-algorithms` | |
 | Nevergrad TBPSA | `NevergradTBPSA` | Branch | `algorithm/nevergrad-algorithms` | |
+| CMA-ES | `CMAESCMA` | Branch | `algorithm/cma-es-algorithms` | Via `cmaes` library |
 | Sep-CMA-ES | `CMAESSepCMA` | Branch | `algorithm/cma-es-algorithms` | Via `cmaes` library |
 | Evosax MA-ES | `EvosaxMAES` | Branch | `algorithm/cma-es-algorithms` | |
 | Evosax LM-MA-ES | `EvosaxLMMAES` | Branch | `algorithm/cma-es-algorithms` | Large-scale variant |
@@ -189,10 +189,18 @@ Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
 | PDFO NEWUOA | `PDFONEWUOA` | Branch | `algorithm/powell-dfo-algorithms` | Unconstrained |
 | PDFO UOBYQA | `PDFOUOBYQA` | Branch | `algorithm/powell-dfo-algorithms` | Unconstrained, quadratic approx |
 | Py-BOBYQA | `PyBOBYQA` | Branch | `algorithm/powell-dfo-algorithms` | Bound-constrained |
-| Basin Hopping | `BasinHopping` | Branch | `algorithm/scipy-nongrad-algorithms` | |
-| Dual Annealing | `DualAnnealing` | Branch | `algorithm/scipy-nongrad-algorithms` | |
 | Nelder-Mead (scipy-nongrad) | `NelderMead` | Branch | `algorithm/scipy-nongrad-algorithms` | Overlaps with `future` |
 | Powell (scipy-nongrad) | `Powell` | Branch | `algorithm/scipy-nongrad-algorithms` | Overlaps with `future` |
+| OMADS MADS | `OmadsMADS` | Branch | `algorithm/mads-algorithms` | Mesh Adaptive Direct Search |
+| OMADS OrthoMADS | `OmadsOrthoMADS` | Branch | `algorithm/mads-algorithms` | Orthogonal variant |
+
+### Global Search
+
+| Algorithm | Class Name | Status | Branch | Notes |
+|-----------|-----------|--------|--------|-------|
+| Basin Hopping | `BasinHopping` | Branch | `algorithm/scipy-nongrad-algorithms` | SciPy stochastic global optimizer |
+| Dual Annealing | `DualAnnealing` | Branch | `algorithm/scipy-nongrad-algorithms` | SciPy stochastic global optimizer |
+| Random Search | `RandomSearch` | **Finished** | `main` | Baseline |
 
 ### Surrogate-Based / Bayesian Optimization
 
@@ -206,7 +214,7 @@ Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
 | GEBO | `GEBO` | Branch | `algorithm/bo-algorithms` | Gradient-Enhanced BO |
 | LineBO | `LineBO` | Branch | `algorithm/bo-algorithms` | Line-search BO |
 | qKG | `BotorchqKG` | Branch | `algorithm/bo-algorithms` | Knowledge Gradient |
-| qNEI | `BotorchqNEI` | Branch | `algorithm/bo-algorithms` | Noisy Expected Improvement |
+| qNEI | `BotorchQNEI` | Branch | `algorithm/bo-algorithms` | Noisy Expected Improvement |
 | REMBO | `REMBO` | Branch | `algorithm/bo-algorithms` | Random Embedding BO |
 | HEBO | `HEBO` | Branch | `algorithm/bo-algorithms` | Heteroscedastic BO |
 | SMAC | `SMAC` | Branch | `algorithm/bo-algorithms` | Sequential Model-based Config |
@@ -218,23 +226,14 @@ Coexists with `EvoxES` — different backend, class names use `evosax_` prefix.
 |-----------|-----------|--------|--------|-------|
 | VAE Sampling | `VAESampling` | **Finished** | `main` | Variational Autoencoder |
 
-### Direct Search
-
-| Algorithm | Class Name | Status | Branch | Notes |
-|-----------|-----------|--------|--------|-------|
-| OMADS MADS | `OmadsMADS` | Branch | `algorithm/mads-algorithms` | Mesh Adaptive Direct Search |
-| OMADS OrthoMADS | `OmadsOrthoMADS` | Branch | `algorithm/mads-algorithms` | Orthogonal variant |
-
----
-
 ## Summary by Status
 
 | Status | Count | Categories Covered |
 |--------|------:|--------------------|
-| **Finished** (on `main`) | 11 classes (22 runnable via variants) | Gradient, Evolutionary, Surrogate, Generative |
+| **Finished** (on `main`) | 11 classes (22 runnable via variants) | Gradient, Evolutionary, Derivative-Free, Global Search, Surrogate, Generative |
 | **Future branch** | 5 | Derivative-Free, Evolutionary, Gradient |
-| **Branch** (merge-ready) | 73 classes (87 runnable via variants) | Gradient (Optax, SciPy, JAX), Evolutionary, Derivative-Free, Surrogate, Direct Search |
-| **Total unique runnable algorithms** | ~114 | 7 categories |
+| **Branch** (merge-ready) | 74 classes (88 runnable via variants) | Gradient (Optax, SciPy, JAX), Evolutionary, Derivative-Free, Global Search, Surrogate |
+| **Total unique runnable algorithms** | ~115 | 6 categories |
 
 > **Runnable count breakdown:** 11 main classes yield 22 via EvoX variants (12 ES + 7 PSO + 3 standalone).
 > Branch classes include EvosaxES with 14 additional variants.

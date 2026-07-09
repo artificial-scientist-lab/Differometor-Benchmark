@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
-from scipy.optimize import dual_annealing, minimize
+
+try:
+    from scipy.optimize import dual_annealing, minimize
+except ImportError as exc:
+    raise ImportError(
+        "scipy is required for this algorithm. Install with:  uv add 'dfbench[scipy]'"
+    ) from exc
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
@@ -29,18 +34,18 @@ class DualAnnealing(OptimizationAlgorithm):
 
     Attributes:
         algorithm_str: ``"dual_annealing"``
-        algorithm_type: :attr:`AlgorithmType.EVOLUTIONARY`
+        algorithm_type: :attr:`AlgorithmType.GLOBAL_SEARCH`
     """
 
     algorithm_str: str = "dual_annealing"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.GLOBAL_SEARCH
 
     def __init__(self) -> None:
         pass
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         initial_temp: float = 5230.0,
@@ -53,7 +58,7 @@ class DualAnnealing(OptimizationAlgorithm):
         """Run Dual Annealing optimisation.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Starting point (``x0``). If *None*, sampled uniformly.
             random_seed: Seed for reproducibility.
             initial_temp: Initial temperature for generalised simulated
@@ -66,11 +71,9 @@ class DualAnnealing(OptimizationAlgorithm):
             local_refinement: If *True*, refine the best incumbent with a
                 bounded Nelder-Mead pass after the main annealing loop.
         """
-        obj = problem_objective
+        obj = objective
 
-        random_seed, _key = self.prepare(
-            obj, unbounded=False, random_seed=random_seed
-        )
+        random_seed, _key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         if init_params is None:
             params = obj.random_params_bounded()
@@ -78,7 +81,7 @@ class DualAnnealing(OptimizationAlgorithm):
             params = init_params
 
         # JIT warmup
-        _ = obj.value(params)
+        obj.warmup_value()
 
         obj.start_logging()
 

@@ -7,7 +7,7 @@ registry below so the test bodies themselves stay identical.
 
 Two goals drive this:
 
-* Every algorithm is held to the same contract — it produces evaluations,
+* Every algorithm is held to the same contract: it produces evaluations,
   leaves the ``Objective`` in a consistent state, respects bounds, etc.
 * Adding a new algorithm requires nothing more than appending one entry to
   ``REGISTRY``; the full set of tests then runs against it automatically.
@@ -39,7 +39,7 @@ from dfbench.algorithms import (
     BotorchBO,
     BotorchTuRBO,
     BotorchqKG,
-    BotorchqNEI,
+    BotorchQNEI,
     CMAESSepCMA,
     COBYLA,
     COBYQA,
@@ -171,138 +171,182 @@ def _botorch_kwargs(max_evals: int) -> dict[str, Any]:
     return {"max_iterations": 2, "n_initial": min(5, max(2, max_evals // 4))}
 
 
-# Order: misc gradient → optax → scipy → evolutionary → surrogate → generative.
+# Order: misc gradient -> optax -> scipy -> evolutionary -> derivative-free
+# -> global search -> surrogate -> generative.
 # To add a new algorithm, append one AlgoSpec entry here.
 REGISTRY: list[AlgoSpec] = [
     # -- misc gradient-based --------------------------------------------------
-    AlgoSpec(AdamGD,        AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(SAGD,          AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(NAAdamGD,      AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(LBFGSGD,       AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(AdamGD, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(SAGD, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(NAAdamGD, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(LBFGSGD, AlgorithmType.GRADIENT_BASED, unbounded=True),
     # -- optax ----------------------------------------------------------------
-    AlgoSpec(OptaxAdam,            AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxAdamW,           AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxAdaBelief,       AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxAdafactor,       AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxAMSGrad,         AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxAdaGrad,         AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxAdaDelta,        AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxAdaMax,          AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxAdaMaxW,         AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxAdan,            AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxLion,            AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxLAMB,            AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxNadam,           AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxNadamW,          AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxRMSProp,         AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxRProp,           AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxRAdam,           AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxSGD,             AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxSGDM,            AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxNAG,             AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxNoisySGD,        AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxPolyakSGD,       AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxSAM,             AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxSophia,          AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxLookahead,       AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxAdam, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxAdamW, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxAdaBelief, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxAdafactor, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxAMSGrad, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxAdaGrad, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxAdaDelta, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxAdaMax, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxAdaMaxW, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxAdan, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxLion, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxLAMB, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxNadam, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxNadamW, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxRMSProp, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxRProp, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxRAdam, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxSGD, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxSGDM, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxNAG, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxNoisySGD, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxPolyakSGD, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxSAM, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxSophia, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxLookahead, AlgorithmType.GRADIENT_BASED, unbounded=True),
     AlgoSpec(OptaxScheduleFreeAdam, AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxYogi,            AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxNovoGrad,        AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxOGD,             AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxOAdam,           AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxSignSGD,         AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxSignum,          AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxSM3,             AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OptaxLBFGS,           AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxYogi, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxNovoGrad, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxOGD, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxOAdam, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxSignSGD, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxSignum, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxSM3, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OptaxLBFGS, AlgorithmType.GRADIENT_BASED, unbounded=True),
     # -- native-JAX custom / hybrid batch -------------------------------------
-    AlgoSpec(SGLDJAX,                 AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(ASAMJAX,                 AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(AdamToLBFGSJAX,          AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(EntropySGDJAX,           AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(SGHMCJAX,                AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(SGLDJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(ASAMJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(AdamToLBFGSJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(EntropySGDJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(SGHMCJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
     AlgoSpec(
-        ARCJAX, AlgorithmType.GRADIENT_BASED, unbounded=True,
+        ARCJAX,
+        AlgorithmType.GRADIENT_BASED,
+        unbounded=True,
         skip="ARCJAX is intentionally not implemented; covered in test_custom_jax_batch.py",
     ),
-    AlgoSpec(OGDJAX,                  AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(OAdamJAX,                AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(PerturbedGDJAX,          AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(NoisyAdamJAX,            AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(GDRestartsJAX,           AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(GaussianSmoothingGDJAX,  AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OGDJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(OAdamJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(PerturbedGDJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(NoisyAdamJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(GDRestartsJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(GaussianSmoothingGDJAX, AlgorithmType.GRADIENT_BASED, unbounded=True),
     # -- scipy: unbounded (sigmoid-mapped) ------------------------------------
-    AlgoSpec(BFGS,         AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(NonlinearCG,  AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(NewtonCG,     AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(TrustNCG,     AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(TrustKrylov,  AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(Dogleg,       AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(BFGS, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(NonlinearCG, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(NewtonCG, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(TrustNCG, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(TrustKrylov, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(Dogleg, AlgorithmType.GRADIENT_BASED, unbounded=True),
     # -- scipy: native bounds -------------------------------------------------
-    AlgoSpec(LBFGSB,       AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(TrustConstr,  AlgorithmType.GRADIENT_BASED, unbounded=False),
-    AlgoSpec(TNC,          AlgorithmType.GRADIENT_BASED, unbounded=True),
-    AlgoSpec(SLSQP,        AlgorithmType.GRADIENT_BASED, unbounded=False),
-    AlgoSpec(COBYQA,       AlgorithmType.GRADIENT_BASED, unbounded=False),
-    AlgoSpec(COBYLA,       AlgorithmType.GRADIENT_BASED, unbounded=False),
-    AlgoSpec(SR1,          AlgorithmType.GRADIENT_BASED, unbounded=False),
+    AlgoSpec(LBFGSB, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(TrustConstr, AlgorithmType.GRADIENT_BASED, unbounded=False),
+    AlgoSpec(TNC, AlgorithmType.GRADIENT_BASED, unbounded=True),
+    AlgoSpec(SLSQP, AlgorithmType.GRADIENT_BASED, unbounded=False),
+    AlgoSpec(COBYQA, AlgorithmType.GRADIENT_BASED, unbounded=False),
+    AlgoSpec(COBYLA, AlgorithmType.GRADIENT_BASED, unbounded=False),
+    AlgoSpec(SR1, AlgorithmType.GRADIENT_BASED, unbounded=False),
     # -- evolutionary ---------------------------------------------------------
-    AlgoSpec(RandomSearch, AlgorithmType.EVOLUTIONARY, unbounded=False),
     AlgoSpec(
-        EvoxES, AlgorithmType.EVOLUTIONARY, unbounded=False,
+        EvoxES,
+        AlgorithmType.EVOLUTIONARY,
+        unbounded=False,
         xfail="EvoxES default variant (CMA-ES) hits a torch.compile / dynamo "
-              "aliasing bug inside evox on torch >= 2.6. Tracked upstream; "
-              "other EvoxES variants are exercised in their own tests.",
+        "aliasing bug inside evox on torch >= 2.6. Tracked upstream; "
+        "other EvoxES variants are exercised in their own tests.",
     ),
-    AlgoSpec(EvoxPSO,      AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(EvoxPSO, AlgorithmType.EVOLUTIONARY, unbounded=False),
     AlgoSpec(NevergradOnePlusOne, AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(NevergradTBPSA,      AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(NevergradNGOpt,      AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(OmadsMADS,      AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(OmadsOrthoMADS, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(NevergradTBPSA, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(NevergradNGOpt, AlgorithmType.EVOLUTIONARY, unbounded=False),
     # -- CMA family -----------------------------------------------------------
-    AlgoSpec(PyCMACMAES,       AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(PyCMACMAES, AlgorithmType.EVOLUTIONARY, unbounded=False),
     AlgoSpec(PyCMAActiveCMAES, AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(PyCMAIPOP,        AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(PyCMABIPOP,       AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(CMAESSepCMA,      AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(EvosaxMAES,       AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(EvosaxLMMAES,     AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(JAXOnePlusOneES,  AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(JAXMuLambdaES,    AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(PyCMAIPOP, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(PyCMABIPOP, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(CMAESSepCMA, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(EvosaxMAES, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(EvosaxLMMAES, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(JAXOnePlusOneES, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(JAXMuLambdaES, AlgorithmType.EVOLUTIONARY, unbounded=False),
     # -- derivative-free / Powell DFO ----------------------------------------
-    AlgoSpec(PDFOUOBYQA,   AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(PDFONEWUOA,   AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(PDFOLINCOA,   AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(PyBOBYQA,     AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(OmadsMADS, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(OmadsOrthoMADS, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(PDFOUOBYQA, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(PDFONEWUOA, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(PDFOLINCOA, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(PyBOBYQA, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
     # -- derivative-free / SciPy classics ------------------------------------
-    AlgoSpec(NelderMead,    AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(Powell,        AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(NelderMead, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
+    AlgoSpec(Powell, AlgorithmType.DERIVATIVE_FREE, unbounded=False),
     # -- global search (SciPy) -----------------------------------------------
-    AlgoSpec(BasinHopping,  AlgorithmType.EVOLUTIONARY, unbounded=False),
-    AlgoSpec(DualAnnealing, AlgorithmType.EVOLUTIONARY, unbounded=False),
+    AlgoSpec(BasinHopping, AlgorithmType.GLOBAL_SEARCH, unbounded=False),
+    AlgoSpec(DualAnnealing, AlgorithmType.GLOBAL_SEARCH, unbounded=False),
+    AlgoSpec(RandomSearch, AlgorithmType.GLOBAL_SEARCH, unbounded=False),
     # -- surrogate-based ------------------------------------------------------
-    AlgoSpec(BotorchBO,    AlgorithmType.SURROGATE_BASED, unbounded=False,
-             extra_kwargs=_botorch_kwargs),
-    AlgoSpec(BotorchTuRBO, AlgorithmType.SURROGATE_BASED, unbounded=False,
-             extra_kwargs=_botorch_kwargs),
-    AlgoSpec(BotorchqNEI,  AlgorithmType.SURROGATE_BASED, unbounded=False,
-             extra_kwargs=_botorch_kwargs),
-    AlgoSpec(BotorchqKG,   AlgorithmType.SURROGATE_BASED, unbounded=False,
-             extra_kwargs=lambda m: {**_botorch_kwargs(m), "num_fantasies": 4}),
-    AlgoSpec(REMBO,        AlgorithmType.SURROGATE_BASED, unbounded=False,
-             extra_kwargs=lambda m: {**_botorch_kwargs(m), "d_embedding": 2}),
-    AlgoSpec(GEBO,         AlgorithmType.SURROGATE_BASED, unbounded=False,
-             extra_kwargs=_botorch_kwargs),
-    AlgoSpec(LineBO,       AlgorithmType.SURROGATE_BASED, unbounded=False,
-             extra_kwargs=lambda m: {**_botorch_kwargs(m), "line_samples": 5}),
-    AlgoSpec(BAxUS,        AlgorithmType.SURROGATE_BASED, unbounded=False,
-             extra_kwargs=lambda m: {**_botorch_kwargs(m), "d_init": 2}),
-    AlgoSpec(TuRBOLBFGS,   AlgorithmType.SURROGATE_BASED, unbounded=False,
-             extra_kwargs=lambda m: {"turbo_iterations": 2, "n_initial": 5,
-                                     "lbfgs_patience": 5}),
-    AlgoSpec(ReSTIR,       AlgorithmType.SURROGATE_BASED, unbounded=False),
+    AlgoSpec(
+        BotorchBO,
+        AlgorithmType.SURROGATE_BASED,
+        unbounded=False,
+        extra_kwargs=_botorch_kwargs,
+    ),
+    AlgoSpec(
+        BotorchTuRBO,
+        AlgorithmType.SURROGATE_BASED,
+        unbounded=False,
+        extra_kwargs=_botorch_kwargs,
+    ),
+    AlgoSpec(
+        BotorchQNEI,
+        AlgorithmType.SURROGATE_BASED,
+        unbounded=False,
+        extra_kwargs=_botorch_kwargs,
+    ),
+    AlgoSpec(
+        BotorchqKG,
+        AlgorithmType.SURROGATE_BASED,
+        unbounded=False,
+        extra_kwargs=lambda m: {**_botorch_kwargs(m), "num_fantasies": 4},
+    ),
+    AlgoSpec(
+        REMBO,
+        AlgorithmType.SURROGATE_BASED,
+        unbounded=False,
+        extra_kwargs=lambda m: {**_botorch_kwargs(m), "d_embedding": 2},
+    ),
+    AlgoSpec(
+        GEBO,
+        AlgorithmType.SURROGATE_BASED,
+        unbounded=False,
+        extra_kwargs=_botorch_kwargs,
+    ),
+    AlgoSpec(
+        LineBO,
+        AlgorithmType.SURROGATE_BASED,
+        unbounded=False,
+        extra_kwargs=lambda m: {**_botorch_kwargs(m), "line_samples": 5},
+    ),
+    AlgoSpec(
+        BAxUS,
+        AlgorithmType.SURROGATE_BASED,
+        unbounded=False,
+        extra_kwargs=lambda m: {**_botorch_kwargs(m), "d_init": 2},
+    ),
+    AlgoSpec(
+        TuRBOLBFGS,
+        AlgorithmType.SURROGATE_BASED,
+        unbounded=False,
+        extra_kwargs=lambda m: {
+            "turbo_iterations": 2,
+            "n_initial": 5,
+            "lbfgs_patience": 5,
+        },
+    ),
+    AlgoSpec(ReSTIR, AlgorithmType.SURROGATE_BASED, unbounded=False),
     # -- generative -----------------------------------------------------------
-    AlgoSpec(VAESampling,  AlgorithmType.GENERATIVE, unbounded=True),
+    AlgoSpec(VAESampling, AlgorithmType.GENERATIVE, unbounded=True),
 ]
 
 
@@ -310,9 +354,15 @@ REGISTRY: list[AlgoSpec] = [
 # Population-based and async-compiled methods are excluded; their
 # reproducibility is checked in their own focused tests where applicable.
 DETERMINISTIC_ALGORITHMS = {
-    AdamGD, NAAdamGD, LBFGSGD,
-    OptaxAdam, OptaxSGD, OptaxLBFGS,
-    BFGS, LBFGSB, NewtonCG,
+    AdamGD,
+    NAAdamGD,
+    LBFGSGD,
+    OptaxAdam,
+    OptaxSGD,
+    OptaxLBFGS,
+    BFGS,
+    LBFGSB,
+    NewtonCG,
     RandomSearch,
 }
 
@@ -341,16 +391,27 @@ def _apply_marks(spec: AlgoSpec, *, run_required: bool = True) -> pytest.param:
 
 ALL_PARAMS = [_apply_marks(s) for s in REGISTRY]
 ALL_PARAMS_STATIC = [_apply_marks(s, run_required=False) for s in REGISTRY]
-GRADIENT_PARAMS = [_apply_marks(s) for s in REGISTRY
-                   if s.family == AlgorithmType.GRADIENT_BASED]
-EVOLUTIONARY_PARAMS = [_apply_marks(s) for s in REGISTRY
-                       if s.family == AlgorithmType.EVOLUTIONARY]
-SURROGATE_PARAMS = [_apply_marks(s) for s in REGISTRY
-                    if s.family == AlgorithmType.SURROGATE_BASED]
-GENERATIVE_PARAMS = [_apply_marks(s) for s in REGISTRY
-                     if s.family == AlgorithmType.GENERATIVE]
-DETERMINISTIC_PARAMS = [_apply_marks(s) for s in REGISTRY
-                        if s.cls in DETERMINISTIC_ALGORITHMS]
+GRADIENT_PARAMS = [
+    _apply_marks(s) for s in REGISTRY if s.family == AlgorithmType.GRADIENT_BASED
+]
+EVOLUTIONARY_PARAMS = [
+    _apply_marks(s) for s in REGISTRY if s.family == AlgorithmType.EVOLUTIONARY
+]
+DERIVATIVE_FREE_PARAMS = [
+    _apply_marks(s) for s in REGISTRY if s.family == AlgorithmType.DERIVATIVE_FREE
+]
+GLOBAL_SEARCH_PARAMS = [
+    _apply_marks(s) for s in REGISTRY if s.family == AlgorithmType.GLOBAL_SEARCH
+]
+SURROGATE_PARAMS = [
+    _apply_marks(s) for s in REGISTRY if s.family == AlgorithmType.SURROGATE_BASED
+]
+GENERATIVE_PARAMS = [
+    _apply_marks(s) for s in REGISTRY if s.family == AlgorithmType.GENERATIVE
+]
+DETERMINISTIC_PARAMS = [
+    _apply_marks(s) for s in REGISTRY if s.cls in DETERMINISTIC_ALGORITHMS
+]
 
 
 # Budget used throughout. Small enough to keep the test run CPU-friendly.
@@ -358,8 +419,9 @@ DEFAULT_MAX_EVALS = 30
 DEFAULT_MAX_TIME = 60.0
 
 
-def _run(spec: AlgoSpec, mock_problem, *, max_evals: int = DEFAULT_MAX_EVALS,
-         seed: int = 42) -> Objective:
+def _run(
+    spec: AlgoSpec, mock_problem, *, max_evals: int = DEFAULT_MAX_EVALS, seed: int = 42
+) -> Objective:
     """Run ``optimize`` and return the resulting Objective.
 
     Shared by all test methods so that budget, seed, and problem are
@@ -472,7 +534,7 @@ class TestBoundsContract:
     )
     def test_native_bounded_raw_params_inside_box(self, spec: AlgoSpec, mock_problem):
         """For native-bounded algorithms, the raw ``best_params`` must also
-        lie inside the box — there is no sigmoid postprocessing to fall back on.
+        lie inside the box; there is no sigmoid postprocessing to fall back on.
         """
         obj = _run(spec, mock_problem)
         bp = np.asarray(obj.best_params)

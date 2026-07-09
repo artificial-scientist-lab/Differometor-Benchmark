@@ -11,16 +11,13 @@ Optimizer for Language Model Pre-training", 2023.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
-import optax
-from jaxtyping import Array, Float
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
     build_optimizer,
+    optax,
 )
-from dfbench.core.algorithm import AlgorithmType
 from dfbench.core.objective import Objective
 
 
@@ -57,7 +54,7 @@ def sophia(
         b1: Decay rate for the first moment.
         b2: Decay rate for the Hessian diagonal EMA.
         eps: Small constant for numerical stability.
-        gamma: Clipping threshold — updates are clipped to [-1/gamma, 1/gamma].
+        gamma: Clipping threshold. Updates are clipped to [-1/gamma, 1/gamma].
         weight_decay: Decoupled weight decay coefficient.
     """
 
@@ -120,7 +117,7 @@ class OptaxSophia(OptaxAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params=None,
         random_seed=None,
         patience=None,
@@ -128,9 +125,9 @@ class OptaxSophia(OptaxAlgorithm):
         grad_clip_norm=1.0,
         **kwargs,
     ) -> None:
-        """Sophia loop — defaults to learning_rate=1e-3."""
+        """Sophia loop: defaults to learning_rate=1e-3."""
         super().optimize(
-            problem_objective,
+            objective,
             init_params=init_params,
             random_seed=random_seed,
             patience=patience,

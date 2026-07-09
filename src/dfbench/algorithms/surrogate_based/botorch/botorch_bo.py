@@ -1,7 +1,13 @@
 """State-of-the-art Bayesian Optimization using BoTorch with batch acquisition."""
 
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from botorch.acquisition import qLogExpectedImprovement as qLogEI
 from botorch.utils.transforms import normalize
 from jaxtyping import Array, Float
@@ -29,49 +35,52 @@ class BotorchBO(OptimizationAlgorithm):
         dtype (torch.dtype): PyTorch dtype for tensors (float64 for numerical stability).
 
     Note:
-        This algorithm searches in the bounded parameter space using `problem.objective_function`.
-        Bounds are always taken from `problem.bounds`.
+        This algorithm searches in the bounded parameter space using the objective function.
+        Bounds are always taken from `obj.bounds`.
 
     Example:
         >>> problem = VoyagerProblem()
-        >>> optimizer = BotorchBO()
+        >>> optimizer = BotorchBO(batch_size=5)
         >>> objective = optimizer.optimize(
-        ...     problem_objective=objective,
+        ...     objective=objective,
         ...     max_iterations=100,
         ...     n_initial=10,
-        ...     batch_size=5,
+        ...     acquisition_batch_size=5,
         ... )
     """
 
     algorithm_str: str = "botorch_bo"
     algorithm_type: AlgorithmType = AlgorithmType.SURROGATE_BASED
 
-    def __init__(self) -> None:
+    def __init__(self, batch_size: int = 1) -> None:
         """Initialize BoTorch Bayesian Optimization.
 
-        No configuration parameters needed - all settings are provided
-        at optimization time via the optimize() method.
+        Args:
+            batch_size: Number of candidates evaluated per ``vmap_value`` call.
         """
+        if batch_size < 1:
+            raise ValueError("batch_size must be at least 1.")
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.dtype = torch.float64
-
+        self.batch_size = batch_size
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "n_params"] | None = None,
         num_restarts: int = 20,
         raw_samples: int | None = None,
         random_seed: int | None = None,
         n_initial: int = 10,
-        batch_size: int = 1,
+        acquisition_batch_size: int = 1,
         **bo_kwargs,
     ) -> None:
         """Run Bayesian Optimization with batch acquisition.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             max_iterations: Optional cap on BO iterations (excluding initial samples).
                 When ``None`` the algorithm runs until ``obj.budget_exceeded``.
             init_params: Initial parameters to include in the training set.
@@ -79,18 +88,21 @@ class BotorchBO(OptimizationAlgorithm):
             random_seed: Random seed for reproducibility. Defaults to None.
             n_initial: Number of initial Sobol samples before fitting GP.
                 Defaults to 10.
-            batch_size: Number of points to acquire per iteration. Defaults to 1.
+            acquisition_batch_size: Number of points to acquire per iteration.
+                Defaults to 1.
             **bo_kwargs: Additional keyword arguments for acquisition optimization.
         """
-        obj = problem_objective
-        problem = obj.problem
+        if acquisition_batch_size < 1:
+            raise ValueError("acquisition_batch_size must be at least 1.")
+
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
         # Get bounds from problem
-        lb_np = np.asarray(problem.bounds[0])
-        ub_np = np.asarray(problem.bounds[1])
+        lb_np = np.asarray(obj.bounds[0])
+        ub_np = np.asarray(obj.bounds[1])
 
         problem_bounds_torch = torch.tensor(
             np.array([lb_np, ub_np]), device=self.device, dtype=self.dtype
@@ -98,20 +110,20 @@ class BotorchBO(OptimizationAlgorithm):
 
         unit_bounds = torch.stack(
             [
-                torch.zeros(problem.n_params, dtype=self.dtype, device=self.device),
-                torch.ones(problem.n_params, dtype=self.dtype, device=self.device),
+                torch.zeros(obj.n_params, dtype=self.dtype, device=self.device),
+                torch.ones(obj.n_params, dtype=self.dtype, device=self.device),
             ],
             dim=0,
         )
 
         # Warmup JIT (vmap_value is used for batch evaluation in _evaluate_y)
-        obj.warmup_vmap_value(batch_size=batch_size)
+        obj.warmup_vmap_value(batch_size=self.batch_size)
 
         obj.start_logging()
 
         # Create initial design
         train_X = create_initial_design(
-            dimensions=problem.n_params,
+            dimensions=obj.n_params,
             n_initial=n_initial,
             random_seed=random_seed,
             sampler="sobol",
@@ -131,7 +143,8 @@ class BotorchBO(OptimizationAlgorithm):
         train_Y_raw, valid_mask = evaluate_y(
             X=train_X,
             bounds=problem_bounds_torch,
-            obj=obj
+            obj=obj,
+            batch_size=self.batch_size,
         )
         train_Y_raw = train_Y_raw.unsqueeze(-1)
 
@@ -178,7 +191,7 @@ class BotorchBO(OptimizationAlgorithm):
             candidates, _ = optimize_acqfn(
                 acquisition_function=acqf,
                 bounds=unit_bounds,
-                q=batch_size,
+                q=acquisition_batch_size,
                 num_restarts=num_restarts,
                 raw_samples=raw_samples,
                 seed=random_seed,
@@ -187,7 +200,10 @@ class BotorchBO(OptimizationAlgorithm):
 
             # Evaluate candidates
             new_Y_raw, valid_mask_batch = evaluate_y(
-                candidates, problem_bounds_torch, obj
+                candidates,
+                problem_bounds_torch,
+                obj,
+                batch_size=self.batch_size,
             )
             new_Y_raw = new_Y_raw.unsqueeze(-1)
 

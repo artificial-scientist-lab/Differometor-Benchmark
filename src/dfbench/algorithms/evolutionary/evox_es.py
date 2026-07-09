@@ -1,28 +1,33 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-import torch
 from typing import Literal, get_args
-from evox.algorithms import (
-    OpenES,
-    XNES,
-    SeparableNES,
-    DES,
-    SNES,
-    ARS,
-    ASEBO,
-    PersistentES,
-    NoiseReuseES,
-    GuidedES,
-    ESMC,
-    CMAES,
-)
-from evox.core import Problem as EvoxProblem
-from evox.workflows import EvalMonitor, StdWorkflow
+
+try:
+    import torch
+    from evox.algorithms import (
+        OpenES,
+        XNES,
+        SeparableNES,
+        DES,
+        SNES,
+        ARS,
+        ASEBO,
+        PersistentES,
+        NoiseReuseES,
+        GuidedES,
+        ESMC,
+        CMAES,
+    )
+    from evox.core import Problem as EvoxProblem
+    from evox.workflows import EvalMonitor, StdWorkflow
+except ImportError as exc:
+    raise ImportError(
+        "evox and torch are required for EvoxES. Install with:  uv add 'dfbench[evolution]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench import (
-    ContinuousProblem,
     OptimizationAlgorithm,
     AlgorithmType,
     j2t,
@@ -63,7 +68,7 @@ class EvoxES(OptimizationAlgorithm):
         _variant (str): ES variant name (e.g., "CMAES", "OpenES").
 
     Note:
-        This algorithm uses `problem.objective_function` with the problem's bounds.
+        This algorithm uses the objective function with the problem's bounds.
         The population searches directly in the bounded parameter space.
 
     Example:
@@ -71,7 +76,7 @@ class EvoxES(OptimizationAlgorithm):
         >>> obj = Objective(problem, ...)
         >>> optimizer = EvoxES(batch_size=50, variant="CMAES")
         >>> result = optimizer.optimize(
-        ...     problem_objective=obj,
+        ...     objective=obj,
         ...     max_iterations=1000,
         ...     pop_size=100,
         ... )
@@ -120,7 +125,7 @@ class EvoxES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params_pop: Float[Array, "pop_size n_params"] | None = None,
         random_seed: int | None = None,
@@ -131,7 +136,7 @@ class EvoxES(OptimizationAlgorithm):
         """Run ES optimization.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             max_iterations: Maximum number of iterations (generations). None for unlimited.
             init_params_pop: Initial population of parameters. Not supported by most
                 ES variants (mean is typically initialized instead). Defaults to None.
@@ -140,18 +145,12 @@ class EvoxES(OptimizationAlgorithm):
             n_generations: Number of generations to run. Defaults to 10000.
             **es_kwargs: Variant-specific keyword arguments passed to the EvoX algorithm.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        # Get bounds from problem
-        if not hasattr(problem, "bounds"):
-            raise ValueError(
-                f"Problem {type(problem).__name__} must have a 'bounds' attribute."
-            )
-        problem_bounds = problem.bounds
+        problem_bounds = obj.bounds
         lb_np = np.asarray(problem_bounds[0])
         ub_np = np.asarray(problem_bounds[1])
 
@@ -205,7 +204,7 @@ class EvoxES(OptimizationAlgorithm):
 
         def get_center_init():
             return torch.from_numpy(
-                np.random.uniform(lb_np, ub_np, size=problem.n_params)
+                np.random.uniform(lb_np, ub_np, size=obj.n_params)
             ).float()
 
         # Initialize based on variant-specific requirements
@@ -236,7 +235,7 @@ class EvoxES(OptimizationAlgorithm):
             if "init_mean" not in es_kwargs:
                 es_kwargs["init_mean"] = get_center_init()
             if "init_covar" not in es_kwargs:
-                es_kwargs["init_covar"] = torch.eye(problem.n_params).float() * (
+                es_kwargs["init_covar"] = torch.eye(obj.n_params).float() * (
                     default_sigma**2
                 )
             algorithm = AlgorithmClass(pop_size=pop_size, **es_kwargs)
@@ -245,9 +244,7 @@ class EvoxES(OptimizationAlgorithm):
             if "init_mean" not in es_kwargs:
                 es_kwargs["init_mean"] = get_center_init()
             if "init_std" not in es_kwargs:
-                es_kwargs["init_std"] = (
-                    torch.ones(problem.n_params).float() * default_sigma
-                )
+                es_kwargs["init_std"] = torch.ones(obj.n_params).float() * default_sigma
             algorithm = AlgorithmClass(pop_size=pop_size, **es_kwargs)
 
         elif self._variant == "DES":

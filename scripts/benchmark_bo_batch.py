@@ -22,7 +22,7 @@ from dfbench.problems import VoyagerProblem
 from dfbench.benchmark import Benchmark, AlgorithmConfig
 
 # ── Always-available BoTorch algorithms ──────────────────────────────
-from dfbench.algorithms.surrogate_based.botorch.botorch_qnei import BotorchqNEI
+from dfbench.algorithms.surrogate_based.botorch.botorch_qnei import BotorchQNEI
 from dfbench.algorithms.surrogate_based.botorch.botorch_qkg import BotorchqKG
 from dfbench.algorithms.surrogate_based.botorch.botorch_rembo import REMBO
 from dfbench.algorithms.surrogate_based.botorch.botorch_gebo import GEBO
@@ -39,13 +39,18 @@ def build_configs(*, quick: bool = False):
 
     configs = [
         AlgorithmConfig(
-            BotorchqNEI(),
+            BotorchQNEI(),
             {"n_initial": n_init, "batch_size": 1, "max_iterations": bo_iters},
             name="qNEI",
         ),
         AlgorithmConfig(
             BotorchqKG(),
-            {"n_initial": n_init, "batch_size": 1, "max_iterations": bo_iters, "num_fantasies": 8},
+            {
+                "n_initial": n_init,
+                "batch_size": 1,
+                "max_iterations": bo_iters,
+                "num_fantasies": 8,
+            },
             name="qKG",
         ),
         AlgorithmConfig(
@@ -70,8 +75,12 @@ def build_configs(*, quick: bool = False):
         ),
         AlgorithmConfig(
             TuRBOLBFGS(),
-            {"turbo_iterations": turbo_iters, "n_initial": n_init, "lbfgs_patience": 200},
-            name="TuRBO→L-BFGS",
+            {
+                "turbo_iterations": turbo_iters,
+                "n_initial": n_init,
+                "lbfgs_patience": 200,
+            },
+            name="TuRBO->L-BFGS",
         ),
     ]
 
@@ -121,7 +130,9 @@ def build_configs(*, quick: bool = False):
 
 def main():
     parser = argparse.ArgumentParser(description="BO batch benchmark")
-    parser.add_argument("--quick", action="store_true", help="Tiny budget for local smoke test")
+    parser.add_argument(
+        "--quick", action="store_true", help="Tiny budget for local smoke test"
+    )
     args = parser.parse_args()
 
     problem = VoyagerProblem()

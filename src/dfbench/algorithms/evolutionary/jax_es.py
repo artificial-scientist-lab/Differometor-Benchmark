@@ -2,8 +2,8 @@
 
 Provides:
 
-* :class:`JAXOnePlusOneES`  – (1+1)-ES with the one-fifth success rule.
-* :class:`JAXMuLambdaES`   – (μ,λ)-ES with truncation selection and
+* :class:`JAXOnePlusOneES`  : (1+1)-ES with the one-fifth success rule.
+* :class:`JAXMuLambdaES`   : (μ,λ)-ES with truncation selection and
   cumulative step-size accumulation.
 
 Both algorithms are implemented from scratch in pure JAX/NumPy and have **no
@@ -25,7 +25,7 @@ Algorithm notes
     to form the new mean.  Step size is adapted via a cumulative success-rate
     estimate.
 
-Both algorithms use **no covariance adaptation** — they are classical ES, not
+Both algorithms use **no covariance adaptation**; they are classical ES, not
 CMA.  For covariance-adapting variants see ``pycma_cmaes.py`` or
 ``evosax_es.py``.
 
@@ -41,7 +41,6 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 from collections import deque
 from jaxtyping import Array, Float
 
@@ -60,11 +59,11 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
     A classic single-parent, single-offspring ES.  At each step:
 
     1. Sample offspring ``y = clip(x + σ·z,  lb, ub)``  where ``z ~ N(0, I)``.
-    2. Evaluate ``f(y)``; if ``f(y) ≤ f(x)`` accept: ``x ← y``.
+    2. Evaluate ``f(y)``; if ``f(y) ≤ f(x)`` accept: ``x <- y``.
     3. Every ``success_window`` steps, adapt σ::
 
-           if p_success > 0.20:  σ ← σ · exp(1/n)
-           if p_success < 0.20:  σ ← σ · exp(-1/(5n))
+           if p_success > 0.20:  σ <- σ · exp(1/n)
+           if p_success < 0.20:  σ <- σ · exp(-1/(5n))
 
     The initial σ defaults to ``0.3 × mean(ub − lb)``.
 
@@ -100,7 +99,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -111,7 +110,7 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
         """Run (1+1)-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Starting point.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
@@ -126,14 +125,13 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
             max_iterations: Maximum number of offspring evaluations.  ``None``
                 means unlimited (budget governs stopping).
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb = jnp.asarray(problem.bounds[0])
-        ub = jnp.asarray(problem.bounds[1])
-        n = problem.n_params
+        lb = jnp.asarray(obj.bounds[0])
+        ub = jnp.asarray(obj.bounds[1])
+        n = obj.n_params
 
         if init_params is None:
             rng, init_rng = jax.random.split(rng)
@@ -149,8 +147,8 @@ class JAXOnePlusOneES(OptimizationAlgorithm):
         sigma = float(sigma0 if sigma0 is not None else 0.3)
         window = success_window if success_window is not None else max(10, 10 * n)
 
-        # JIT warmup — single-point evaluation
-        _ = obj.value(x)
+        # JIT warmup: single-point evaluation
+        obj.warmup_value()
         obj.start_logging()
 
         # Evaluate starting point
@@ -200,16 +198,16 @@ class JAXMuLambdaES(OptimizationAlgorithm):
 
     1.  λ offspring: ``y_i = clip(mean + σ·z_i,  lb, ub)``  for ``z_i ~ N(0, I)``.
     2.  Evaluate all offspring via ``obj.vmap_value``.
-    3.  Select the best μ by fitness (truncation, **comma** semantics — parents
+    3.  Select the best μ by fitness (truncation, **comma** semantics; parents
         are *not* retained).
-    4.  New mean ``← weighted average of the μ best offspring``
+    4.  New mean ``<- weighted average of the μ best offspring``
         (uniform weights by default).
     5.  Step size σ adapted via a cumulative success-rate estimate based on
         generational improvement::
 
-            improved ← 1 if mean_loss(selected_μ) < prev_mean_loss else 0
-            p_succ   ← (1 − cₛ) · p_succ + cₛ · improved
-            σ        ← σ · exp((p_succ − target_succ) / d_σ)
+            improved <- 1 if mean_loss(selected_μ) < prev_mean_loss else 0
+            p_succ   <- (1 − cₛ) · p_succ + cₛ · improved
+            σ        <- σ · exp((p_succ − target_succ) / d_σ)
 
         where ``target_succ = μ / λ`` and ``cₛ = 1/n``, ``d_σ = 1``.
 
@@ -246,7 +244,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "n_params"] | None = None,
         random_seed: int | None = None,
         sigma0: float | None = None,
@@ -258,7 +256,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
         """Run (μ,λ)-ES.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Initial mean.  Sampled uniformly in bounds when
                 ``None``.
             random_seed: Seed for reproducibility.
@@ -277,18 +275,15 @@ class JAXMuLambdaES(OptimizationAlgorithm):
             ValueError: If ``mu >= lam``.
         """
         if mu >= lam:
-            raise ValueError(
-                f"(μ,λ)-ES requires mu < lam, got mu={mu}, lam={lam}."
-            )
+            raise ValueError(f"(μ,λ)-ES requires mu < lam, got mu={mu}, lam={lam}.")
 
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, rng = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
-        lb = jnp.asarray(problem.bounds[0])
-        ub = jnp.asarray(problem.bounds[1])
-        n = problem.n_params
+        lb = jnp.asarray(obj.bounds[0])
+        ub = jnp.asarray(obj.bounds[1])
+        n = obj.n_params
 
         if init_params is None:
             rng, init_rng = jax.random.split(rng)
@@ -304,17 +299,15 @@ class JAXMuLambdaES(OptimizationAlgorithm):
         sigma = float(sigma0 if sigma0 is not None else 0.3)
 
         # Step-size adaptation parameters
-        target_succ = mu / lam       # expected success fraction
-        c_s = 1.0 / max(n, 1)      # smoothing coefficient
-        d_sigma = 1.0               # damping
-        p_succ = target_succ        # initialise cumulative success rate
+        target_succ = mu / lam  # expected success fraction
+        c_s = 1.0 / max(n, 1)  # smoothing coefficient
+        d_sigma = 1.0  # damping
+        p_succ = target_succ  # initialise cumulative success rate
         prev_mean_loss = float("inf")  # track improvement for adaptation
 
-        # JIT warmup with batch_size — use midpoint (not zeros) so the
-        # warmup call lands within bounds for every parameter.
+        # JIT warmup with the same effective batch size used in-loop.
         batch_size = self._batch_size
-        midpoint = 0.5 * (lb + ub)
-        _ = obj.vmap_value(jnp.tile(midpoint[None, :], (min(batch_size, lam), 1)))
+        obj.warmup_vmap_value(batch_size=min(batch_size, lam))
         obj.start_logging()
 
         iteration = 0
@@ -331,8 +324,10 @@ class JAXMuLambdaES(OptimizationAlgorithm):
             offspring = jnp.clip(mean[None, :] + sigma * scale[None, :] * noise, lb, ub)
 
             # Evaluate via vmap in chunks of batch_size
-            chunks = [obj.vmap_value(offspring[i : i + batch_size])
-                      for i in range(0, lam, batch_size)]
+            chunks = [
+                obj.vmap_value(offspring[i : i + batch_size])
+                for i in range(0, lam, batch_size)
+            ]
             losses = jnp.concatenate(chunks)  # (lam,)
 
             if obj.budget_exceeded:
@@ -345,7 +340,7 @@ class JAXMuLambdaES(OptimizationAlgorithm):
 
             # Truncation selection: keep best μ (comma semantics)
             sorted_idx = jnp.argsort(losses)[:mu]
-            selected = offspring[sorted_idx]         # (mu, n)
+            selected = offspring[sorted_idx]  # (mu, n)
 
             # Uniform recombination (intermediate recombination)
             mean = jnp.clip(jnp.mean(selected, axis=0), lb, ub)

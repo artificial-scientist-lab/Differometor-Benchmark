@@ -78,10 +78,10 @@ def random_bounded_start(
             is returned alongside the sample.
 
     Returns:
-        (x0, new_key) – x0 is a 1-D ``np.ndarray`` of shape ``(n_params,)``.
+        (x0, new_key): x0 is a 1-D ``np.ndarray`` of shape ``(n_params,)``.
     """
     key, subkey = random.split(key)
-    lower, upper = obj.problem.bounds
+    lower, upper = obj.bounds
     x0_jax = random.uniform(subkey, shape=(obj.n_params,), minval=lower, maxval=upper)
     return np.asarray(x0_jax, dtype=np.float64), key
 
@@ -92,15 +92,15 @@ def clip_to_bounds(x: np.ndarray, obj: Objective) -> np.ndarray:
     Returns:
         Clipped copy of *x*.
     """
-    lower = np.asarray(obj.problem.bounds[0], dtype=np.float64)
-    upper = np.asarray(obj.problem.bounds[1], dtype=np.float64)
+    lower = np.asarray(obj.bounds[0], dtype=np.float64)
+    upper = np.asarray(obj.bounds[1], dtype=np.float64)
     return np.clip(x, lower, upper)
 
 
 def solver_bounds_np(obj: Objective) -> tuple[np.ndarray, np.ndarray]:
     """Return ``(lower, upper)`` as plain NumPy float64 arrays."""
-    lower = np.asarray(obj.problem.bounds[0], dtype=np.float64)
-    upper = np.asarray(obj.problem.bounds[1], dtype=np.float64)
+    lower = np.asarray(obj.bounds[0], dtype=np.float64)
+    upper = np.asarray(obj.bounds[1], dtype=np.float64)
     return lower, upper
 
 
@@ -123,7 +123,7 @@ def multistart_loop(
     Args:
         obj: The Objective instance (already logging).
         key: JAX PRNG key for sampling restarts.
-        solve_fn: ``(x0: np.ndarray) -> None`` – runs one solver call.
+        solve_fn: ``(x0: np.ndarray) -> None``: runs one solver call.
         n_restarts: Total number of solver invocations.
         init_params: Optional starting point for the first restart.
     """
@@ -147,4 +147,6 @@ def multistart_loop(
                 break
             # DFO solvers may raise on degenerate geometry, singular models,
             # etc.  Log and continue with next restart.
-            print(f"[DFO restart {i+1}/{n_restarts}] solver raised {type(exc).__name__}: {exc}")
+            print(
+                f"[DFO restart {i + 1}/{n_restarts}] solver raised {type(exc).__name__}: {exc}"
+            )

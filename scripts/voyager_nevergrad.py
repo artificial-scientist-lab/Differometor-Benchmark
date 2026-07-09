@@ -20,9 +20,9 @@ configs = [
 ]
 
 for name, optimizer, extra_kwargs in configs:
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Running {name}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     obj = Objective(
         problem,
@@ -33,10 +33,10 @@ for name, optimizer, extra_kwargs in configs:
     )
 
     optimizer.optimize(
-        problem_objective=obj,
+        objective=obj,
         random_seed=SEED,
         **extra_kwargs,
     )
 
-    print(f"\n{name} — Best loss: {obj.best_loss:.6f}  |  Evals: {obj.eval_count}")
+    print(f"\n{name} | Best loss: {obj.best_loss:.6f}  |  Evals: {obj.eval_count}")
     obj.save_run_data(name, hyper_param_str="standard")

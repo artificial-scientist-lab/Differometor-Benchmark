@@ -4,37 +4,148 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dfbench"
-version = "0.1.0"
-description = "Differometor Benchmark - Optimization algorithms and problem definitions"
+version = "0.3.0"
+description = "dfbench: A Black-Box Optimization Framework for JAX-Differentiable Gravitational Wave Detector Discovery"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Artificial Scientist Lab" },
+]
+keywords = [
+    "benchmark",
+    "differentiable-simulation",
+    "gravitational-wave-detectors",
+    "jax",
+    "optimization",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = [
-    "beartype>=0.22.8",
-    "botorch>=0.16.1",
-    "differometor>=0.0.5",
-    "evox>=1.3.0",
+    "differometor==0.0.5",
     "jax==0.9.0.1",
     "jaxlib>=0.5.0",
     "jaxtyping>=0.3.3",
-    "OMADS>=2408.0",
-    "scipy>=1.15",
-    "torchaudio>=2.9.1",
-    "torchvision>=0.24.1",
-    "ruff>=0.14.8",
-    "nevergrad>=1.0.12",
-    # CMA-family optional backends
-    "cma>=3.3.0",
-    "cmaes>=0.10.0",
-    "evosax>=0.1.6",
-    "pdfo>=2.2.0",
-    "ax-platform>=1.2.4",
+    "matplotlib>=3.8",
+    "numpy>=2.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/artificial-scientist-lab/Differometor-Benchmark"
+Repository = "https://github.com/artificial-scientist-lab/Differometor-Benchmark"
+Documentation = "https://github.com/artificial-scientist-lab/Differometor-Benchmark/tree/main/docs"
+Issues = "https://github.com/artificial-scientist-lab/Differometor-Benchmark/issues"
+
 [project.optional-dependencies]
+analysis = [
+    "equinox>=0.13.2",
+    "ipykernel>=7.1.0",
+    "ipywidgets>=8.1.8",
+    "jupytext>=1.19.1",
+    "papermill>=2.7.0",
+    "snakeviz>=2.2.2",
+    "tueplots>=0.2.1",
+]
+cuda12 = [
+    "jax[cuda12]==0.9.0.1",
+]
+cuda13 = [
+    "jax[cuda13]==0.9.0.1",
+]
+dfo = [
+    "OMADS>=2408.0",
+    "pdfo>=2.2.0",
+    "Py-BOBYQA>=1.5.0",
+    "scipy>=1.15",
+]
+evolution = [
+    "cma>=3.3.0",
+    "cmaes>=0.10.0",
+    "evox>=1.3.0",
+    "evosax>=0.1.6",
+    "nevergrad>=1.0.12",
+    "torch>=2.9.1",
+]
+bo = [
+    "ax-platform>=1.2.4",
+    "botorch>=0.16.1",
+    "gpytorch>=1.14",
+    "hebo>=0.3.2",
+    "torch>=2.9.1",
+]
+optax = ["optax>=0.2.6"]
+pybobyqa = ["Py-BOBYQA>=1.5.0"]
+scipy = ["scipy>=1.15"]
 smac = ["smac>=2.4.0"]
+torch = ["torch>=2.9.1"]
+all = [
+    "ax-platform>=1.2.4",
+    "botorch>=0.16.1",
+    "cma>=3.3.0",
+    "cmaes>=0.10.0",
+    "evox>=1.3.0",
+    "evosax>=0.1.6",
+    "gpytorch>=1.14",
+    "hebo>=0.3.2",
+    "nevergrad>=1.0.12",
+    "OMADS>=2408.0",
+    "optax>=0.2.6",
+    "pdfo>=2.2.0",
+    "Py-BOBYQA>=1.5.0",
+    "scipy>=1.15",
+    "smac>=2.4.0",
+    "torch>=2.9.1",
+]
+test = [
+    "pytest==9.0.3",
+    "pytest-timeout>=2.2",
+    "pytest-cases>=3.10.1",
+    "pytest-repeat>=0",
+]
+
+[tool.hatch.build]
+exclude = [
+    "/.github",
+    "/.gitignore",
+    "/.venv",
+    "/analysis",
+    "/batch-*.sh",
+    "/data",
+    "/dev",
+    "/jobfiles_err",
+    "/jobfiles_out",
+    "/media",
+    "/notes.md",
+    "/plots",
+    "/plots-scratch",
+    "/scripts",
+    "/temp",
+    "/tmp.py",
+    "/tmp.txt",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dfbench"]
+
+[tool.hatch.build.targets.sdist]
+only-include = [
+    "docs",
+    "LICENSE",
+    "pyproject.toml",
+    "README.md",
+    "src/dfbench",
+    "tests",
+]
 
 [dependency-groups]
 cuda12 = [
@@ -52,9 +163,18 @@ analysis = [
     "snakeviz>=2.2.2",
     "tueplots>=0.2.1",
 ]
-test = [
-    "pytest>=8.0",
+dev = [
+    "ruff",
+    "pre-commit",
+    "mypy",
+    "pytest==9.0.3",
     "pytest-timeout>=2.2",
+    "pytest-cases>=3.10.1",
+    "pytest-repeat>=0",
+]
+publish = [
+    "build>=1.2",
+    "twine>=6.0",
 ]
 
 [tool.pytest.ini_options]
@@ -64,3 +184,34 @@ markers = [
     "gpu: tests that require a CUDA device; must not block CPU-only CI.",
 ]
 addopts = "-m 'not slow and not gpu' --tb=short -q"
+
+
+[tool.ruff]
+extend-exclude = ["analysis"]
+force-exclude = true
+
+[tool.ruff.lint]
+ignore = [ # Ignore safely to allow jaxtyping
+    "F722",
+    "F821",
+    "E741",
+]
+
+# Exclude a variety of commonly ignored directories.
+[tool.ruff.lint.per-file-ignores]
+"tests/*.py" = [
+    "S101",
+    "D101",
+    "D102",
+    "D103",
+    "ANN001",
+    "ANN201",
+    "FBT001",
+    "D100",
+    "PD901", #  X is a bad variable name. (pandas)
+    "TCH",
+    "N803",
+    "C901", # Too complex
+    "PT011", # Catch value error to broad
+    "ARG001", # unused param
+]

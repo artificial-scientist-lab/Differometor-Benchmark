@@ -1,15 +1,19 @@
 import jax
 import jax.numpy as jnp
-import numpy as np
-import torch
 from typing import Literal, get_args
-from evox.algorithms import PSO, CLPSO, CSO, DMSPSOEL, FSPSO, SLPSOGS, SLPSOUS
-from evox.core import Problem as EvoxProblem
-from evox.workflows import EvalMonitor, StdWorkflow
+
+try:
+    import torch
+    from evox.algorithms import PSO, CLPSO, CSO, DMSPSOEL, FSPSO, SLPSOGS, SLPSOUS
+    from evox.core import Problem as EvoxProblem
+    from evox.workflows import EvalMonitor, StdWorkflow
+except ImportError as exc:
+    raise ImportError(
+        "evox and torch are required for EvoxPSO. Install with:  uv add 'dfbench[evolution]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench import (
-    ContinuousProblem,
     OptimizationAlgorithm,
     AlgorithmType,
     j2t,
@@ -37,7 +41,7 @@ class EvoxPSO(OptimizationAlgorithm):
         _variant (str): PSO variant name (uppercase, e.g., "PSO", "CLPSO").
 
     Note:
-        This algorithm uses `problem.objective_function` with the problem's bounds.
+        This algorithm uses the objective function with the problem's bounds.
         The swarm searches directly in the bounded parameter space.
 
     Example:
@@ -45,7 +49,7 @@ class EvoxPSO(OptimizationAlgorithm):
         >>> obj = Objective(problem, ...)
         >>> optimizer = EvoxPSO(batch_size=50, variant="CLPSO")
         >>> result = optimizer.optimize(
-        ...     problem_objective=obj,
+        ...     objective=obj,
         ...     max_iterations=1000,
         ...     pop_size=200,
         ... )
@@ -89,7 +93,7 @@ class EvoxPSO(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params_pop: Float[Array, "pop_size n_params"] | None = None,
         random_seed: int | None = None,
@@ -100,7 +104,7 @@ class EvoxPSO(OptimizationAlgorithm):
         """Run PSO optimization.
 
         Args:
-            problem_objective: The Objective instance wrapping the problem.
+            objective: The Objective instance wrapping the problem.
             max_iterations: Maximum number of iterations (generations). None for unlimited.
             init_params_pop: Initial population of parameters. If None, randomly
                 initialized within bounds. Defaults to None.
@@ -109,18 +113,12 @@ class EvoxPSO(OptimizationAlgorithm):
             n_generations: Number of generations to run. Defaults to 10000.
             **pso_kwargs: Variant-specific keyword arguments passed to the EvoX algorithm.
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         random_seed, _ = self.prepare(obj, unbounded=False, random_seed=random_seed)
         torch.manual_seed(random_seed)
 
-        # Get bounds from problem
-        if not hasattr(problem, "bounds"):
-            raise ValueError(
-                f"Problem {type(problem).__name__} must have a 'bounds' attribute."
-            )
-        problem_bounds = problem.bounds
+        problem_bounds = obj.bounds
         lb = j2t(problem_bounds[0])
         ub = j2t(problem_bounds[1])
 

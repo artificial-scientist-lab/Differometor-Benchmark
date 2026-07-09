@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
-from scipy.optimize import basinhopping
+
+try:
+    from scipy.optimize import basinhopping
+except ImportError as exc:
+    raise ImportError(
+        "scipy is required for this algorithm. Install with:  uv add 'dfbench[scipy]'"
+    ) from exc
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
@@ -36,13 +41,13 @@ class BasinHopping(OptimizationAlgorithm):
 
     Attributes:
         algorithm_str: ``"basin_hopping"``
-        algorithm_type: :attr:`AlgorithmType.EVOLUTIONARY`
+        algorithm_type: :attr:`AlgorithmType.GLOBAL_SEARCH`
         local_method: SciPy minimizer name used for the local search
             (default ``"L-BFGS-B"``).
     """
 
     algorithm_str: str = "basin_hopping"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.GLOBAL_SEARCH
 
     # Local solvers that accept a jac argument
     _GRADIENT_METHODS = frozenset(
@@ -58,14 +63,14 @@ class BasinHopping(OptimizationAlgorithm):
 
         Args:
             local_method: SciPy method string for the local minimiser.
-                Gradient-aware methods (``L-BFGS-B``, ``trust-constr``, …) use
+                Gradient-aware methods (``L-BFGS-B``, ``trust-constr``, ...) use
                 ``value_and_grad``; derivative-free methods use ``value`` only.
         """
         self.local_method = local_method
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         T: float = 1.0,
@@ -74,19 +79,16 @@ class BasinHopping(OptimizationAlgorithm):
         """Run Basin-Hopping global optimisation.
 
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             init_params: Starting point. If *None*, sampled uniformly in bounds.
             random_seed: Seed for reproducibility.
             T: Temperature parameter for the Metropolis acceptance criterion.
             stepsize: Relative step size for the random perturbation (fraction
                 of the bound range per dimension).
         """
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
-        random_seed, _key = self.prepare(
-            obj, unbounded=False, random_seed=random_seed
-        )
+        random_seed, _key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         if init_params is None:
             params = obj.random_params_bounded()
@@ -98,9 +100,9 @@ class BasinHopping(OptimizationAlgorithm):
 
         # JIT warmup
         if uses_grad:
-            _ = obj.value_and_grad(params)
+            obj.warmup_value_and_grad()
         else:
-            _ = obj.value(params)
+            obj.warmup_value()
 
         obj.start_logging()
 
@@ -117,8 +119,8 @@ class BasinHopping(OptimizationAlgorithm):
             minimizer_kwargs["bounds"] = scipy_bounds(obj)
 
         # ── Bounded step-taker ────────────────────────────────────────
-        lb = np.asarray(problem.bounds[0], dtype=np.float64)
-        ub = np.asarray(problem.bounds[1], dtype=np.float64)
+        lb = np.asarray(obj.bounds[0], dtype=np.float64)
+        ub = np.asarray(obj.bounds[1], dtype=np.float64)
         take_step = BoundedStep(stepsize, lb, ub)
 
         x0 = np.asarray(params, dtype=np.float64)

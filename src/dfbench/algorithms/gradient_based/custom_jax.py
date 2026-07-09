@@ -18,11 +18,16 @@ This is explicit and intentional for gradient / quasi-gradient methods.
 
 from __future__ import annotations
 
-import math
 
 import jax
 import jax.numpy as jnp
-import optax
+
+try:
+    import optax
+except ImportError as exc:
+    raise ImportError(
+        "optax is required for this algorithm. Install with:  uv add 'dfbench[optax]'"
+    ) from exc
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -99,7 +104,7 @@ class SGLDJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.05,
@@ -109,12 +114,12 @@ class SGLDJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.05,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
 
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         step = 0
@@ -161,7 +166,7 @@ class ASAMJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
@@ -172,19 +177,18 @@ class ASAMJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.02,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
 
-        optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adam(learning_rate))
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(1.0), optax.adam(learning_rate)
+        )
         opt_state = optimizer.init(params)
 
-        # Warmup both value_and_grad paths used in-loop.
-        _ = obj.value_and_grad(params)
-        scale = jnp.abs(params) + eta
-        grad_norm = jnp.linalg.norm(scale * jnp.ones_like(params)) + 1e-12
-        _ = obj.value_and_grad(params + rho * scale / grad_norm)
+        # Warm up the Objective loss+gradient path used in-loop.
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         step = 0
@@ -236,7 +240,7 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         adam_learning_rate: float = 0.1,
@@ -246,8 +250,7 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         lbfgs_patience: int | None = None,
         **lbfgs_kwargs,
     ) -> None:
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
         _, _ = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
@@ -258,7 +261,7 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         )
         adam_state = adam_opt.init(params)
 
-        value_fn = problem.sigmoid_objective_function
+        value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
         lbfgs_opt = optax.lbfgs(**lbfgs_kwargs)
         lbfgs_state = lbfgs_opt.init(params)
@@ -277,7 +280,7 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
             new_p = optax.apply_updates(p, updates)
             return new_p, new_state, loss, grad
 
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
         warm_state = lbfgs_opt.init(params)
         _, warm_state, _, _ = _lbfgs_step(params, warm_state)
         _ = _lbfgs_step(params, warm_state)
@@ -289,8 +292,7 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         # as a floor so Stage 1 always gets a minimum amount of exploration.
         adam_steps = 0
         while not obj.budget_exceeded and (
-            obj.budget_progress_fraction < adam_fraction
-            or adam_steps < min_adam_steps
+            obj.budget_progress_fraction < adam_fraction or adam_steps < min_adam_steps
         ):
             loss, grad = obj.value_and_grad(params)
             if patience is not None and obj.evals_since_improvement > patience:
@@ -312,7 +314,10 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
                     break
                 obj.log_evaluation(prior_params, loss, grad)
 
-            if lbfgs_patience is not None and obj.evals_since_improvement > lbfgs_patience:
+            if (
+                lbfgs_patience is not None
+                and obj.evals_since_improvement > lbfgs_patience
+            ):
                 break
 
 
@@ -334,7 +339,7 @@ class EntropySGDJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.03,
@@ -346,11 +351,11 @@ class EntropySGDJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.03,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         step = 0
@@ -403,7 +408,7 @@ class SGHMCJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.01,
@@ -414,13 +419,13 @@ class SGHMCJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.05,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
         momentum = jnp.zeros_like(params)
 
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         step = 0
@@ -467,7 +472,7 @@ class ARCJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         **kwargs,
@@ -495,7 +500,7 @@ class OGDJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.05,
@@ -504,13 +509,13 @@ class OGDJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.02,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
         prev_grad = None
 
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         step = 0
@@ -557,7 +562,7 @@ class OAdamJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
@@ -567,16 +572,18 @@ class OAdamJAX(OptimizationAlgorithm):
         restart_from_best: bool = True,
         **adam_kwargs,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
         prev_grad = None
 
-        optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adam(learning_rate, **adam_kwargs))
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(1.0), optax.adam(learning_rate, **adam_kwargs)
+        )
         opt_state = optimizer.init(params)
 
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         step = 0
@@ -626,7 +633,7 @@ class PerturbedGDJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.05,
@@ -637,12 +644,12 @@ class PerturbedGDJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.02,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
 
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         step = 0
@@ -655,7 +662,9 @@ class PerturbedGDJAX(OptimizationAlgorithm):
 
             if perturb_every > 0 and step > 0 and step % perturb_every == 0:
                 rng_key, pkey = _split_once(rng_key)
-                params = params + perturb_std * jax.random.normal(pkey, shape=params.shape)
+                params = params + perturb_std * jax.random.normal(
+                    pkey, shape=params.shape
+                )
 
             step += 1
             params, rng_key, _ = _maybe_restart_params(
@@ -686,7 +695,7 @@ class NoisyAdamJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.1,
@@ -697,15 +706,17 @@ class NoisyAdamJAX(OptimizationAlgorithm):
         restart_from_best: bool = True,
         **adam_kwargs,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
 
-        optimizer = optax.chain(optax.clip_by_global_norm(1.0), optax.adam(learning_rate, **adam_kwargs))
+        optimizer = optax.chain(
+            optax.clip_by_global_norm(1.0), optax.adam(learning_rate, **adam_kwargs)
+        )
         opt_state = optimizer.init(params)
 
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         step = 0
@@ -719,7 +730,9 @@ class NoisyAdamJAX(OptimizationAlgorithm):
 
             if noise_std > 0:
                 rng_key, nkey = _split_once(rng_key)
-                params = params + noise_std * jax.random.normal(nkey, shape=params.shape)
+                params = params + noise_std * jax.random.normal(
+                    nkey, shape=params.shape
+                )
 
             step += 1
             params, rng_key, did_restart = _maybe_restart_params(
@@ -750,7 +763,7 @@ class GDRestartsJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.05,
@@ -759,12 +772,12 @@ class GDRestartsJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.03,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
 
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
         obj.start_logging()
 
         step = 0
@@ -805,7 +818,7 @@ class GaussianSmoothingGDJAX(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         learning_rate: float = 0.03,
@@ -816,20 +829,18 @@ class GaussianSmoothingGDJAX(OptimizationAlgorithm):
         restart_noise_std: float = 0.02,
         restart_from_best: bool = True,
     ) -> None:
-        obj = problem_objective
+        obj = objective
         _, rng_key = self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         params = obj.random_params_unbounded() if init_params is None else init_params
 
-        # Warmup the exact calls used in-loop.
-        _ = obj.value(params)
-        _ = obj.value(params + 1e-3)
+        # Warm up the Objective value path used in-loop.
+        obj.warmup_value()
         obj.start_logging()
 
         step = 0
         dirs = max(1, int(n_directions))
         while not obj.budget_exceeded:
-            base_loss = obj.value(params)
             if patience is not None and obj.evals_since_improvement > patience:
                 break
 

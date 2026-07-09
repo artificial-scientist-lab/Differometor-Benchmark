@@ -10,9 +10,9 @@ Every algorithm must:
 
 1. **Subclass** `OptimizationAlgorithm`
 2. **Declare** `algorithm_str` and `algorithm_type`
-3. **Implement** `optimize(problem_objective, …) → None`
+3. **Implement** `optimize(objective, ...) -> None`
 4. **Use `Objective`** for all function evaluations
-    - *Unless* you use your own JIT-compiled loop — then manually log calls via `Objective.log_evaluation(...)` afterwards. This adds negligible overhead relative to the objective function.
+    - *Unless* you use your own JIT-compiled loop, then manually log calls via `Objective.log_evaluation(...)` afterwards. This adds negligible overhead relative to the objective function.
 
 That's it. No manual timing, history management or file I/O necessary.
 
@@ -24,13 +24,16 @@ Place your algorithm in the appropriate subdirectory:
 
 ```
 src/dfbench/algorithms/
-├── evolutionary/        ← population-based (PSO, ES, random search)
+├── derivative_free/     <- direct search and non-gradient local solvers
+├── global_search/       <- stochastic global optimizers
+├── evolutionary/        <- population-based methods (PSO, ES)
 ├── gradient_based/
-│   ├── optax/           ← Optax optimizer wrappers (subclass OptaxAlgorithm)
-│   ├── scipy/           ← SciPy minimize wrappers (subclass ScipyMinimizeAlgorithm)
-│   └── misc/            ← custom optimization loops
-├── surrogate_based/     ← builds a surrogate model (BO, kNN, etc.)
-└── generative/          ← generative models (VAE, diffusion, etc.)
+│   ├── optax/           <- Optax optimizer wrappers (subclass OptaxAlgorithm)
+│   ├── scipy/           <- SciPy minimize wrappers (subclass ScipyMinimizeAlgorithm)
+│   ├── custom_jax.py    <- native-JAX custom/hybrid gradient methods
+│   └── *.py             <- custom optimization loops
+├── surrogate_based/     <- builds a surrogate model (BO, kNN, etc.)
+└── generative/          <- generative models (VAE, diffusion, etc.)
 ```
 
 For example: `src/dfbench/algorithms/evolutionary/my_algorithm.py`
@@ -54,16 +57,16 @@ from dfbench.core.objective import Objective
 
 class MyAlgorithm(OptimizationAlgorithm):
     """One-line description of your algorithm.
-    
+
     Longer description, references, etc.
     """
 
     algorithm_str: str = "my_algorithm"          # unique identifier
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY  # or GRADIENT_BASED, etc.
+    algorithm_type: AlgorithmType = AlgorithmType.GLOBAL_SEARCH  # match the algorithms/ subfolder
 
     def __init__(self, batch_size: int = 50) -> None:
         """Initialize with algorithm-level meta-parameters.
-        
+
         These are parameters intrinsic to the algorithm that don't change
         between runs (e.g. batch size, network architecture).
         """
@@ -71,7 +74,7 @@ class MyAlgorithm(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         max_iterations: int | None = None,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
@@ -81,12 +84,12 @@ class MyAlgorithm(OptimizationAlgorithm):
         **kwargs,
     ) -> None:
         """Run the optimization.
-        
+
         Args:
-            problem_objective: Pre-configured Objective instance.
+            objective: Pre-configured Objective instance.
             max_iterations: Max algorithm iterations (not evals). None = budget only.
                 For algorithms where each iteration performs exactly one evaluation
-                (e.g. gradient-based methods), omit this parameter —
+                (e.g. gradient-based methods), omit this parameter -
                 `obj.budget_exceeded` already handles it.
             init_params: Optional starting point.
             random_seed: Seed for reproducibility.
@@ -94,11 +97,14 @@ class MyAlgorithm(OptimizationAlgorithm):
             patience: Stop after N iterations without improvement.
         """
         # ─── 1. Setup references ───
-        obj = problem_objective
-        problem = obj.problem
+        obj = objective
 
         # Sets unbounded mode, algorithm_str, seeds np/JAX, returns resolved seed + JAX key
-        random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+        random_seed, key = self.prepare(
+            obj,
+            unbounded=False,
+            random_seed=random_seed,
+        )
         # torch.manual_seed(random_seed)  # add if you use PyTorch
 
         # ─── 3. Initialize parameters ───
@@ -110,7 +116,7 @@ class MyAlgorithm(OptimizationAlgorithm):
         # ─── 4. JIT warmup ───
         # This compiles the JAX computation graph. Do it BEFORE start_logging()
         # so compilation time doesn't count against the time budget.
-        _ = obj.vmap_value(params)
+        obj.warmup_vmap_value(batch_size=self.batch_size)
 
         # ─── 5. Start logging (starts the clock) ───
         obj.start_logging()
@@ -157,7 +163,7 @@ from dfbench.algorithms.evolutionary.my_algorithm import MyAlgorithm
 from dfbench.algorithms.evolutionary.my_algorithm import MyAlgorithm
 
 __all__ = [
-    …,
+    ...,
     "MyAlgorithm",
 ]
 ```
@@ -171,15 +177,24 @@ The base class `OptimizationAlgorithm.optimize()` contains a commented blueprint
 ### 1. Setup references
 
 ```python
-obj = problem_objective
-problem = obj.problem
-random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+obj = objective
+random_seed, key = self.prepare(
+    obj,
+    unbounded=False,
+    random_seed=random_seed,
+)
 ```
 
-`prepare()` sets `obj.unbounded`, `obj.algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. If `random_seed=None` is passed, a seed is generated via system entropy. You can also configure the Objective manually instead of calling `prepare()`.
+The problem instance wrapped by the `Objective` is private. Use the public
+Objective API directly: `obj.bounds` for the `(2, n_params)` bounds,
+`obj.n_params` for the dimension, `obj.problem_name` for the display name,
+`obj.value_function(unbounded=False)` for the raw bounded objective, and
+`obj.penalty_fn` / `obj.power_thresholds` for the penalty contract.
+
+`prepare()` is called as `prepare(obj, unbounded, random_seed, algorithm_str=None, **kwargs)`. It sets `obj.unbounded`, `obj.algorithm_str`, seeds `np.random` and JAX, and returns `(random_seed, key)`. If `random_seed=None` is passed, a seed is generated via system entropy. You can also configure the Objective manually instead of calling `prepare()`.
 
 **Choose `unbounded`:**
-- `False` if your algorithm naturally handles bound constraints (evolutionary, surrogate-based)
+- `False` if your algorithm naturally handles bound constraints (evolutionary, derivative-free, global-search, surrogate-based)
 - `True` if you want smooth unconstrained space where gradients never hit box boundaries (via sigmoid transform)
 
 ### 2. Set random seeds
@@ -187,7 +202,11 @@ random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 `prepare()` handles `np.random`, JAX, and the seed print. If your algorithm uses PyTorch or another framework, seed it with the returned value:
 
 ```python
-random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+random_seed, key = self.prepare(
+    obj,
+    unbounded=False,
+    random_seed=random_seed,
+)
 torch.manual_seed(random_seed)   # only needed for PyTorch-based libraries
 ```
 
@@ -212,7 +231,7 @@ obj.warmup_value_and_grad()              # when using gradients
 obj.warmup_vmap_value(batch_size=100)    # for batched methods (match your batch size)
 ```
 
-Warmup can take seconds because it triggers JAX compilation. Do this **before** `start_logging()` so the compilation time is not counted against the time budget. The `warmup_*()` helpers use deterministic params internally and run the corresponding path twice.
+Warmup can take seconds because it triggers JAX compilation. Do this **before** `start_logging()` so the compilation time is not counted against the time budget. The `warmup_*()` helpers use deterministic params internally and run the corresponding path twice. Single-point helpers take no arguments; batched helpers take the batch size used by your algorithm.
 
 ### 5. Start logging
 
@@ -234,7 +253,7 @@ while not obj.budget_exceeded:
 
 ### 7. Done
 
-`optimize()` returns `None`. The `Objective` was mutated in place — the caller (benchmark harness or user script) accesses results from the same instance it passed in. This follows the Python convention that in-place mutating methods return `None` (like `list.sort()`).
+`optimize()` returns `None`. The `Objective` was mutated in place; the caller (benchmark harness or user script) accesses results from the same instance it passed in. This follows the Python convention that in-place mutating methods return `None` (like `list.sort()`).
 
 ---
 
@@ -251,21 +270,24 @@ while not obj.budget_exceeded:
 | `obj.vmap_value_and_grad(batch)` | Batched gradient-based | batch losses, grads, params |
 | `obj.vmap_hessian(batch)` | Batched second-order optimization | batch hessians, batch params |
 | `obj.vmap_value_grad_and_hessian(batch)` | Batched second-order optimization | batch losses, grads, hessians, params |
-| `obj.log_evaluation(…)` | Custom JIT'd loop | whatever you pass, including optional Hessians |
+| `obj.value_function(...)` | Raw JAX callable for custom JIT loops | nothing; use `log_evaluation` afterwards |
+| `obj.log_evaluation(...)` | Custom JIT'd loop | whatever you pass, including optional Hessians |
 
 **Important:** `obj.grad()` and `obj.hessian()` do **not** log a loss value. If you need the loss too, use `obj.value_and_grad()` or `obj.value_grad_and_hessian()`.
 
 ### Custom JIT-compiled loops with `log_evaluation()`
 
-Some optimizers (e.g. Optax's L-BFGS) need to call `value_and_grad` *inside* a JIT-compiled function — for instance because the optimizer's line-search requires the raw value function. In that case you can't use `obj.value_and_grad()` (which has Python-side logging). Instead:
+Some optimizers (e.g. Optax's L-BFGS) need to call `value_and_grad` *inside* a JIT-compiled function, for instance because the optimizer's line-search requires the raw value function. In that case you can't use `obj.value_and_grad()` (which has Python-side logging). Instead:
 
-1. Get the raw function from `obj.problem` (e.g. `problem.sigmoid_objective_function`)
+1. Get an unlogged raw value function from `obj.value_function(...)`
 2. Build your own JIT-compiled step
 3. After each step, call `obj.log_evaluation(params, loss, grad, hessian=None)` to record the results
 
+`obj.value_function(unbounded=None)` follows the Objective's active space mode by default. Pass `unbounded=True` when the JIT loop works in unbounded coordinates and needs Objective's mapping into problem bounds; pass `unbounded=False` for bounded coordinates. The callable deliberately does not log anything.
+
 ```python
 # Get the raw function for JIT compilation
-value_fn = problem.sigmoid_objective_function
+value_fn = obj.value_function(unbounded=True)
 value_and_grad_fn = jax.value_and_grad(value_fn)
 
 @jax.jit
@@ -284,7 +306,7 @@ while not obj.budget_exceeded:
     obj.log_evaluation(prior_params, loss, grads)  # public API for manual logging
 ```
 
-> **Do NOT call** `obj._log()`, `obj._log_evals()`, or `obj._log_to_file()` directly — these are private methods. `log_evaluation()` delegates to `_log()` which coordinates all internal logging.
+> **Do NOT call** `obj._log()`, `obj._log_evals()`, or `obj._log_to_file()` directly; these are private methods. `log_evaluation()` delegates to `_log()` which coordinates all internal logging.
 
 See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/lbfgs_gd.py` for a complete working example.
 
@@ -297,13 +319,17 @@ See `LBFGSGD` in `src/dfbench/algorithms/gradient_based/lbfgs_gd.py` for a compl
 - Parameters live in `[lower, upper]` for each dimension.
 - Use `obj.value()` or `obj.vmap_value()`.
 - Algorithms must keep parameters within bounds (via clamping, constrained sampling, etc.).
-- Useful for evolutionary methods, surrogate-based methods.
+- Useful for evolutionary, derivative-free, global-search, and surrogate-based methods.
 
 Be careful!
 - Ask for a `batch_size` in the `__init__()` and try different sizes.
-- Changing the `batch_size` causes a recompile which can take a wile.
+- Changing the `batch_size` causes a recompile which can take a while.
 ```python
-random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
+random_seed, key = self.prepare(
+    obj,
+    unbounded=False,
+    random_seed=random_seed,
+)
 params = obj.random_params_bounded(n_samples=100)
 losses = obj.vmap_value(params)
 ```
@@ -315,7 +341,11 @@ losses = obj.vmap_value(params)
 - To get final results in the physical space: `obj.best_params_bounded`.
 
 ```python
-random_seed, key = self.prepare(obj, unbounded=True, random_seed=random_seed)
+random_seed, key = self.prepare(
+    obj,
+    unbounded=True,
+    random_seed=random_seed,
+)
 params = obj.random_params_unbounded()
 loss, grad = obj.value_and_grad(params)
 ```
@@ -325,7 +355,7 @@ If you need a different transform than sigmoid, configure it explicitly before l
 ```python
 import jax
 
-# Scalar function — works on floats and arrays alike
+# Scalar function: works on floats and arrays alike
 obj.set_space_mode(
     True,
     unit_mapping=jax.nn.sigmoid,
@@ -336,7 +366,7 @@ obj.set_space_mode(
 Important:
 
 - Always pass both functions together (forward and inverse)
-- The forward maps to [0, 1]; the inverse maps [0, 1] → unbounded. Bounds scaling is handled by `Objective`
+- The forward maps to [0, 1]; the inverse maps [0, 1] -> unbounded. Bounds scaling is handled by `Objective`
 - Functions can be scalar (e.g. `jax.nn.sigmoid`) or element-wise vector; both work because JAX broadcasts element-wise operations. Batching is handled by `Objective` via `jax.vmap`
 - `obj.best_params_bounded` and `obj.random_params_unbounded()` then follow your custom mapping pair
 
@@ -351,10 +381,10 @@ Many algorithms wrap external optimization libraries (EvoX, BoTorch, Optax). Her
 ```python
 from dfbench import t2j, j2t
 
-# Convert JAX → PyTorch for the library
+# Convert JAX -> PyTorch for the library
 params_torch = j2t(params_jax)
 
-# Convert PyTorch → JAX for evaluation
+# Convert PyTorch -> JAX for evaluation
 params_jax = t2j(params_torch)
 losses_jax = obj.vmap_value(params_jax)
 losses_torch = j2t(losses_jax)
@@ -364,7 +394,7 @@ The conversion goes through NumPy and adds negligible overhead relative to evalu
 
 ### JAX-based libraries (Optax)
 
-No conversion needed — Optax operates directly on JAX arrays:
+No conversion needed; Optax operates directly on JAX arrays:
 
 ```python
 import optax
@@ -383,9 +413,9 @@ params = optax.apply_updates(params, updates)
 - [ ] Algorithm subclasses `OptimizationAlgorithm`
 - [ ] `algorithm_str` is set to a unique identifier
 - [ ] `algorithm_type` is set correctly
-- [ ] `optimize()` accepts `problem_objective: Objective` as first arg
+- [ ] `optimize()` accepts `objective: Objective` as first arg
 - [ ] `optimize()` returns `None` (the `Objective` is mutated in place)
-- [ ] All evaluations go through `Objective` (no direct `problem.objective_function()` calls)
+- [ ] All evaluations go through `Objective` (`value*`, `vmap_*`, or `value_function(...)` plus `log_evaluation(...)`; no direct `problem.objective_function()` calls)
 - [ ] JIT warmup happens before `obj.start_logging()`
 - [ ] `random_seed` is accepted, set, and printed
 - [ ] Early stopping uses `obj.evals_since_improvement` (or custom logic)

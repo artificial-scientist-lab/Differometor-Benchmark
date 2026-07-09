@@ -8,14 +8,19 @@ from __future__ import annotations
 
 import warnings
 
-import jax.numpy as jnp
 import numpy as np
-import torch
+
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 from botorch.exceptions.errors import ModelFittingError
 from botorch.exceptions.warnings import OptimizationWarning
 from botorch.fit import fit_gpytorch_mll
 from botorch.models import SingleTaskGP
-from botorch.utils.transforms import normalize, unnormalize
+from botorch.utils.transforms import unnormalize
 from gpytorch.constraints import Interval
 from gpytorch.kernels import MaternKernel, ScaleKernel
 from gpytorch.likelihoods import GaussianLikelihood
@@ -37,10 +42,10 @@ _NAN_PERTURB_BASE = 1e-10
 _MAX_NAN_STREAK = 20
 
 
-def get_problem_bounds_torch(problem, device=DEVICE, dtype=DTYPE):
+def get_problem_bounds_torch(bounds, device=DEVICE, dtype=DTYPE):
     """Return problem bounds as a (2, d) torch tensor."""
-    lb = np.asarray(problem.bounds[0])
-    ub = np.asarray(problem.bounds[1])
+    lb = np.asarray(bounds[0])
+    ub = np.asarray(bounds[1])
     return torch.tensor(np.stack([lb, ub]), device=device, dtype=dtype)
 
 
@@ -93,7 +98,7 @@ def evaluate_objective(
         for idx in torch.where(invalid)[0]:
             for retry in range(max_retries):
                 xp = X[idx].clone()
-                scale = perturbation_scale * (2 ** retry)
+                scale = perturbation_scale * (2**retry)
                 xp += torch.randn_like(xp) * scale
                 xp = torch.clamp(xp, 0.0, 1.0)
                 xp_jax = t2j(unnormalize(xp.unsqueeze(0), bounds).squeeze(0))

@@ -1,13 +1,12 @@
 """PolyakSGD optimizer (Optax)."""
 
 import jax
-import optax
 
 from dfbench.algorithms.gradient_based.optax._common import (
     OptaxAlgorithm,
-    build_optimizer,
     _is_nonfinite,
     _MAX_NAN_STREAK,
+    optax,
 )
 
 
@@ -43,7 +42,7 @@ class OptaxPolyakSGD(OptaxAlgorithm):
 
     def optimize(
         self,
-        problem_objective,
+        objective,
         init_params=None,
         random_seed=None,
         patience=None,
@@ -51,8 +50,8 @@ class OptaxPolyakSGD(OptaxAlgorithm):
         grad_clip_norm=1.0,
         **kwargs,
     ):
-        """Polyak SGD loop — passes loss to ``optimizer.update``."""
-        obj = problem_objective
+        """Polyak SGD loop: passes loss to ``optimizer.update``."""
+        obj = objective
         self.prepare(obj, unbounded=True, random_seed=random_seed)
 
         if init_params is None:
@@ -68,14 +67,12 @@ class OptaxPolyakSGD(OptaxAlgorithm):
         opt_state = optimizer.init(params)
 
         # JIT warmup
-        _ = obj.value_and_grad(params)
+        obj.warmup_value_and_grad()
 
         obj.start_logging()
 
         nan_streak = 0
-        rng_key = jax.random.PRNGKey(
-            random_seed if random_seed is not None else 0
-        )
+        rng_key = jax.random.PRNGKey(random_seed if random_seed is not None else 0)
 
         while not obj.budget_exceeded:
             loss, grads = obj.value_and_grad(params)
@@ -90,22 +87,19 @@ class OptaxPolyakSGD(OptaxAlgorithm):
                 if nan_streak > _MAX_NAN_STREAK:
                     best = obj.best_params
                     if best is not None:
-                        params = best + jax.random.normal(
-                            sub_key, best.shape
-                        ) * learning_rate
+                        params = (
+                            best
+                            + jax.random.normal(sub_key, best.shape) * learning_rate
+                        )
                     else:
                         params = obj.random_params_unbounded()
                     opt_state = optimizer.init(params)
                     nan_streak = 0
                 else:
                     scale = learning_rate * (2 ** min(nan_streak, 8))
-                    params = params + jax.random.normal(
-                        sub_key, params.shape
-                    ) * scale
+                    params = params + jax.random.normal(sub_key, params.shape) * scale
                 continue
 
             nan_streak = 0
-            updates, opt_state = optimizer.update(
-                grads, opt_state, params, value=loss
-            )
+            updates, opt_state = optimizer.update(grads, opt_state, params, value=loss)
             params = optax.apply_updates(params, updates)

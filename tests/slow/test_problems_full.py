@@ -1,4 +1,4 @@
-"""Section 4 (full) — Full problem tests requiring Differometor.
+"""Section 4 (full): Full problem tests requiring Differometor.
 
 These are marked @slow and must be run via srun on the cluster.
 """
@@ -15,7 +15,7 @@ pytestmark = pytest.mark.slow
 
 
 # ======================================================================
-# VoyagerProblem (4.1–4.9)
+# VoyagerProblem (4.1-4.9)
 # ======================================================================
 
 
@@ -51,14 +51,16 @@ class TestVoyagerProblem:
         assert jnp.isfinite(loss)
         assert loss.ndim == 0
 
-    def test_sigmoid_objective_at_midpoint(self):
-        """4.5 sigmoid_objective_function at inverse(midpoint) is finite."""
+    def test_unbounded_objective_at_midpoint(self):
+        """4.5 Objective unbounded value at inverse(midpoint) is finite."""
+        from dfbench.core.objective import Objective
         from dfbench.core.utils import inverse_sigmoid_bounding
 
         b = self.problem.bounds
         mid = (b[0] + b[1]) / 2
         unbounded = inverse_sigmoid_bounding(mid, b)
-        loss = self.problem.sigmoid_objective_function(unbounded)
+        obj = Objective(self.problem, unbounded=True)
+        loss = obj.value_function(unbounded=True)(unbounded)
         assert jnp.isfinite(loss)
 
     def test_grad_at_midpoint(self):
@@ -69,14 +71,16 @@ class TestVoyagerProblem:
         assert g.shape == (self.problem.n_params,)
         assert jnp.all(jnp.isfinite(g))
 
-    def test_grad_sigmoid_at_midpoint(self):
-        """4.7 jax.grad(sigmoid_obj) at unbounded midpoint is finite."""
+    def test_grad_unbounded_at_midpoint(self):
+        """4.7 jax.grad of Objective unbounded value is finite."""
+        from dfbench.core.objective import Objective
         from dfbench.core.utils import inverse_sigmoid_bounding
 
         b = self.problem.bounds
         mid = (b[0] + b[1]) / 2
         unbounded = inverse_sigmoid_bounding(mid, b)
-        g = jax.grad(self.problem.sigmoid_objective_function)(unbounded)
+        obj = Objective(self.problem, unbounded=True)
+        g = jax.grad(obj.value_function(unbounded=True))(unbounded)
         assert g.shape == (self.problem.n_params,)
         assert jnp.all(jnp.isfinite(g))
 
@@ -89,7 +93,7 @@ class TestVoyagerProblem:
 
 
 # ======================================================================
-# ConstrainedVoyagerProblem (4.12–4.15)
+# ConstrainedVoyagerProblem (4.12-4.15)
 # ======================================================================
 
 
@@ -122,25 +126,23 @@ class TestConstrainedVoyagerProblem:
         """4.14 Switching power_penalty_fn changes loss."""
         from dfbench.problems.base_problem import (
             squashed_relu_penalty,
-            relu_penalty,
             zero_penalty,
         )
-        from dfbench.problems import ConstrainedVoyagerProblem
 
         b = self.problem.bounds
         mid = (b[0] + b[1]) / 2
 
         self.problem._power_penalty_fn = squashed_relu_penalty
-        loss_sq = float(self.problem.objective_function(mid))
+        loss_sq = float(self.problem.objective_function(mid))  # noqa
 
         self.problem._power_penalty_fn = zero_penalty
-        loss_zero = float(self.problem.objective_function(mid))
+        loss_zero = float(self.problem.objective_function(mid))  # noqa
         # Loss should differ if there are actual power violations
         # (may be equal if midpoint has no violations)
 
 
 # ======================================================================
-# UIFOProblem (4.16–4.20)
+# UIFOProblem (4.16-4.20)
 # ======================================================================
 
 
@@ -162,7 +164,7 @@ class TestUIFOProblem:
         assert jnp.all(b[0] < b[1])
 
     def test_different_topology_seeds(self):
-        """4.18 Different topology_seed → different n_params or bounds."""
+        """4.18 Different topology_seed -> different n_params or bounds."""
         from dfbench.problems import UIFOProblem
 
         p1 = UIFOProblem(size=3, topology_seed=42)
@@ -173,7 +175,7 @@ class TestUIFOProblem:
         assert different
 
     def test_same_topology_seeds(self):
-        """4.19 Same topology_seed → identical n_params and bounds."""
+        """4.19 Same topology_seed -> identical n_params and bounds."""
         from dfbench.problems import UIFOProblem
 
         p1 = UIFOProblem(size=3, topology_seed=42)

@@ -1,7 +1,12 @@
 from __future__ import annotations
 from typing import Any, Mapping
 
-import torch
+try:
+    import torch
+except ImportError as exc:
+    raise ImportError(
+        "torch is required for this algorithm. Install with:  uv add 'dfbench[bo]'"
+    ) from exc
 import numpy as np
 from botorch.models import SingleTaskGP
 from botorch.fit import fit_gpytorch_mll
@@ -18,6 +23,7 @@ from botorch.exceptions.errors import ModelFittingError
 from botorch.exceptions.warnings import OptimizationWarning
 
 from dfbench.algorithms.utils.weighted_acq import WeightedAcquisitionFunction
+
 
 def fit_gp(
     train_X: torch.Tensor,
@@ -48,6 +54,7 @@ def fit_gp(
     )
 
     if tr_modeling:
+
         def create_turbo_model():
             likelihood = GaussianLikelihood(noise_constraint=Interval(1e-8, 1e-3))
             covar_module = ScaleKernel(
@@ -65,7 +72,7 @@ def fit_gp(
             )
             mll = ExactMarginalLogLikelihood(model.likelihood, model)
             return model, mll
-        
+
         with gpytorch.settings.max_cholesky_size(max_cholesky_size):
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=OptimizationWarning)
@@ -86,7 +93,7 @@ def fit_gp(
 
     fit_gpytorch_mll(mll)
     return gp
-    
+
 
 def optimize_acqfn(
     acquisition_function: AcquisitionFunction,

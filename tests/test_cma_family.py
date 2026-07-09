@@ -14,8 +14,11 @@ import pytest
 
 from dfbench.core.objective import Objective
 
+# JAX algorithms have no optional deps
+from dfbench.algorithms.evolutionary.jax_es import JAXOnePlusOneES, JAXMuLambdaES
+
 # ---------------------------------------------------------------------------
-# Optional imports — skip tests if backend unavailable
+# Optional imports: skip tests if backend unavailable
 # ---------------------------------------------------------------------------
 
 pycma_available = True
@@ -41,18 +44,10 @@ try:
 except ImportError:
     evosax_available = False  # pragma: no cover
 
-# JAX algorithms have no optional deps
-from dfbench.algorithms.evolutionary.jax_es import JAXOnePlusOneES, JAXMuLambdaES
 
-skip_pycma = pytest.mark.skipif(
-    not pycma_available, reason="pycma not installed"
-)
-skip_cmaes = pytest.mark.skipif(
-    not cmaes_available, reason="cmaes not installed"
-)
-skip_evosax = pytest.mark.skipif(
-    not evosax_available, reason="evosax not installed"
-)
+skip_pycma = pytest.mark.skipif(not pycma_available, reason="pycma not installed")
+skip_cmaes = pytest.mark.skipif(not cmaes_available, reason="cmaes not installed")
+skip_evosax = pytest.mark.skipif(not evosax_available, reason="evosax not installed")
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -94,7 +89,6 @@ class TestPyCMAAlgorithms:
 
     def test_init_params_accepted(self, mock_problem):
         """init_params are used when provided."""
-        import jax.numpy as jnp
         x0 = np.zeros(mock_problem._n_params)
         obj = _make_obj(mock_problem)
         PyCMACMAES().optimize(obj, init_params=x0, random_seed=4, pop_size=5)
@@ -126,7 +120,7 @@ class TestPyCMAAlgorithms:
 
 
 # ---------------------------------------------------------------------------
-# Section D — cmaes-specific tests
+# Section D: cmaes-specific tests
 # ---------------------------------------------------------------------------
 
 
@@ -149,15 +143,13 @@ class TestCMAESSepCMA:
     def test_max_no_improvement_stops(self, mock_problem):
         """max_no_improvement terminates the run early on flat objectives."""
         obj = Objective(mock_problem, max_evals=10_000, max_time=60)
-        CMAESSepCMA().optimize(
-            obj, random_seed=12, max_no_improvement=2, pop_size=6
-        )
+        CMAESSepCMA().optimize(obj, random_seed=12, max_no_improvement=2, pop_size=6)
         # Should not use all 10k evals (stop on stagnation)
         assert obj.eval_count < 500
 
 
 # ---------------------------------------------------------------------------
-# Section E — evosax-specific tests
+# Section E: evosax-specific tests
 # ---------------------------------------------------------------------------
 
 
@@ -187,7 +179,7 @@ class TestEvosaxAlgorithms:
 
 
 # ---------------------------------------------------------------------------
-# Section F — native JAX ES tests (no optional deps, always run)
+# Section F: native JAX ES tests (no optional deps, always run)
 # ---------------------------------------------------------------------------
 
 
@@ -214,10 +206,8 @@ class TestJAXOnePlusOneES:
     def test_sigma_min_stops(self, mock_problem):
         """sigma_min=1e3 (very large) should stop immediately after warmup."""
         obj = Objective(mock_problem, max_evals=10_000, max_time=60)
-        JAXOnePlusOneES().optimize(
-            obj, random_seed=33, sigma0=1e-11, sigma_min=1e-10
-        )
-        # sigma drops below sigma_min immediately → very few evals
+        JAXOnePlusOneES().optimize(obj, random_seed=33, sigma0=1e-11, sigma_min=1e-10)
+        # sigma drops below sigma_min immediately -> very few evals
         assert obj.eval_count < 20
 
     def test_max_iterations_cap(self, mock_problem):

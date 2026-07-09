@@ -1,4 +1,4 @@
-"""NEWUOA — NEW Unconstrained Optimization Algorithm (via PDFO).
+"""NEWUOA: NEW Unconstrained Optimization Algorithm (via PDFO).
 
 NEWUOA is a derivative-free trust-region method by M. J. D. Powell.  It
 builds a quadratic interpolation model using *fewer* interpolation points
@@ -15,13 +15,12 @@ Defaults are conservative and benchmark-oriented.
 Reference:
     Powell, M. J. D. (2006). The NEWUOA software for unconstrained
     optimization without derivatives. *Large-Scale Nonlinear Optimization*,
-    Springer, 255–297.
+    Springer, 255-297.
 """
 
 from __future__ import annotations
 
 import numpy as np
-import jax.numpy as jnp
 from jaxtyping import Array, Float
 
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
@@ -52,7 +51,7 @@ class PDFONEWUOA(OptimizationAlgorithm):
     """
 
     algorithm_str: str = "pdfo_newuoa"
-    algorithm_type: AlgorithmType = AlgorithmType.EVOLUTIONARY
+    algorithm_type: AlgorithmType = AlgorithmType.DERIVATIVE_FREE
 
     def __init__(
         self,
@@ -68,7 +67,7 @@ class PDFONEWUOA(OptimizationAlgorithm):
 
     def optimize(
         self,
-        problem_objective: Objective,
+        objective: Objective,
         init_params: Float[Array, "..."] | None = None,
         random_seed: int | None = None,
         max_iterations: int | None = None,
@@ -77,14 +76,18 @@ class PDFONEWUOA(OptimizationAlgorithm):
             import pdfo
         except ImportError as exc:
             raise ImportError(
-                "PDFO is required for NEWUOA.  Install with: pip install pdfo"
+                "PDFO is required for NEWUOA.  Install with: uv add 'dfbench[dfo]'"
             ) from exc
 
-        obj = problem_objective
+        obj = objective
         random_seed, key = self.prepare(obj, unbounded=False, random_seed=random_seed)
 
         lower, upper = solver_bounds_np(obj)
-        radius_init = self.radius_init if self.radius_init is not None else float(0.1 * np.mean(upper - lower))
+        radius_init = (
+            self.radius_init
+            if self.radius_init is not None
+            else float(0.1 * np.mean(upper - lower))
+        )
         npt = self.npt if self.npt is not None else 2 * obj.n_params + 1
 
         raw_fun = dfo_objective_wrapper(obj)
@@ -94,7 +97,7 @@ class PDFONEWUOA(OptimizationAlgorithm):
             return raw_fun(xc)
 
         # JIT warmup
-        _ = obj.value(jnp.asarray(clip_to_bounds(np.zeros(obj.n_params), obj)))
+        obj.warmup_value()
 
         obj.start_logging()
 
@@ -121,7 +124,9 @@ class PDFONEWUOA(OptimizationAlgorithm):
             )
 
         multistart_loop(
-            obj, key, _solve,
+            obj,
+            key,
+            _solve,
             n_restarts=self.n_restarts,
             init_params=init_params,
         )

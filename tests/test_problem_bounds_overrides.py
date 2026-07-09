@@ -1,6 +1,6 @@
-"""Section 4 (partial) — Problem bounds overrides and penalty functions.
+"""Section 4 (partial): Problem bounds overrides and penalty functions.
 
-Tests 4.10–4.11, 4.15, 4.21–4.26 — these do NOT require Differometor simulation.
+Tests 4.10-4.11, 4.15, 4.21-4.26: these do NOT require Differometor simulation.
 """
 
 from __future__ import annotations
@@ -25,6 +25,10 @@ class _StubProblem(OpticalSetupProblem):
 
     def __init__(self):
         super().__init__(name="stub", n_frequencies=10)
+        self._build_objective_function()
+
+    def _build_objective_function(self) -> None:
+        self.objective_function = lambda params: jnp.sum(params**2)
 
     @property
     def bounds(self):
@@ -34,18 +38,15 @@ class _StubProblem(OpticalSetupProblem):
     def optimization_pairs(self):
         return [("comp", "param_a"), ("comp", "param_b")]
 
-    def objective_function(self, params):
-        return jnp.sum(params**2)
-
-    def sigmoid_objective_function(self, params):
-        return self.objective_function(params)
-
     def calculate_sensitivity(self, optimized_parameters):
         return jnp.ones(10)
 
+    def to_spec(self) -> dict:
+        return self._base_spec() | {"type": "_StubProblem"}
+
 
 # ======================================================================
-# _apply_property_bounds_overrides (4.21–4.23)
+# _apply_property_bounds_overrides (4.21-4.23)
 # ======================================================================
 
 
@@ -97,7 +98,7 @@ class TestApplyPropertyBoundsOverrides:
 
 
 # ======================================================================
-# Penalty functions (4.24–4.26)
+# Penalty functions (4.24-4.26)
 # ======================================================================
 
 
