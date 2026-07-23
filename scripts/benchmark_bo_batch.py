@@ -28,6 +28,7 @@ from dfbench.algorithms.surrogate_based.botorch.botorch_rembo import REMBO
 from dfbench.algorithms.surrogate_based.botorch.botorch_gebo import GEBO
 from dfbench.algorithms.surrogate_based.botorch.botorch_linebo import LineBO
 from dfbench.algorithms.surrogate_based.ax_baxus import BAxUS
+from dfbench.algorithms.surrogate_based import hebo_bo
 from dfbench.algorithms.surrogate_based.turbo_lbfgs import TuRBOLBFGS
 
 
@@ -102,12 +103,10 @@ def build_configs(*, quick: bool = False):
         )
 
     # Conditional: HEBO
-    if importlib.util.find_spec("hebo") is not None:
-        from dfbench.algorithms.surrogate_based.hebo_bo import HEBO
-
+    if hebo_bo._HEBO_AVAILABLE:
         configs.append(
             AlgorithmConfig(
-                HEBO(),
+                hebo_bo.HEBO(),
                 {"batch_size": 1, "max_iterations": n_init + bo_iters},
                 name="HEBO",
             )

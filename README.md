@@ -105,10 +105,12 @@ pip install "dfbench[optax,scipy]"      # Common local optimizers
 pip install "dfbench[evolution]"        # CMA, EvoX, Nevergrad, Evosax
 pip install "dfbench[bo]"               # BoTorch/Ax surrogate optimizers
 pip install "dfbench[dfo,smac]"         # Derivative-free and SMAC optimizers
-pip install "dfbench[all]"              # All optimizer backends
+pip install "dfbench[all]"              # All packaged optimizer backends
 pip install "dfbench[cuda13]"           # CUDA 13 JAX support
 pip install "dfbench[analysis]"         # Notebook/profiling tools
 ```
+
+The HEBO adapter is available in the API, but no dfbench extra installs HEBO because its dependency stack conflicts with dfbench's NumPy 2.x stack. Use it only with a separately managed compatible HEBO installation.
 
 ### From Source With `uv` (recommended for development)
 
@@ -125,7 +127,7 @@ uv sync --group cuda13 --group analysis  # Everything
 
 ```bash
 pip install -e .                         # CPU-only editable install
-pip install -e ".[all,cuda13,analysis]"  # All backends, CUDA 13, and analysis extras
+pip install -e ".[all,cuda13,analysis]"  # Packaged backends, CUDA 13, and analysis extras
 ```
 
 See [Installation](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Installation) for GPU setup details and HPC notes.

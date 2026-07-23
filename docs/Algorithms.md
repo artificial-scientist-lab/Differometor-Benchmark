@@ -942,7 +942,7 @@ optimizer.optimize(
 
 ### HEBO (Heteroscedastic Evolutionary BO)
 
-Winner of the NeurIPS 2020 BBO challenge. Uses a heteroscedastic GP, input warping, and multi-objective acquisition. Requires the `dfbench[bo]` extra.
+Winner of the NeurIPS 2020 BBO challenge. Uses a heteroscedastic GP, input warping, and multi-objective acquisition. HEBO is not installed by a dfbench extra because its dependency stack conflicts with dfbench's NumPy 2.x stack; using this adapter requires a separately managed compatible installation.
 
 Reference: Cowen-Rivers et al., *An Empirical Study of Assumptions in Bayesian Optimisation*, 2020.
 

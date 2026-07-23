@@ -5,7 +5,7 @@ by the REGISTRY-driven tests in ``test_algorithms_uniform.py``. Only knobs
 that the uniform suite cannot express belong here.
 
 External-package algorithms (HEBO, SMAC, Ax) are skipped when their
-dependencies are not installed.
+dependencies are unavailable or incompatible.
 """
 
 from __future__ import annotations
@@ -14,17 +14,17 @@ import importlib
 
 import pytest
 
+from dfbench.algorithms.surrogate_based import hebo_bo
 from dfbench.algorithms.surrogate_based.turbo_lbfgs import TuRBOLBFGS
 from dfbench.core.objective import Objective
 
 _has_ax = importlib.util.find_spec("ax") is not None
-_has_hebo = importlib.util.find_spec("hebo") is not None
+_has_hebo = hebo_bo._HEBO_AVAILABLE
 _has_smac = importlib.util.find_spec("smac") is not None
 
 if _has_ax:
     from dfbench.algorithms.surrogate_based.ax_saasbo import AxSAASBO
-if _has_hebo:
-    from dfbench.algorithms.surrogate_based.hebo_bo import HEBO
+HEBO = hebo_bo.HEBO
 if _has_smac:
     from dfbench.algorithms.surrogate_based.smac_bo import SMAC
 
@@ -46,7 +46,7 @@ class TestAxSAASBO:
         assert obj.best_loss is not None
 
 
-@pytest.mark.skipif(not _has_hebo, reason="HEBO not installed")
+@pytest.mark.skipif(not _has_hebo, reason="HEBO unavailable or incompatible")
 class TestHEBO:
     def test_smoke(self, mock_problem):
         algo = HEBO()

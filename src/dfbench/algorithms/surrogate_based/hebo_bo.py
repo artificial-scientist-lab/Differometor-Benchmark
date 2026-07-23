@@ -20,14 +20,18 @@ from jaxtyping import Array, Float
 from dfbench.core.algorithm import AlgorithmType, OptimizationAlgorithm
 from dfbench.core.objective import Objective
 
+_HEBO_IMPORT_ERROR: ImportError | None
+
 try:
     import pandas as pd
     from hebo.design_space.design_space import DesignSpace
     from hebo.optimizers.hebo import HEBO as HEBOOptimizer
-
-    _HEBO_AVAILABLE = True
-except ImportError:
+except ImportError as exc:
     _HEBO_AVAILABLE = False
+    _HEBO_IMPORT_ERROR = exc
+else:
+    _HEBO_AVAILABLE = True
+    _HEBO_IMPORT_ERROR = None
 
 
 class HEBO(OptimizationAlgorithm):
@@ -48,8 +52,12 @@ class HEBO(OptimizationAlgorithm):
     algorithm_type: AlgorithmType = AlgorithmType.SURROGATE_BASED
 
     def __init__(self) -> None:
-        if not _HEBO_AVAILABLE:
-            raise ImportError("HEBO is required. Install with: uv add 'dfbench[bo]'")
+        if _HEBO_IMPORT_ERROR is not None:
+            raise ImportError(
+                "HEBO is an unbundled optional backend because its dependency "
+                "stack conflicts with dfbench. Install and test HEBO separately "
+                "in a compatible environment."
+            ) from _HEBO_IMPORT_ERROR
 
     def optimize(
         self,

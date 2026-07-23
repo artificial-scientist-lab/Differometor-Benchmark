@@ -229,8 +229,9 @@ The non-pass results all have a single root cause each:
   * **3** are in `tests/test_bo_batch.py`, gated on optional
     dependencies that are not installed in the default environment:
     `ax-platform` (for `AxSAASBO`), `HEBO`, and `SMAC3`. Installing
-    the corresponding `dfbench` extras (`dfbench[bo]` for AxSAASBO/HEBO,
-    `dfbench[smac]` for SMAC) re-enables the tests.
+    `dfbench[bo]` re-enables AxSAASBO and `dfbench[smac]` re-enables SMAC.
+    The HEBO test requires a separately managed compatible installation;
+    HEBO is intentionally not supplied by a dfbench extra.
 
 There are no unexpected failures; every skip and xfail carries an
 explanatory reason in the registry / `pytest.mark.skipif`.

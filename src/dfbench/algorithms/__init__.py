@@ -91,7 +91,7 @@ try:
 except ImportError:
     pass
 
-# BO extra: botorch, ax, gpytorch, torch, HEBO
+# BO extra: botorch, ax, gpytorch, torch. HEBO is an unbundled backend.
 try:
     from dfbench.algorithms.surrogate_based.botorch.botorch_bo import BotorchBO
     from dfbench.algorithms.surrogate_based.botorch.botorch_turbo import BotorchTuRBO

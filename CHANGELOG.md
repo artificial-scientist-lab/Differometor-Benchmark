@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-07-23
+
+### Fixed
+- Removed `hebo` from the `bo` and `all` extras because its dependency stack conflicts with dfbench's NumPy 2.x stack. The guarded HEBO adapter remains available for users who provide and test a compatible installation themselves.
+
 ## [0.3.0] - 2026-07-08
 
 ### Added

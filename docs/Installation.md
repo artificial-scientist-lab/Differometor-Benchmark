@@ -21,15 +21,15 @@ The base install keeps heavyweight optimizer backends optional. Add extras for t
 ```bash
 pip install "dfbench[optax,scipy]"      # common local optimizers
 pip install "dfbench[evolution]"        # CMA, EvoX, Nevergrad, Evosax
-pip install "dfbench[bo]"               # BoTorch/Ax/HEBO surrogate optimizers
+pip install "dfbench[bo]"               # BoTorch/Ax surrogate optimizers
 pip install "dfbench[dfo,smac]"         # derivative-free and SMAC optimizers
-pip install "dfbench[all]"              # all optimizer backends
+pip install "dfbench[all]"              # all packaged optimizer backends
 pip install "dfbench[cuda13]"           # CUDA 13 JAX support
 pip install "dfbench[cuda12]"           # CUDA 12 JAX support
 pip install "dfbench[analysis]"         # notebooks, profiling, plotting helpers
 ```
 
-`HEBO` is part of the `bo` and `all` extras. The optional backends are imported lazily: `import dfbench` succeeds even when an extra is not installed, and importing an algorithm whose backend is missing raises an `ImportError` pointing to the extra to install (e.g. `uv add 'dfbench[bo]'`).
+`HEBO` is intentionally not exposed through a project extra because its dependency stack is incompatible with dfbench's NumPy 2.x stack. The guarded wrapper remains available for users who provide and test a compatible HEBO installation themselves. Other optional backends are imported lazily: `import dfbench` succeeds when their extras are not installed.
 
 ## Development Install with `uv`
 
@@ -78,7 +78,7 @@ pip install -e .
 # With CUDA GPU support
 pip install -e ".[cuda12]"
 
-# With all optimizer backends and analysis tools
+# With all packaged optimizer backends and analysis tools (HEBO excluded)
 pip install -e ".[all,analysis]"
 ```
 
