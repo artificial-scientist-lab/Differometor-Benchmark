@@ -333,6 +333,14 @@ CheckpointManager(..., validate_on_save=False, validate_on_load=False)
 
 The first `save()` without explicit overrides caches the computed path. Subsequent saves without overrides overwrite the same file. Passing `explicit_path` or `hyper_param_str` bypasses the cache. `load()` caches the loaded path, so a resume-then-save cycle overwrites the same file.
 
+`SaveConfig` is part of the persistent run identity. When `Objective.load_run_data()`
+loads a checkpoint whose save configuration differs from the constructor, it
+emits `RuntimeWarning` and adopts the checkpoint configuration before restoring
+state. This prevents enabled histories from changing halfway through a run.
+When the problem supports aux logging, legacy checkpoints that advertise an
+enabled aux history but store no array for it are aligned with `None` entries up
+to `log_call_count` before evaluation resumes.
+
 ### `tick`: periodic checkpointing
 
 `tick` is called by `Objective._log_to_file` after each evaluation. The manager checks the cadence (`save_every`); if a checkpoint is due, it lazily calls `state_factory` to build a `RunState`, saves it, and returns the wall-clock duration of the save. The `Objective` then advances `_start_time` by that duration, so the checkpoint write does not consume wall-clock budget. If no checkpoint is due, `tick` returns `0.0` and `state_factory` is never called.

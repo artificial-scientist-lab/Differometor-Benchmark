@@ -17,11 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reworked scalar and batched Hessian materialization around linearized gradient transforms; combined value/gradient/Hessian calls retain primal aux while derivative-only Hessian calls remain aux-free.
 - Simplified `SaveConfig` token expansion, aux-selection queries, serialization, and mismatch detection. Aux and standard histories are documented as one entry per admitted logged call rather than per individual batch member.
 - Manual `log_evaluation` accepts an optional aux pytree and persists only fields selected by save tokens; omitting aux preserves history alignment with `None`.
+- Checkpoint resume adopts the stored `SaveConfig`, preserving one history schema for the lifetime of a run and backfilling missing legacy aux histories with aligned `None` entries.
 
 ### Fixed
 - Singleton `vmap_*` calls are recognized as batched by rank, so reduced aux drops the leading size-one axis while `batched_*` aux retains it.
 - Removed transformed-function side-effect stashing for aux, preventing stale or missing diagnostics across JIT and vmap paths.
-- Aux save tokens on a problem without `objective_function_aux` now fail during Objective construction with a clear `ValueError`.
+- Aux save tokens on a problem without `objective_function_aux` now warn and leave automatic aux logging disabled; explicit aux methods still fail clearly.
+- Preserved the public `SaveConfig.from_dict(d=...)` keyword while retaining legacy field-name compatibility.
 - Budget-rejected batches no longer partially mutate loss, parameter, derivative, aux, or timestamp histories.
 - Penalty rebinding refreshes both scalar and aux objective families, while derivative-only calls and no-aux runs avoid aux-computation overhead.
 

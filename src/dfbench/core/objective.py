@@ -1,4 +1,5 @@
 import time
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -52,7 +53,8 @@ class Objective:
        string tokens (plus the three standard flags ``save_time_steps``,
        ``save_params_history``, and ``save_batched_params_history``) controls what is stored; the active
        configuration is recorded as a :class:`SaveConfig` and embedded in
-       every checkpoint so a resumed run can detect mismatches.
+       every checkpoint. Resumed runs adopt that stored configuration so the
+       history schema remains fixed across the run.
 
         4. **Bounded / unbounded mode**: when ``unbounded=True`` the objective
              is evaluated through a configurable mapping from unbounded to bounded
@@ -252,6 +254,8 @@ class Objective:
                 ``"batched_aux"`` aliases. Selecting an aux token makes
                 value-bearing methods use ``objective_function_aux``; gradient-
                 only and Hessian-only calls record ``None`` for aux alignment.
+                On problems without an aux objective, a warning is emitted and
+                automatic aux logging remains disabled.
                 Defaults to ``None`` (no advanced histories).
             verbose: Verbosity level (0=silent, 1=warnings, 2=info). Defaults to 0.
             print_every: Print progress every N evaluations (if verbose >= 1). Defaults to 100.
@@ -529,8 +533,8 @@ class Objective:
         Mirrors :meth:`value_function` but calls the wrapped problem's
         ``objective_function_aux``. Returns ``None`` when the problem does
         not expose an aux objective. Explicit ``*_aux`` methods translate
-        that into a clear ``RuntimeError``; selecting an aux save token is
-        rejected earlier while evaluation functions are bound.
+        that into a clear ``RuntimeError``. Selecting an aux save token on
+        such a problem emits a warning and leaves automatic aux logging off.
 
         Args:
             unbounded: If True, map unbounded params to bounded space before
@@ -561,7 +565,8 @@ class Objective:
 
         Without aux save tokens, value-bearing methods wrap the scalar objective
         as ``(loss, None)``. This keeps the public logging path uniform while
-        explicit ``*_aux`` methods remain available on demand.
+        explicit ``*_aux`` methods remain available on demand. Unsupported aux
+        selections warn and fall back to the same scalar path.
         """
         self._func = self.value_function()
         self._func_aux = self.value_function_aux()
@@ -572,13 +577,18 @@ class Objective:
         )
         save_aux = bool(self._aux_log_specs)
 
+        if save_aux and self._func_aux is None:
+            warnings.warn(
+                "Aux save tokens were requested, but this problem does not "
+                "implement objective_function_aux; aux histories will remain empty.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            self._aux_log_specs = ()
+            save_aux = False
+
         if save_aux:
-            if self._func_aux is None:
-                raise ValueError(
-                    f"Aux save tokens require {type(self._problem).__name__} to "
-                    "expose objective_function_aux. Remove the aux token(s) or "
-                    "use a problem that implements the aux objective contract."
-                )
+            assert self._func_aux is not None
             selected_value_func = self._func_aux
         else:
             scalar_func = self._func
@@ -2318,6 +2328,32 @@ class Objective:
             metadata=self._build_metadata(algorithm_name),
         )
 
+    def _backfill_missing_aux_histories(self, state: RunState) -> None:
+        """Align empty legacy aux histories before a resumed evaluation.
+
+        Some older checkpoints recorded an aux-enabled :class:`SaveConfig`
+        without persisting the corresponding history arrays. Once that config
+        is restored, fill each selected empty history with missing-value
+        placeholders so the next logged call can append without changing the
+        run's history shape.
+
+        Unsupported aux problems have no active aux log specs and intentionally
+        keep these histories empty for backwards compatibility.
+        """
+        n_calls = int(state.log_call_count)
+        if n_calls <= 0:
+            return
+
+        for _, history_name, _ in self._aux_log_specs:
+            state_field = history_name.removeprefix("_")
+            history = getattr(state, state_field)
+            if history.ndim == 0 or history.shape[0] == 0:
+                setattr(
+                    state,
+                    state_field,
+                    np.full(n_calls, None, dtype=object),
+                )
+
     def _apply_run_state(self, state: RunState) -> None:
         """Restore internal tracking state from a :class:`RunState`."""
         self._loss_history = (
@@ -2447,10 +2483,11 @@ class Objective:
         """Load optimization state from a run data file.
 
         Restores all tracking state including loss history, parameters,
-        and timing via the configured :class:`CheckpointManager`. The
-        previously elapsed time is stored as an offset so that
-        ``warmup_*()`` and ``start_logging()`` still work normally after
-        loading.  Call ``start_logging()`` to resume the wall-clock timer.
+        timing, and the checkpoint's save configuration via the configured
+        :class:`CheckpointManager`. The previously elapsed time is stored as
+        an offset so that ``warmup_*()`` and ``start_logging()`` still work
+        normally after loading. Call ``start_logging()`` to resume the
+        wall-clock timer.
 
         Args:
             filepath: Path to the run data checkpoint file to load.
@@ -2470,19 +2507,22 @@ class Objective:
             raise FileNotFoundError(f"Run data file not found: {filepath}")
 
         state = self._checkpoint_manager.load(filepath)
-        self._apply_run_state(state)
 
-        # Warn if the checkpoint's save config differs from this Objective's
-        loaded_cfg = state.metadata.extra.get("save_config")
-        if loaded_cfg is not None:
-            ckpt_cfg = SaveConfig.from_dict(loaded_cfg)
-            diffs = self._save_config.mismatch(ckpt_cfg)
-            if diffs and self._verbose >= 1:
-                print(
-                    "Warning: checkpoint save_config differs from current "
-                    f"Objective in: {', '.join(diffs)}. Histories may be "
-                    "inconsistent."
+        loaded_cfg_data = state.metadata.extra.get("save_config")
+        if loaded_cfg_data is not None:
+            loaded_cfg = SaveConfig.from_dict(d=loaded_cfg_data)
+            if self._save_config.mismatch(loaded_cfg):
+                warnings.warn(
+                    "Using the checkpoint's save configuration; the Objective "
+                    "constructor configuration is ignored while resuming.",
+                    RuntimeWarning,
+                    stacklevel=2,
                 )
+                self._save_config = loaded_cfg
+                self._bind_evaluation_functions()
+            self._backfill_missing_aux_histories(state)
+
+        self._apply_run_state(state)
 
         if self._verbose >= 1:
             print(f"Checkpoint loaded from {filepath}")

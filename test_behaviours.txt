@@ -282,7 +282,8 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 5.22g[P0] Without aux save tokens, standard value-bearing methods neither
           evaluate the aux objective nor allocate aux history entries.
 5.22h[P0] Selecting an aux token for a problem without objective_function_aux
-          raises ValueError during Objective construction.
+          emits RuntimeWarning, preserves scalar value/grad behavior, and leaves
+          aux histories empty; explicit aux methods still raise RuntimeError.
 
 --- History tracking ---
 
@@ -358,6 +359,10 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 5.53 [P1] save_run_data creates a file on disk.
 5.54 [P1] load_run_data restores eval_count, loss_history, best_loss,
           best_params to the saved state.
+5.54a[P1] load_run_data adopts the checkpoint SaveConfig when constructor flags
+          differ, then a resumed evaluation can be saved and loaded again.
+5.54b[P1] Enabled legacy aux histories that are empty are backfilled with one
+          None entry per prior logged call, including batched calls.
 5.55 [P1] After load_run_data, time_elapsed continues from where it left off.
 5.56 [P1] save_to_file_every triggers periodic checkpoints at correct
           intervals.

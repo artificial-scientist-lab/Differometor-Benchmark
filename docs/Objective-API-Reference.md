@@ -48,7 +48,7 @@ Objective(
 | `save_time_steps` | `bool` | `True` | Record elapsed-time timestamp for each evaluation. |
 | `save_params_history` | `bool` | `True` | Record the parameter vector at each evaluation. |
 | `save_batched_params_history` | `bool` | `False` | Store full `(batch, n_params)` parameter arrays for batched evals instead of the reduced representative point. |
-| `save` | `list[str] \| None` | `None` | List of advanced save tokens for recording additional / batched histories. Standard tokens: `"grad"`, `"hessian"`, `"eval_type"`, `"batched_loss"`, `"batched_grad"`, `"batched_hessian"`, `"batched"` (convenience alias expanding to the three batched tokens above). Aux diagnostics tokens: `"sensitivity_loss"`, `"penalty"`, `"is_feasible"`, `"power_values"`, `"violations"`, `"aux"` (convenience alias expanding to all five), plus per-field `batched_*` variants and `"batched_aux"`. On a problem exposing `objective_function_aux`, these tokens persist diagnostics from explicit `*_aux` methods and standard value-bearing methods. Derivative-only calls append aligned `None` entries. Selecting an aux token for a problem without `objective_function_aux` raises `ValueError` during construction. The active configuration is recorded as a `SaveConfig` and embedded in every checkpoint so a resumed run can detect mismatches. |
+| `save` | `list[str] \| None` | `None` | List of advanced save tokens for recording additional / batched histories. Standard tokens: `"grad"`, `"hessian"`, `"eval_type"`, `"batched_loss"`, `"batched_grad"`, `"batched_hessian"`, `"batched"` (convenience alias expanding to the three batched tokens above). Aux diagnostics tokens: `"sensitivity_loss"`, `"penalty"`, `"is_feasible"`, `"power_values"`, `"violations"`, `"aux"` (convenience alias expanding to all five), plus per-field `batched_*` variants and `"batched_aux"`. On a problem exposing `objective_function_aux`, these tokens persist diagnostics from explicit `*_aux` methods and standard value-bearing methods. Derivative-only calls append aligned `None` entries. On a problem without `objective_function_aux`, aux tokens emit `RuntimeWarning` and automatic aux logging remains disabled; explicit aux methods still raise `RuntimeError`. The active configuration is recorded as a `SaveConfig` and restored from checkpoints so a resumed run keeps the original history schema. |
 | `verbose` | `int` | `0` | Verbosity level. `0` = silent; `1` = periodic progress prints; `2` is WIP. |
 | `print_every` | `int` | `100` | When `verbose ≥ 1`, print a progress summary every N evaluations. |
 | `algorithm_str` | `str \| None` | `None` | If `None`, this is set by the algorithm via `prepare()` of `OptimizationAlgorithm`. Optional identifier string used in file names and logs. |
@@ -147,7 +147,7 @@ For advanced combinations (gradients, Hessians, eval types, full batched arrays)
 | `"batched_hessian"` | Store full `(batch, n_params, n_params)` Hessian arrays |
 | `"batched"` | Convenience alias expanding to the three `batched_*` tokens above |
 
-Aux diagnostics tokens are recorded by the explicit `*_aux` evaluation methods and by the standard value-bearing methods (`value`, `value_and_grad`, `vmap_value`, `vmap_value_and_grad`, `value_grad_and_hessian`, `vmap_value_grad_and_hessian`). Auto-logging turns on when at least one aux token is in the `save` list and the problem exposes `objective_function_aux` (the built-in examples are `ConstrainedVoyagerProblem` and `UIFOProblem`). The standard methods then run the aux objective in the same forward pass and populate the aux histories without changing their return signatures (see [Auto-logging aux](#auto-logging-aux-from-standard-value-bearing-methods)). Each token controls one aux field, so enabling `is_feasible` does not force storing the bulky `power_values` arrays. Selecting an aux token for a problem without `objective_function_aux` raises `ValueError` during `Objective` construction.
+Aux diagnostics tokens are recorded by the explicit `*_aux` evaluation methods and by the standard value-bearing methods (`value`, `value_and_grad`, `vmap_value`, `vmap_value_and_grad`, `value_grad_and_hessian`, `vmap_value_grad_and_hessian`). Auto-logging turns on when at least one aux token is in the `save` list and the problem exposes `objective_function_aux` (the built-in examples are `ConstrainedVoyagerProblem` and `UIFOProblem`). The standard methods then run the aux objective in the same forward pass and populate the aux histories without changing their return signatures (see [Auto-logging aux](#auto-logging-aux-from-standard-value-bearing-methods)). Each token controls one aux field, so enabling `is_feasible` does not force storing the bulky `power_values` arrays. On a problem without `objective_function_aux`, construction emits `RuntimeWarning`, standard methods continue through the scalar objective, and aux histories remain empty.
 
 | Token | Effect |
 |-------|--------|
@@ -178,7 +178,7 @@ obj = Objective(problem, save=["grad", "hessian", "eval_type", "batched"])
 obj = Objective(problem, save=["aux", "batched_is_feasible"])
 ```
 
-The active configuration is stored as a `SaveConfig` and embedded in every checkpoint's `RunMetadata`. On `load_run_data`, the Objective warns if the checkpoint's save config differs from the current Objective's, preventing silent inconsistency.
+The active configuration is stored as a `SaveConfig` and embedded in every checkpoint's `RunMetadata`. On `load_run_data`, the Objective warns if the checkpoint config differs and adopts the stored config before restoring state, so resumed evaluations keep the run's original history schema.
 
 ### Storage (internal)
 
@@ -257,7 +257,7 @@ This rebinds the internal value-bearing callables to the aux variants at bind ti
 
 Grad-only and Hessian-only calls (`grad`, `hessian`, `vmap_grad`, `vmap_hessian`) differentiate the scalar objective but do not return or carry a primal loss/aux result. They therefore append `None` placeholders to enabled aux histories so those histories stay length-aligned with `loss_history`. The history properties preserve these `None` entries; `best_is_feasible` interprets one at the best-loss index as unavailable.
 
-Auto-logging is active only when both conditions hold: at least one aux token is in the construction-time `save` list, and the problem exposes `objective_function_aux`. With no aux token, standard methods use the scalar primal and aux histories stay empty, so non-aux runs pay no aux-computation overhead. Supplying an aux token for a problem without an aux objective raises `ValueError` at construction rather than silently falling back. Calling `set_penalty_fn` rebinds the cached callables so the selected value family stays in sync after a penalty swap.
+Auto-logging is active only when both conditions hold: at least one aux token is in the construction-time `save` list, and the problem exposes `objective_function_aux`. With no aux token, standard methods use the scalar primal and aux histories stay empty, so non-aux runs pay no aux-computation overhead. Supplying an aux token for a problem without an aux objective emits `RuntimeWarning` and falls back to the same scalar path; explicit aux methods still raise `RuntimeError`. Calling `set_penalty_fn` rebinds the cached callables so the selected value family stays in sync after a penalty swap.
 
 ```python
 obj = Objective(problem, save=["is_feasible"])
@@ -570,7 +570,7 @@ The first save without explicit overrides caches the path; subsequent periodic s
 
 ### `load_run_data(filepath)`
 
-Restores all tracking state from a checkpoint via `CheckpointManager.load()` -> `Objective._apply_run_state()`. Adjusts `start_time` so that `time_elapsed` continues seamlessly from where the checkpoint left off. The loaded path is cached so a later `save_run_data()` overwrites the same file. If the checkpoint's `SaveConfig` differs from the current Objective's, a warning is printed (when `verbose >= 1`).
+Restores all tracking state from a checkpoint via `CheckpointManager.load()` -> `Objective._apply_run_state()`. Adjusts `start_time` so that `time_elapsed` continues seamlessly from where the checkpoint left off. The loaded path is cached so a later `save_run_data()` overwrites the same file. If the checkpoint's `SaveConfig` differs from the constructor configuration, `RuntimeWarning` is emitted and the checkpoint configuration is adopted before state is applied. When the problem supports aux logging, empty legacy aux histories selected by that config are backfilled with one `None` entry per prior logged call before evaluation resumes.
 
 The originating `Problem` can be rebuilt from the embedded `problem_spec`:
 

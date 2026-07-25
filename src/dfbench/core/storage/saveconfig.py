@@ -4,8 +4,8 @@ A :class:`SaveConfig` records *what* histories an Objective records during
 a run. It replaces the nine individual boolean constructor arguments with
 three standard flags plus a declarative ``save`` list of string tokens for
 advanced combinations. The config is embedded in :class:`RunMetadata` so a
-checkpoint records which histories were active, preventing silent
-mismatches on resume.
+checkpoint records which histories were active. A resumed Objective adopts
+that stored configuration so its history schema cannot change mid-run.
 
 Valid ``save`` tokens
 --------------------
@@ -44,6 +44,10 @@ receive ``None`` placeholders:
 | ``"batched_power_values"``  | Store full batched per-group power arrays.                            |
 | ``"batched_violations"``    | Store full batched per-constraint violation arrays.                   |
 | ``"batched_aux"``           | Convenience alias: expands to the five batched aux tokens above.      |
+
+On a problem without ``objective_function_aux``, aux tokens emit a runtime
+warning and automatic aux logging stays disabled for 0.3.2 compatibility.
+Explicit aux evaluation methods continue to raise ``RuntimeError``.
 
 When a ``batched_*`` aux token is off and the corresponding non-batched
 token is on, batched aux entries are reduced to the same representative
@@ -167,8 +171,9 @@ class SaveConfig:
         return {field.name: bool(getattr(self, field.name)) for field in fields(self)}
 
     @classmethod
-    def from_dict(cls, data: dict) -> "SaveConfig":
+    def from_dict(cls, d: dict) -> "SaveConfig":
         """Reconstruct from a dict, accepting legacy plural field names."""
+        data = d
         values: dict[str, bool] = {}
         for field in fields(cls):
             default = field.default if field.default is not MISSING else False

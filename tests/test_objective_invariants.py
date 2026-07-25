@@ -729,6 +729,53 @@ class TestCheckpointing:
             atol=1e-6,
         )
 
+    def test_load_adopts_standard_save_config_and_resumes(
+        self, mock_problem, tmp_path
+    ):
+        """The checkpoint schema controls histories after a resumed call."""
+        obj = Objective(
+            mock_problem,
+            save=["grad"],
+            save_params_history=False,
+            save_time_steps=False,
+        )
+        params = jnp.array([0.5, -0.25])
+        obj.start_logging()
+        obj.value_and_grad(params)
+        path = obj.save_run_data(filepath=str(tmp_path / "standard_config.npz"))
+
+        obj2 = Objective(mock_problem)
+        with pytest.warns(RuntimeWarning, match="checkpoint's save configuration"):
+            obj2.load_run_data(path)
+        assert obj2.save_config.grad
+        assert not obj2.save_config.params
+        assert not obj2.save_config.time_steps
+        assert len(obj2.grad_history) == 1
+        assert obj2.params_history == []
+        assert obj2.time_steps == []
+
+        obj2.start_logging()
+        obj2.value_and_grad(-params)
+        assert len(obj2.grad_history) == 2
+        assert obj2.params_history == []
+        assert obj2.time_steps == []
+        resumed_path = obj2.save_run_data(
+            filepath=str(tmp_path / "standard_config_resumed.npz")
+        )
+
+        obj3 = Objective(mock_problem)
+        with pytest.warns(RuntimeWarning, match="checkpoint's save configuration"):
+            obj3.load_run_data(resumed_path)
+        assert obj3.save_config.grad
+        assert not obj3.save_config.params
+        assert not obj3.save_config.time_steps
+        assert obj3.save_config.mismatch(obj.save_config) == []
+        assert obj3.eval_count == 2
+        assert len(obj3.loss_history) == 2
+        assert len(obj3.grad_history) == 2
+        assert obj3.params_history == []
+        assert obj3.time_steps == []
+
     def test_load_continues_time(self, mock_problem, tmp_path):
         """5.55 After load, time_elapsed continues from saved state."""
         obj = Objective(mock_problem)

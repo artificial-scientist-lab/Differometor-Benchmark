@@ -477,9 +477,11 @@ class TestSaveConfigAuxTokens:
         from dfbench.core.storage import SaveConfig
 
         cfg = SaveConfig.from_flags(save=["aux", "batched_is_feasible"])
-        d = cfg.to_dict()
-        cfg2 = SaveConfig.from_dict(d)
-        assert cfg.mismatch(cfg2) == []
+        payload = cfg.to_dict()
+        positional = SaveConfig.from_dict(payload)
+        keyword = SaveConfig.from_dict(d=payload)
+        assert cfg.mismatch(positional) == []
+        assert cfg.mismatch(keyword) == []
 
     def test_aux_selection_queries(self):
         from dfbench.core.storage import SaveConfig
@@ -731,10 +733,31 @@ class TestAuxHistories:
         assert all(history[0] is not None for history in histories)
         assert all(history[1] is None for history in histories)
 
-    def test_aux_tokens_require_aux_objective(self, mock_problem):
-        """Invalid aux configuration fails at construction, not mid-run."""
-        with pytest.raises(ValueError, match="objective_function_aux"):
-            Objective(mock_problem, save=["is_feasible"])
+    def test_aux_tokens_warn_and_fall_back_for_unsupported_problem(
+        self, mock_problem
+    ):
+        """Unsupported aux tokens preserve the standard Objective API."""
+        with pytest.warns(RuntimeWarning, match="aux histories will remain empty"):
+            obj = Objective(mock_problem, save=["aux"])
+
+        params = jnp.array([1.0, -2.0])
+        obj.start_logging()
+        assert float(obj.value(params)) == pytest.approx(5.0)
+        np.testing.assert_allclose(np.asarray(obj.grad(params)), [2.0, -4.0])
+
+        histories = (
+            obj.sensitivity_loss_history,
+            obj.penalty_history,
+            obj.is_feasible_history,
+            obj.violations_history,
+            obj.power_hard_history,
+            obj.power_soft_history,
+            obj.power_detector_history,
+        )
+        assert all(history == [] for history in histories)
+
+        with pytest.raises(RuntimeError, match="does not expose"):
+            obj.value_aux(params)
 
     def test_aux_selection_uses_aux_family_for_value_bearing_methods(self, problem):
         """Aux mode preserves signatures and avoids the scalar objective."""
@@ -872,15 +895,163 @@ class TestAuxCheckpointRoundtrip:
         assert len(obj2.power_detector_history) == 1
         assert obj2.best_eval_index == obj.best_eval_index
 
-    def test_legacy_checkpoint_loads_with_empty_aux(self, problem, tmp_path):
-        # Save without aux tokens, then load into an Objective that has aux
-        # tokens enabled. Aux histories should be empty after load.
+    def test_no_aux_checkpoint_config_replaces_aux_constructor(
+        self, problem, tmp_path
+    ):
+        # The checkpoint's no-aux schema wins over the constructor config.
         obj = Objective(problem, checkpoint_dir=str(tmp_path))
         obj.start_logging()
         obj.value(jnp.array([0.0, 0.0]))
         path = obj.save_run_data(algorithm_name="no_aux")
 
         obj2 = Objective(problem, save=["aux"], checkpoint_dir=str(tmp_path))
-        obj2.load_run_data(path)
+        with pytest.warns(RuntimeWarning, match="checkpoint's save configuration"):
+            obj2.load_run_data(path)
+        assert not obj2.save_config.has_aux
         assert obj2.sensitivity_loss_history == []
         assert obj2.is_feasible_history == []
+
+        obj2.start_logging()
+        obj2.value(jnp.array([0.3, -0.2]))
+        resumed_path = obj2.save_run_data(
+            algorithm_name="no_aux_resumed",
+            filepath=str(tmp_path / "no_aux_resumed.npz"),
+        )
+
+        obj3 = Objective(problem, save=["aux"], checkpoint_dir=str(tmp_path))
+        with pytest.warns(RuntimeWarning, match="checkpoint's save configuration"):
+            obj3.load_run_data(resumed_path)
+        assert not obj3.save_config.has_aux
+        assert obj3.save_config.mismatch(obj.save_config) == []
+        assert obj3.eval_count == 2
+        assert len(obj3.loss_history) == 2
+        assert obj3.is_feasible_history == []
+
+    def test_aux_checkpoint_config_replaces_no_aux_constructor(
+        self, problem, tmp_path
+    ):
+        obj = Objective(
+            problem,
+            save=["is_feasible"],
+            checkpoint_dir=str(tmp_path),
+        )
+        obj.start_logging()
+        obj.value(jnp.array([0.0, 0.0]))
+        path = obj.save_run_data(algorithm_name="aux")
+
+        obj2 = Objective(problem, checkpoint_dir=str(tmp_path))
+        with pytest.warns(RuntimeWarning, match="checkpoint's save configuration"):
+            obj2.load_run_data(path)
+        assert obj2.save_config.is_feasible
+        assert len(obj2.is_feasible_history) == 1
+
+        obj2.start_logging()
+        obj2.value(jnp.array([0.3, -0.2]))
+        assert len(obj2.is_feasible_history) == 2
+        assert all(entry is not None for entry in obj2.is_feasible_history)
+        resumed_path = obj2.save_run_data(
+            algorithm_name="aux_resumed",
+            filepath=str(tmp_path / "aux_resumed.npz"),
+        )
+
+        obj3 = Objective(problem, checkpoint_dir=str(tmp_path))
+        with pytest.warns(RuntimeWarning, match="checkpoint's save configuration"):
+            obj3.load_run_data(resumed_path)
+        assert obj3.save_config.is_feasible
+        assert obj3.save_config.mismatch(obj.save_config) == []
+        assert obj3.eval_count == 2
+        assert len(obj3.is_feasible_history) == 2
+        assert all(entry is not None for entry in obj3.is_feasible_history)
+
+    def test_resume_backfills_empty_enabled_aux_histories(self, problem, tmp_path):
+        obj = Objective(
+            problem,
+            save=["aux"],
+            checkpoint_dir=str(tmp_path),
+        )
+        obj.start_logging()
+        obj.vmap_value(
+            jnp.array(
+                [
+                    [0.0, 0.0],
+                    [0.3, -0.2],
+                    [0.5, 0.5],
+                ]
+            )
+        )
+        assert obj.eval_count == 3
+        assert obj.log_call_count == 1
+
+        state = obj._build_run_state("legacy_aux")
+        aux_state_fields = (
+            "sensitivity_loss_history",
+            "penalty_history",
+            "is_feasible_history",
+            "violations_history",
+            "power_hard_history",
+            "power_soft_history",
+            "power_detector_history",
+        )
+        for field_name in aux_state_fields:
+            setattr(state, field_name, np.array([], dtype=object))
+        path = obj._checkpoint_manager.save(
+            state,
+            explicit_path=tmp_path / "legacy_aux.npz",
+        )
+
+        obj2 = Objective(
+            problem,
+            save=["aux"],
+            checkpoint_dir=str(tmp_path),
+        )
+        obj2.load_run_data(path)
+        histories = (
+            obj2.sensitivity_loss_history,
+            obj2.penalty_history,
+            obj2.is_feasible_history,
+            obj2.violations_history,
+            obj2.power_hard_history,
+            obj2.power_soft_history,
+            obj2.power_detector_history,
+        )
+        assert all(history == [None] for history in histories)
+
+        obj2.start_logging()
+        obj2.value(jnp.array([0.3, -0.2]))
+        histories = (
+            obj2.sensitivity_loss_history,
+            obj2.penalty_history,
+            obj2.is_feasible_history,
+            obj2.violations_history,
+            obj2.power_hard_history,
+            obj2.power_soft_history,
+            obj2.power_detector_history,
+        )
+        assert all(history[0] is None for history in histories)
+        assert all(history[1] is not None for history in histories)
+        resumed_path = obj2.save_run_data(
+            algorithm_name="legacy_aux_resumed",
+            filepath=str(tmp_path / "legacy_aux_resumed.npz"),
+        )
+
+        obj3 = Objective(
+            problem,
+            save=["aux"],
+            checkpoint_dir=str(tmp_path),
+        )
+        obj3.load_run_data(resumed_path)
+        assert obj3.save_config.mismatch(obj.save_config) == []
+        assert obj3.eval_count == 4
+        assert obj3.log_call_count == 2
+        histories = (
+            obj3.sensitivity_loss_history,
+            obj3.penalty_history,
+            obj3.is_feasible_history,
+            obj3.violations_history,
+            obj3.power_hard_history,
+            obj3.power_soft_history,
+            obj3.power_detector_history,
+        )
+        assert all(len(history) == 2 for history in histories)
+        assert all(history[0] is None for history in histories)
+        assert all(history[1] is not None for history in histories)
