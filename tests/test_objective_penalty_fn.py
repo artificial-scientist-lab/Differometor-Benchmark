@@ -733,9 +733,7 @@ class TestAuxHistories:
         assert all(history[0] is not None for history in histories)
         assert all(history[1] is None for history in histories)
 
-    def test_aux_tokens_warn_and_fall_back_for_unsupported_problem(
-        self, mock_problem
-    ):
+    def test_aux_tokens_warn_and_fall_back_for_unsupported_problem(self, mock_problem):
         """Unsupported aux tokens preserve the standard Objective API."""
         with pytest.warns(RuntimeWarning, match="aux histories will remain empty"):
             obj = Objective(mock_problem, save=["aux"])
@@ -895,9 +893,7 @@ class TestAuxCheckpointRoundtrip:
         assert len(obj2.power_detector_history) == 1
         assert obj2.best_eval_index == obj.best_eval_index
 
-    def test_no_aux_checkpoint_config_replaces_aux_constructor(
-        self, problem, tmp_path
-    ):
+    def test_no_aux_checkpoint_config_replaces_aux_constructor(self, problem, tmp_path):
         # The checkpoint's no-aux schema wins over the constructor config.
         obj = Objective(problem, checkpoint_dir=str(tmp_path))
         obj.start_logging()
@@ -927,9 +923,7 @@ class TestAuxCheckpointRoundtrip:
         assert len(obj3.loss_history) == 2
         assert obj3.is_feasible_history == []
 
-    def test_aux_checkpoint_config_replaces_no_aux_constructor(
-        self, problem, tmp_path
-    ):
+    def test_aux_checkpoint_config_replaces_no_aux_constructor(self, problem, tmp_path):
         obj = Objective(
             problem,
             save=["is_feasible"],

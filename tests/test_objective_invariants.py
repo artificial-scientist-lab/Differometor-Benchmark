@@ -729,9 +729,7 @@ class TestCheckpointing:
             atol=1e-6,
         )
 
-    def test_load_adopts_standard_save_config_and_resumes(
-        self, mock_problem, tmp_path
-    ):
+    def test_load_adopts_standard_save_config_and_resumes(self, mock_problem, tmp_path):
         """The checkpoint schema controls histories after a resumed call."""
         obj = Objective(
             mock_problem,
