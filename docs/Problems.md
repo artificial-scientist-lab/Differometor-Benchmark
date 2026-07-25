@@ -197,7 +197,7 @@ problem = ConstrainedVoyagerProblem(n_frequencies=50, signal_floor=1e-20)
    problem = ConstrainedVoyagerProblem(power_penalty_fn=my_quadratic_penalty)
    ```
 
-   The penalty function can also be swapped **after** the problem has been constructed (e.g. after wrapping it in an `Objective`), via `Objective.set_penalty_fn(fn)`. This re-traces the problem's JIT-compiled `objective_function` and re-binds the Objective's cached evaluation callables, so the new penalty takes effect on subsequent evaluations. It must be called before `Objective.start_logging()`:
+   The penalty function can also be swapped **after** the problem has been constructed (e.g. after wrapping it in an `Objective`), via `Objective.set_penalty_fn(fn)`. This rebuilds the problem's JIT-compiled scalar and aux objectives and re-binds the Objective's cached evaluation callables, so the new penalty takes effect on subsequent evaluations. It must be called before `Objective.start_logging()`:
 
    ```python
    from dfbench import Objective
@@ -229,7 +229,7 @@ The constrained problems also expose a JIT-compiled `objective_function_aux(para
 
 Because `aux` is a JAX pytree, `objective_function_aux` vmapps cleanly: a batched call adds a leading batch dim to every leaf, including the `power_values` sub-arrays.
 
-The `Objective` wraps this with `value_aux`, `value_and_grad_aux`, `vmap_value_aux`, and `vmap_value_and_grad_aux`. These thread aux through logging and the save-token system: each aux field has its own token (`sensitivity_loss`, `penalty`, `is_feasible`, `power_values`, `violations`) plus a `batched_*` variant and `aux` / `batched_aux` convenience aliases. When a `batched_*` token is off and the non-batched token is on, batched aux entries are reduced to the representative point picked by the loss minimum, so the recorded `is_feasible` and `violations` reflect that best point. `Objective.best_is_feasible` reports the feasibility of the best-loss point from that recorded history. Full reference in the [Objective API Reference](Objective-API-Reference).
+The `Objective` wraps this with `value_aux`, `value_and_grad_aux`, `vmap_value_aux`, and `vmap_value_and_grad_aux`. These explicit methods—and standard value-bearing methods when an aux save token is selected—thread aux through logging without a second forward pass. Each aux field has its own token (`sensitivity_loss`, `penalty`, `is_feasible`, `power_values`, `violations`) plus a `batched_*` variant and `aux` / `batched_aux` convenience aliases. Derivative-only calls do not produce a primal aux pytree and append `None` to enabled aux histories. When a `batched_*` token is off and the non-batched token is on, aux from every batched value-bearing call, including a singleton batch, is reduced to the representative point picked by the loss minimum. `Objective.best_is_feasible` reports the feasibility of the best-loss point from that recorded history. Full reference in the [Objective API Reference](Objective-API-Reference).
 
 ---
 

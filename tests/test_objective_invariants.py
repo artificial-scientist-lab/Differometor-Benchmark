@@ -71,7 +71,7 @@ class TestWarmup:
         def fake_value_and_grad(params):
             nonlocal call_count
             call_count += 1
-            return jnp.float32(0.0), jnp.zeros(obj.n_params)
+            return (jnp.float32(0.0), None), jnp.zeros(obj.n_params)
 
         obj._value_and_grad_func = fake_value_and_grad
         obj.warmup_value_and_grad()
@@ -98,9 +98,9 @@ class TestWarmup:
 
         def fake_value(params):
             seen.append(np.array(params))
-            return jnp.float32(0.0)
+            return jnp.float32(0.0), None
 
-        obj._func = fake_value
+        obj._value_func = fake_value
         obj.warmup_value()
         assert len(seen) == 2
         np.testing.assert_allclose(seen[0], np.zeros(obj.n_params), atol=1e-6)

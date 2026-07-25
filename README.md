@@ -87,7 +87,7 @@ This adds negligible overhead compared to the objective function itself.
 
 Both constrained problems accept a `power_penalty_fn(value, threshold)` callable to control how power-constraint violations are penalized.  Built-in presets: `squashed_relu_penalty` (default), `relu_penalty`, `zero_penalty`. Feel free to try own ones. The penalty function can also be swapped after construction via `obj.set_penalty_fn(fn)` (before `obj.start_logging()`), which re-traces the objective so the change takes effect. The unconstrained Voyager problems reject this call because they have no power-constraint path.
 
-Constrained problems also expose aux diagnostics. `obj.value_aux(params)` and `obj.vmap_value_aux(batch)` return `(loss, aux)` where `aux` carries the loss decomposition, a physical `is_feasible` flag, per-constraint violations, and the raw per-group power arrays. Enable `save` tokens like `is_feasible`, `power_values`, or the `aux` alias and the standard `obj.value` / `obj.value_and_grad` loop records the enabled aux fields in the same forward pass, with no code change. See [Problems](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Problems) for the aux schema and [Objective API Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Objective-API-Reference) for the full method set.
+Constrained problems also expose aux diagnostics. `obj.value_aux(params)` and `obj.vmap_value_aux(batch)` return `(loss, aux)` where `aux` carries the loss decomposition, a physical `is_feasible` flag, per-constraint violations, and the raw per-group power arrays. Enable `save` tokens like `is_feasible`, `power_values`, or the `aux` alias and standard value-bearing calls such as `obj.value` / `obj.value_and_grad` record the enabled aux fields in the same forward pass, with no code change. Derivative-only `grad` / `hessian` calls do not produce aux and append aligned `None` entries when aux histories are enabled. See [Problems](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Problems) for the aux schema and [Objective API Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Objective-API-Reference) for the full method set.
 
 All problems also support `bounds_overrides` (e.g. `{"tuning": (0, 45)}`) to narrow default property bounds and `signal_floor` to floor detector signal magnitudes before sensitivity normalization. `signal_floor` defaults to `1e-20`. Use `problem.print_bounds()` to inspect effective bounds.
 
@@ -383,7 +383,8 @@ class MyAlgorithm(OptimizationAlgorithm):
 | `obj.vmap_value_and_grad(batch)` | Batched gradient methods | batch losses, grads, params |
 | `obj.vmap_hessian(batch)` | Batched second-order methods | batch hessians, batch params |
 | `obj.vmap_value_grad_and_hessian(batch)` | Batched second-order methods | batch losses, grads, hessians, params |
-| `obj.log_evaluation(...)` | Custom JIT'd loop | whatever you pass, including optional Hessians |
+| `obj.value_function_aux(...)` | Raw aux-aware callable for custom JIT loops | nothing; use `log_evaluation` afterwards |
+| `obj.log_evaluation(...)` | Custom JIT'd loop | supplied values; aux only for matching save tokens |
 
 ### Register It
 

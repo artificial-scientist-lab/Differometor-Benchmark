@@ -361,7 +361,8 @@ class TestObjectiveValueAux:
             obj.value_aux(jnp.array([0.0, 0.0]))
 
     def test_value_and_grad_aux(self, problem):
-        obj = Objective(problem)
+        obj = Objective(problem, save=["sensitivity_loss"])
+        obj.start_logging()
         params = jnp.array([0.5, -0.5])
         value, grad, aux = obj.value_and_grad_aux(params)
         # Penalty is constant w.r.t. params (fixed powers), so grad == 2*params.
@@ -369,6 +370,11 @@ class TestObjectiveValueAux:
         assert float(value) == pytest.approx(
             float(aux["sensitivity_loss"] + aux["penalty"])
         )
+        np.testing.assert_array_equal(
+            np.asarray(obj.sensitivity_loss_history[0]),
+            np.asarray(aux["sensitivity_loss"]),
+        )
+        assert obj.penalty_history == []
 
     def test_value_and_grad_aux_raises_on_unsupported(self, mock_problem):
         obj = Objective(mock_problem)
@@ -396,12 +402,17 @@ class TestObjectiveValueAux:
             obj.vmap_value_aux(params)
 
     def test_vmap_value_and_grad_aux(self, problem):
-        obj = Objective(problem)
+        obj = Objective(problem, save=["batched_is_feasible"])
+        obj.start_logging()
         params = jnp.array([[0.5, -0.5], [0.0, 0.0]])
         values, grads, aux = obj.vmap_value_and_grad_aux(params)
         assert values.shape == (2,)
         assert grads.shape == (2, 2)
         assert aux["is_feasible"].shape == (2,)
+        np.testing.assert_array_equal(
+            np.asarray(obj.is_feasible_history[0]),
+            np.asarray(aux["is_feasible"]),
+        )
 
     def test_warmup_value_aux_skips_unsupported(self, mock_problem):
         obj = Objective(mock_problem)
@@ -470,6 +481,17 @@ class TestSaveConfigAuxTokens:
         cfg2 = SaveConfig.from_dict(d)
         assert cfg.mismatch(cfg2) == []
 
+    def test_aux_selection_queries(self):
+        from dfbench.core.storage import SaveConfig
+
+        cfg = SaveConfig.from_flags(save=["penalty", "batched_is_feasible"])
+        assert cfg.has_aux
+        assert cfg.wants_aux("penalty")
+        assert cfg.wants_aux("is_feasible")
+        assert cfg.wants_batched_aux("is_feasible")
+        assert not cfg.wants_batched_aux("penalty")
+        assert not SaveConfig.from_flags().has_aux
+
 
 class TestAuxHistories:
     def test_histories_empty_by_default(self, problem):
@@ -513,16 +535,71 @@ class TestAuxHistories:
         entry = obj.is_feasible_history[0]
         assert entry.shape == (3,)
 
-    def test_reduced_is_feasible_picks_best_loss_point(self, problem):
-        obj = Objective(problem, save=["is_feasible"])
+    def test_reduced_aux_picks_best_loss_point(self, problem):
+        obj = Objective(problem, save=["sensitivity_loss"])
         obj.start_logging()
-        # Three points; the one with lowest loss is [0,0] (penalty constant,
-        # base loss = sum(params**2) = 0). Its feasibility is False (powers
-        # exceed thresholds), so the reduced entry must be False.
+        # The penalty is constant, so [0, 0] at index 1 has the lowest total
+        # loss and a uniquely identifiable sensitivity_loss of zero.
         params = jnp.array([[1.0, 1.0], [0.0, 0.0], [0.5, -0.5]])
-        obj.vmap_value_aux(params)
-        assert len(obj.is_feasible_history) == 1
-        assert bool(obj.is_feasible_history[0]) is False
+        losses, aux = obj.vmap_value_aux(params)
+        best_index = int(jnp.argmin(losses))
+
+        assert best_index == 1
+        np.testing.assert_array_equal(
+            np.asarray(obj.sensitivity_loss_history[0]),
+            np.asarray(aux["sensitivity_loss"][best_index]),
+        )
+        np.testing.assert_array_equal(
+            np.asarray(obj.params_history[0]), np.asarray(params[best_index])
+        )
+
+    @pytest.mark.parametrize("method_name", ["vmap_value", "vmap_value_aux"])
+    def test_reduced_singleton_batch_stores_real_reduced_aux(
+        self, problem, method_name
+    ):
+        obj = Objective(problem, save=["aux"])
+        obj.start_logging()
+        params = jnp.zeros((1, 2))
+        getattr(obj, method_name)(params)
+
+        expected_loss, expected_aux = problem.objective_function_aux(params[0])
+        entries_and_expected = (
+            (obj.sensitivity_loss_history[0], expected_aux["sensitivity_loss"]),
+            (obj.penalty_history[0], expected_aux["penalty"]),
+            (obj.is_feasible_history[0], expected_aux["is_feasible"]),
+            (obj.violations_history[0], expected_aux["violations"]),
+            (obj.power_hard_history[0], expected_aux["power_values"]["hard"]),
+            (obj.power_soft_history[0], expected_aux["power_values"]["soft"]),
+            (
+                obj.power_detector_history[0],
+                expected_aux["power_values"]["detector"],
+            ),
+        )
+        for entry, expected in entries_and_expected:
+            assert entry is not None
+            np.testing.assert_array_equal(np.asarray(entry), np.asarray(expected))
+
+        np.testing.assert_allclose(np.asarray(obj.loss_history[0]), expected_loss)
+        assert np.asarray(obj.loss_history[0]).shape == ()
+        assert np.asarray(obj.params_history[0]).shape == (2,)
+        assert obj.eval_type_counts == {5: 1}
+
+    def test_batched_aux_token_retains_singleton_batch_axis(self, problem):
+        obj = Objective(problem, save=["batched_aux"])
+        obj.start_logging()
+        obj.vmap_value(jnp.zeros((1, 2)))
+
+        entries = (
+            obj.sensitivity_loss_history[0],
+            obj.penalty_history[0],
+            obj.is_feasible_history[0],
+            obj.violations_history[0],
+            obj.power_hard_history[0],
+            obj.power_soft_history[0],
+            obj.power_detector_history[0],
+        )
+        assert all(entry is not None for entry in entries)
+        assert all(np.asarray(entry).shape[0] == 1 for entry in entries)
 
     def test_value_auto_logs_aux_with_save_tokens(self, problem):
         """A plain value() call records aux when save tokens are enabled."""
@@ -533,8 +610,8 @@ class TestAuxHistories:
         assert len(obj.is_feasible_history) == 1
         assert len(obj.power_hard_history) == 1
 
-    def test_vmap_value_auto_logs_batched_aux(self, problem):
-        """A plain vmap_value() call records batched aux with save tokens."""
+    def test_vmap_value_auto_logs_reduced_aux_for_batched_call(self, problem):
+        """A plain vmap_value() call records reduced aux with a scalar token."""
         obj = Objective(problem, save=["is_feasible"])
         obj.start_logging()
         params = jnp.array([[0.0, 0.0], [0.3, -0.2], [1.0, 1.0]])
@@ -551,30 +628,158 @@ class TestAuxHistories:
         assert len(obj.sensitivity_loss_history) == 1
 
     def test_grad_only_appends_none_placeholder(self, problem):
-        """Grad-only calls align aux histories with None placeholders."""
+        """Grad-only calls align selected aux histories without logging aux."""
         obj = Objective(problem, save=["is_feasible"])
         obj.start_logging()
-        obj.value(jnp.array([0.0, 0.0]))  # real aux entry
-        obj.grad(jnp.array([0.0, 0.0]))  # no loss -> None placeholder
-        assert len(obj.is_feasible_history) == 2
-        assert obj.is_feasible_history[0] is not None
-        assert obj.is_feasible_history[1] is None
+        obj.grad(jnp.array([0.0, 0.0]))
+        assert len(obj.is_feasible_history) == 1
+        assert obj.is_feasible_history[0] is None
+
+    def test_hessian_only_appends_none_placeholder(self, problem):
+        obj = Objective(problem, save=["is_feasible"], hessian_batch_size=1)
+        obj.start_logging()
+        obj.hessian(jnp.array([0.0, 0.0]))
+        assert len(obj.is_feasible_history) == 1
+        assert obj.is_feasible_history[0] is None
+
+    def test_all_derivative_only_paths_skip_aux_and_align_every_history(self, problem):
+        def aux_must_not_run(_):
+            raise AssertionError("derivative-only path evaluated the aux objective")
+
+        problem.objective_function_aux = aux_must_not_run
+        obj = Objective(problem, save=["batched_aux"], hessian_batch_size=1)
+        obj.start_logging()
+        params = jnp.array([0.2, -0.1])
+        batch = jnp.stack([params, -params])
+
+        obj.grad(params)
+        obj.hessian(params)
+        obj.vmap_grad(batch)
+        obj.vmap_hessian(batch)
+
+        histories = (
+            obj.sensitivity_loss_history,
+            obj.penalty_history,
+            obj.is_feasible_history,
+            obj.violations_history,
+            obj.power_hard_history,
+            obj.power_soft_history,
+            obj.power_detector_history,
+        )
+        assert all(history == [None, None, None, None] for history in histories)
+        assert obj.log_call_count == 4
+        assert obj.eval_count == 6
 
     def test_no_aux_tokens_no_overhead(self, problem):
-        """Without aux tokens, value() does not populate aux histories."""
-        obj = Objective(problem)
-        obj.start_logging()
-        obj.value(jnp.array([0.0, 0.0]))
-        assert obj.sensitivity_loss_history == []
-        assert obj.is_feasible_history == []
+        """Without aux tokens, value-bearing methods never evaluate aux."""
 
-    def test_auto_aux_off_when_problem_has_no_aux(self, mock_problem):
-        """Aux tokens on a non-aux problem: no aux histories populated."""
-        obj = Objective(mock_problem, save=["is_feasible"])
+        def aux_must_not_run(_):
+            raise AssertionError("non-aux run evaluated the aux objective")
+
+        problem.objective_function_aux = aux_must_not_run
+        obj = Objective(problem, hessian_batch_size=1)
         obj.start_logging()
-        obj.value(jnp.array([0.0, 0.0]))
+        params = jnp.array([0.2, -0.1])
+        batch = jnp.stack([params, -params])
+
+        assert obj.value(params).ndim == 0
+        value, grad = obj.value_and_grad(params)
+        assert value.ndim == 0
+        assert grad.shape == (2,)
+        value, grad, hessian = obj.value_grad_and_hessian(params)
+        assert value.ndim == 0
+        assert grad.shape == (2,)
+        assert hessian.shape == (2, 2)
+        assert obj.vmap_value(batch).shape == (2,)
+        values, grads = obj.vmap_value_and_grad(batch)
+        assert values.shape == (2,)
+        assert grads.shape == (2, 2)
+        values, grads, hessians = obj.vmap_value_grad_and_hessian(batch)
+        assert values.shape == (2,)
+        assert grads.shape == (2, 2)
+        assert hessians.shape == (2, 2, 2)
+
+        histories = (
+            obj.sensitivity_loss_history,
+            obj.penalty_history,
+            obj.is_feasible_history,
+            obj.violations_history,
+            obj.power_hard_history,
+            obj.power_soft_history,
+            obj.power_detector_history,
+        )
+        assert all(history == [] for history in histories)
+
+    def test_manual_logging_records_aux_or_aligned_none(self, problem):
+        obj = Objective(problem, save=["aux"])
+        obj.start_logging()
+        params = jnp.array([0.2, -0.1])
+        loss, aux = problem.objective_function_aux(params)
+
+        obj.log_evaluation(params=params, loss=loss, aux=aux)
+        obj.log_evaluation(params=params, loss=loss)
+
+        histories = (
+            obj.sensitivity_loss_history,
+            obj.penalty_history,
+            obj.is_feasible_history,
+            obj.violations_history,
+            obj.power_hard_history,
+            obj.power_soft_history,
+            obj.power_detector_history,
+        )
+        assert all(history[0] is not None for history in histories)
+        assert all(history[1] is None for history in histories)
+
+    def test_aux_tokens_require_aux_objective(self, mock_problem):
+        """Invalid aux configuration fails at construction, not mid-run."""
+        with pytest.raises(ValueError, match="objective_function_aux"):
+            Objective(mock_problem, save=["is_feasible"])
+
+    def test_aux_selection_uses_aux_family_for_value_bearing_methods(self, problem):
+        """Aux mode preserves signatures and avoids the scalar objective."""
+
+        def plain_objective_must_not_run(_):
+            raise AssertionError("plain objective was evaluated in aux mode")
+
+        problem.objective_function = plain_objective_must_not_run
+        obj = Objective(problem, save=["is_feasible"], hessian_batch_size=1)
+        obj.start_logging()
+        params = jnp.array([0.2, -0.1])
+        batch = jnp.stack([params, -params])
+
+        assert obj.value(params).ndim == 0
+        value, grad = obj.value_and_grad(params)
+        assert value.ndim == 0
+        assert grad.shape == (2,)
+        value, grad, hessian = obj.value_grad_and_hessian(params)
+        assert value.ndim == 0
+        assert grad.shape == (2,)
+        assert hessian.shape == (2, 2)
+        assert obj.vmap_value(batch).shape == (2,)
+        values, grads = obj.vmap_value_and_grad(batch)
+        assert values.shape == (2,)
+        assert grads.shape == (2, 2)
+        values, grads, hessians = obj.vmap_value_grad_and_hessian(batch)
+        assert values.shape == (2,)
+        assert grads.shape == (2, 2)
+        assert hessians.shape == (2, 2, 2)
+
+        assert len(obj.is_feasible_history) == 6
+        assert all(entry is not None for entry in obj.is_feasible_history)
+
+    def test_budget_rejection_keeps_aux_and_standard_histories_atomic(self, problem):
+        obj = Objective(
+            problem,
+            save=["batched_loss", "batched_is_feasible"],
+            max_evals=1,
+        )
+        obj.start_logging()
+        obj.vmap_value(jnp.zeros((2, 2)))
+        assert obj.eval_count == 2
+        assert obj.loss_history == []
         assert obj.is_feasible_history == []
-        assert obj.best_is_feasible is None
+        assert obj.time_steps == []
 
 
 # ======================================================================

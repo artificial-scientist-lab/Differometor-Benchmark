@@ -67,7 +67,7 @@ A problem defines *what* is being optimised. Every problem subclasses `Continuou
 
 - Maps unbounded coordinates into problem bounds when needed, then evaluates the bounded problem objective
 - Prepares `jax.grad`, `jax.hessian`, `jax.value_and_grad`, and `jax.vmap` variants
-- Records every evaluation with aligned loss / gradient / Hessian / params / timestamp histories
+- Records every admitted call with aligned loss / gradient / Hessian / params / timestamp histories
 - Enforces wall-clock time and evaluation-count budgets
 - Provides deterministic random sampling via a splittable JAX PRNG
 - Delegates all file I/O to the modular `dfbench.core.storage` layer (see [Storage & Checkpointing](Storage-and-Checkpointing))
@@ -114,39 +114,45 @@ See [Storage & Checkpointing](Storage-and-Checkpointing) for the full reference.
          │            │               │                      │
          └────────────┴───────┬───────┴──────────────────────┘
                               │
-      Objective._func / _value_and_grad_func / _hessian_func / _vmap_func
+      Objective._value_func / derivative transforms / vmapped transforms
                               │
                               ▼
                ┌──────────────────────────────┐
                │ optional Objective mapping   │
-               │ problem.objective_function   │
+               │ objective_function or        │
+               │ objective_function_aux       │
                └──────────────┬───────────────┘
                               │
                               ▼
                       Differometor.simulate()
                               │
                               ▼
-                     scalar loss value
-                              │
+                 value / derivatives + optional aux
                               │
                               ▼
-             _log(params, loss, grad, hessian)
+          _log(params, loss, grad, hessian, aux)
                               │
-                  ┌───────────┼───────────────────┐
-                  │           │                   │
-              time_steps   _log_evals()     _log_to_file()
-              (append)        │                   │
-                  ▼           ▼                   ▼
-              _time_steps  _loss_history      periodic
-                              _params_history    checkpoint
-                              _grad_history      via CheckpointManager
-                              _hessian_history   -> StorageBackend
-                              _best_loss / _best_params
+                              ▼
+                       _log_evals(..., aux)
+                              │
+                  ┌───────────┴────────────┐
+                  │ admitted               │ rejected
+                  ▼                        ▼
+          time + standard histories   no history mutation
+          + best/stagnation + selected aux histories
+                  │                        │
+                  └───────────┬────────────┘
+                              ▼
+                         _log_to_file()
+                              │
+                              ▼
+                    periodic checkpoint via
+                CheckpointManager -> StorageBackend
 ```
 
-Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this exact pipeline. The internal `_log()` coordinator handles time-step recording, delegates to `_log_evals()` for history tracking, and triggers `_log_to_file()` for periodic checkpoints. `_log_to_file()` calls `CheckpointManager.tick()`, which checks the cadence (`save_every`), lazily builds a `RunState` only when a checkpoint is due, saves it through the internal `StorageBackend`, and returns the save duration so the Objective can exclude it from the elapsed-time clock. The algorithm receives the computed result; the logging is a side-effect invisible to the caller.
+Every call to `obj.value()`, `obj.value_and_grad()`, `obj.hessian()`, `obj.value_grad_and_hessian()`, or any `vmap_*` variant follows this pipeline. Value-bearing methods carry one primal aux pytree when aux storage is selected; derivative-only methods carry no aux and contribute `None` to selected aux histories. The internal `_log()` coordinator takes one time snapshot, delegates atomic admission and history tracking to `_log_evals()`, appends the timestamp only for an admitted call, and triggers `_log_to_file()` for periodic checkpoints. `_log_to_file()` calls `CheckpointManager.tick()`, which checks the cadence (`save_every`), lazily builds a `RunState` only when a checkpoint is due, saves it through the internal `StorageBackend`, and returns the save duration so the Objective can exclude it from the elapsed-time clock. The algorithm receives the computed result; logging is a side effect invisible to the caller.
 
-For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.value_function(...)` provides the same Objective-owned bounded/unbounded mapping without Python-side logging, and `obj.log_evaluation(params, loss, grad, hessian=None)` records the completed evaluation through the same logging pipeline. Do not call the private methods directly.
+For algorithms with custom JIT-compiled evaluation loops (e.g. L-BFGS with line-search), `obj.value_function(...)` and `obj.value_function_aux(...)` provide the same Objective-owned bounded/unbounded mapping without Python-side logging. The latter returns an aux-aware callable whose invocation yields `(loss, aux)`, or `None` when unsupported. After logging has started, `obj.log_evaluation(params, loss, grad=None, hessian=None, aux=None)` records the completed evaluation through the same logging pipeline. Manual logging never manufactures aux; omitting it appends `None` to each enabled aux history. Do not call the private methods directly.
 
 ---
 
