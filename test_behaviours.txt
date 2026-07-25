@@ -34,6 +34,7 @@ Recommended file layout under tests/:
     test_problem_bounds_overrides.py  # Sections 4.10-4.11, 4.15, 4.20-4.23
     test_objective_randomness.py  # Section 5 seed & sampling items
     test_objective_invariants.py  # Section 5 all other items
+    test_objective_penalty_fn.py  # Section 5 penalty and aux contract
     test_algorithm_protocol.py    # Section 6
     test_algorithms_unit.py       # Section 7 cheap unit tests (mock problem)
     test_metrics.py               # Section 8: full metrics coverage
@@ -261,6 +262,29 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 5.22 [P0] batched_value / batched_grad / batched_value_and_grad are aliases
           for the vmap variants.
 
+--- Aux diagnostics and save-token alignment ---
+
+5.22a[P0] Explicit value_aux / value_and_grad_aux / vmap_*_aux methods return a
+          conforming primal aux pytree and log only fields selected by save tokens.
+5.22b[P0] With an aux token enabled, every standard value-bearing method uses
+          objective_function_aux as its primal and logs one selected diagnostics
+          pytree without changing its public return signature.
+5.22c[P0] grad / hessian / vmap_grad / vmap_hessian use only the scalar objective,
+          never evaluate objective_function_aux, and append None to every enabled
+          aux history.
+5.22d[P0] Every enabled aux history has one entry per logged call; manual logging
+          with aux=None also appends None. Disabled aux histories remain empty.
+5.22e[P0] A non-batched aux token reduces aux from every batched value-bearing
+          call to its representative, including a batch of size 1 and structured
+          violations/power leaves.
+5.22f[P0] A batched_* aux token retains the leading batch axis when a batched
+          value-bearing call produces aux, including for a singleton batch.
+5.22g[P0] Without aux save tokens, standard value-bearing methods neither
+          evaluate the aux objective nor allocate aux history entries.
+5.22h[P0] Selecting an aux token for a problem without objective_function_aux
+          emits RuntimeWarning, preserves scalar value/grad behavior, and leaves
+          aux histories empty; explicit aux methods still raise RuntimeError.
+
 --- History tracking ---
 
 5.23 [P0] After start_logging() and several value() calls, loss_history
@@ -315,13 +339,15 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 
 5.48 [P1] eval_type_counts correctly distinguishes value-only (1), grad-only
           (2), value+grad (3), and batched variants (5, 6, 7).
-5.49 [P1] log_call_count equals the total number of _log_evals invocations.
+5.49 [P1] log_call_count equals the number of calls admitted into histories.
 
 --- log_evaluation (manual logging) ---
 
 5.50 [P0] log_evaluation(params, loss, grad) updates histories the same way
           as value_and_grad.
 5.51 [P0] log_evaluation respects budget enforcement.
+5.51a[P0] log_evaluation accepts optional aux; supplied diagnostics are stored and
+          omission appends aligned None entries to enabled aux histories.
 
 --- Reset ---
 
@@ -333,6 +359,10 @@ Nightly / manual: --run-slow and/or --run-gpu flags enable those markers.
 5.53 [P1] save_run_data creates a file on disk.
 5.54 [P1] load_run_data restores eval_count, loss_history, best_loss,
           best_params to the saved state.
+5.54a[P1] load_run_data adopts the checkpoint SaveConfig when constructor flags
+          differ, then a resumed evaluation can be saved and loaded again.
+5.54b[P1] Enabled legacy aux histories that are empty are backfilled with one
+          None entry per prior logged call, including batched calls.
 5.55 [P1] After load_run_data, time_elapsed continues from where it left off.
 5.56 [P1] save_to_file_every triggers periodic checkpoints at correct
           intervals.

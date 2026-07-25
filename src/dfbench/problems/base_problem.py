@@ -94,10 +94,11 @@ class OpticalSetupProblem(ContinuousProblem):
     """
 
     #: Opt-in flag: subclasses that compute a power-constraint penalty set this
-    #: to ``True`` so :meth:`set_penalty_fn` and the Objective aux path know the
-    #: problem actually has a penalty contract. ``VoyagerProblem`` and
-    #: ``VoyagerTuningProblem`` leave it ``False`` because they have no power
-    #: constraints, even though they inherit the method.
+    #: to ``True`` for penalty mutation and threshold APIs. Aux availability is
+    #: advertised separately by exposing ``objective_function_aux``.
+    #: ``VoyagerProblem`` and ``VoyagerTuningProblem`` leave this ``False``
+    #: because they have no power constraints, even though they inherit the
+    #: penalty methods.
     _supports_power_penalty: bool = False
 
     def __init__(
@@ -202,13 +203,16 @@ class OpticalSetupProblem(ContinuousProblem):
         }
 
     def set_penalty_fn(self, fn: Callable) -> None:
-        """Set the penalty function and rebuild the objective function.
+        """Set the penalty function and rebuild the objective callables.
 
         Updates ``_power_penalty_fn`` and re-traces the JIT-compiled
-        ``objective_function`` so the new penalty takes effect.
+        scalar and aux objectives exposed by the subclass so the new penalty
+        takes effect in both families.
 
-        Must be called before the problem is wrapped in a logging
-        ``Objective`` (or before ``Objective.start_logging()``).
+        Call this problem-level method directly only before wrapping the
+        problem in an ``Objective``. Once wrapped, call
+        ``Objective.set_penalty_fn()`` before ``Objective.start_logging()`` so
+        the wrapper also rebinds its cached callables.
 
         Raises:
             RuntimeError: If this problem does not opt into the power-penalty
@@ -226,11 +230,11 @@ class OpticalSetupProblem(ContinuousProblem):
 
     @abstractmethod
     def _build_objective_function(self) -> None:
-        """(Re)build and assign the JIT-compiled ``objective_function``.
+        """(Re)build and assign the JIT-compiled objective callable family.
 
-        Subclasses define their closed-over objective here. Called both
-        from ``__init__`` and from ``set_penalty_fn`` so the compiled
-        function picks up the current ``_power_penalty_fn``.
+        Subclasses define their closed-over scalar objective and, when
+        supported, aux objective here. Called from ``__init__`` and
+        ``set_penalty_fn`` so both pick up the current ``_power_penalty_fn``.
         """
 
     def _calculate_loss(self, sensitivities, reference_sensitivities, powers):

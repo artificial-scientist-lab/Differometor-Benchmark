@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-07-25
+
+### Added
+- Real `ConstrainedVoyagerProblem` smoke scripts covering scalar and explicit aux logging, reduced and full-batch aux (including singleton batches), manual logging and budget rejection, NPZ/JSON checkpoint round-trips, unbounded mode, and every scalar/batched second-order path.
+- Aux contract regressions for all standard value-bearing methods, every derivative-only method, explicit aux methods, manual aux input, unsupported problems, singleton batch reduction/retention, disabled aux storage, and atomic budget rejection.
+
+### Changed
+- Condensed Objective evaluation binding and logging so value-bearing methods carry one primal aux pytree directly into `_log(..., aux=aux)` when aux storage is selected, without changing their public return signatures or running a second forward pass.
+- Gradient-only and Hessian-only methods now always differentiate the scalar objective, never evaluate or persist aux derivatives, and append aligned `None` entries to enabled aux histories.
+- Reworked scalar and batched Hessian materialization around linearized gradient transforms; combined value/gradient/Hessian calls retain primal aux while derivative-only Hessian calls remain aux-free.
+- Simplified `SaveConfig` token expansion, aux-selection queries, serialization, and mismatch detection. Aux and standard histories are documented as one entry per admitted logged call rather than per individual batch member.
+- Manual `log_evaluation` accepts an optional aux pytree and persists only fields selected by save tokens; omitting aux preserves history alignment with `None`.
+- Checkpoint resume adopts the stored `SaveConfig`, preserving one history schema for the lifetime of a run and backfilling missing legacy aux histories with aligned `None` entries.
+
+### Fixed
+- Singleton `vmap_*` calls are recognized as batched by rank, so reduced aux drops the leading size-one axis while `batched_*` aux retains it.
+- Removed transformed-function side-effect stashing for aux, preventing stale or missing diagnostics across JIT and vmap paths.
+- Aux save tokens on a problem without `objective_function_aux` now warn and leave automatic aux logging disabled; explicit aux methods still fail clearly.
+- Preserved the public `SaveConfig.from_dict(d=...)` keyword while retaining legacy field-name compatibility.
+- Budget-rejected batches no longer partially mutate loss, parameter, derivative, aux, or timestamp histories.
+- Penalty rebinding refreshes both scalar and aux objective families, while derivative-only calls and no-aux runs avoid aux-computation overhead.
+
+### Documentation
+- Synchronized README, Objective API, architecture, problem, algorithm-authoring, storage/checkpointing, source docstrings, comments, and the behavior catalog with the implemented aux and logged-call contracts.
+- Corrected the documented `ConstrainedVoyagerProblem.n_frequencies` default from 100 to 50.
+
 ## [0.3.1] - 2026-07-23
 
 ### Fixed
@@ -67,7 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - CI via GitHub Actions (tests, pre-commit, conventional-commit PR check).
 - `Objective.set_penalty_fn` for swapping the penalty function post-construction.
-- Aux diagnostics: `power_thresholds`, `_supports_power_penalty` opt-in, and auto-logging of aux from standard eval methods when save tokens are enabled.
+- Aux diagnostics: `power_thresholds`, penalty mutation opt-in through `_supports_power_penalty`, `objective_function_aux` support, and auto-logging of aux from standard value-bearing evaluation methods when save tokens are enabled; derivative-only calls add aligned `None` placeholders.
 - `max_evals` and `max_time` as public properties.
 - `checkpoint_format` and `checkpoint_dir` as user-facing storage knobs.
 - Reconstructive `ProblemSpec` contract with `validate_spec_round_trip` and round-trip tests.

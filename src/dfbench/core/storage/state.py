@@ -101,14 +101,16 @@ class RunState:
 
     The aux histories (``sensitivity_loss_history``, ``penalty_history``,
     ``is_feasible_history``, ``violations_history``, and the three
-    ``power_*_history`` fields) are populated only when the matching
-    :class:`~dfbench.core.storage.saveconfig.SaveConfig` token is enabled
-    and the run used the ``value_aux`` / ``vmap_value_aux`` methods. They
-    are kept as separate leaf arrays rather than a dict so both the NPZ
-    and JSON serializers can encode them without pickling.
+    ``power_*_history`` fields) are populated when the matching
+    :class:`~dfbench.core.storage.saveconfig.SaveConfig` token is enabled.
+    Value-bearing standard and explicit aux calls store diagnostics; calls
+    without aux store ``None`` for alignment. The fields are separate leaf
+    arrays rather than a dict so both the NPZ and JSON serializers can encode
+    them without pickling a nested mapping.
     """
 
-    # Aligned histories (all length == log_call_count, modulo placeholders)
+    # Current Objective states align every non-empty enabled history to
+    # log_call_count; legacy reduced states may use eval_count as a fallback.
     loss_history: np.ndarray
     grad_history: np.ndarray
     hessian_history: np.ndarray
@@ -134,10 +136,9 @@ class RunState:
     best_eval_index: int | None = None
     best_batch_index: int | None = None
 
-    # Aux diagnostics histories (aligned with the histories above; empty
-    # when the corresponding save token was not enabled or no aux eval ran).
-    # Kept as separate leaf arrays rather than a dict so both NPZ and JSON
-    # serializers can encode them without pickling.
+    # Aux diagnostics histories. A disabled field is empty; an enabled field
+    # has one entry per logged call and uses None when that call produced no
+    # aux. Kept as separate leaves so serializers need not encode a nested dict.
     sensitivity_loss_history: np.ndarray = field(default_factory=_empty_object_array)
     penalty_history: np.ndarray = field(default_factory=_empty_object_array)
     is_feasible_history: np.ndarray = field(default_factory=_empty_object_array)
@@ -290,7 +291,7 @@ def _check_structural(state: RunState) -> list[RunStateValidationError]:
             )
         )
 
-    # A2: the six aligned histories are numpy arrays. NumPy collapses
+    # A2: all 13 history fields are numpy arrays. NumPy collapses
     # uniform-shape object arrays to N-D numeric arrays (e.g. a grad
     # history of five (2,)-vectors becomes shape (5, 2)), so we only
     # require an ndarray; A3 checks the *first* axis is the time axis.

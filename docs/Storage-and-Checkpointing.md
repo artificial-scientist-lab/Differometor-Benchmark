@@ -70,14 +70,23 @@ CheckpointManager          <- the only facade Objective talks to
 | `grad_history` | `np.ndarray` | Aligned gradient history |
 | `hessian_history` | `np.ndarray` | Aligned Hessian history |
 | `params_history` | `np.ndarray` | Aligned parameter history (raw space) |
-| `eval_type_history` | `np.ndarray` | Per-eval bitmask call type |
-| `time_steps` | `np.ndarray` | Elapsed-time stamps aligned with histories |
+| `eval_type_history` | `np.ndarray` | One call-type bitmask per logged call when enabled |
+| `time_steps` | `np.ndarray` | Elapsed-time stamps for admitted logged calls when enabled |
+| `sensitivity_loss_history` | `np.ndarray` | Selected aux sensitivity losses; `None` for calls without aux |
+| `penalty_history` | `np.ndarray` | Selected aux penalties; `None` for calls without aux |
+| `is_feasible_history` | `np.ndarray` | Selected aux feasibility flags; `None` for calls without aux |
+| `violations_history` | `np.ndarray` | Selected aux violation arrays; `None` for calls without aux |
+| `power_hard_history` | `np.ndarray` | Selected aux hard-group powers; `None` for calls without aux |
+| `power_soft_history` | `np.ndarray` | Selected aux soft-group powers; `None` for calls without aux |
+| `power_detector_history` | `np.ndarray` | Selected aux detector powers; `None` for calls without aux |
 | `eval_count` | `int` | Total evaluations |
 | `best_loss` | `float` | Lowest loss observed |
 | `best_params` | `np.ndarray` | Parameters at `best_loss` (float64; empty if none) |
+| `best_eval_index` | `int \| None` | Logged-call index containing `best_loss` |
+| `best_batch_index` | `int \| None` | Winning within-batch index, if applicable |
 | `improvement_count` | `int` | Times `best_loss` was improved |
 | `evals_since_improvement` | `int` | Evaluations since last improvement |
-| `log_call_count` | `int` | Number of internal `_log_evals` invocations |
+| `log_call_count` | `int` | Number of calls admitted into the histories |
 | `eval_type_counts` | `dict[int, int]` | Distribution of eval call types |
 | `metadata` | `RunMetadata` | Record with run identity + problem spec |
 
@@ -324,6 +333,14 @@ CheckpointManager(..., validate_on_save=False, validate_on_load=False)
 
 The first `save()` without explicit overrides caches the computed path. Subsequent saves without overrides overwrite the same file. Passing `explicit_path` or `hyper_param_str` bypasses the cache. `load()` caches the loaded path, so a resume-then-save cycle overwrites the same file.
 
+`SaveConfig` is part of the persistent run identity. When `Objective.load_run_data()`
+loads a checkpoint whose save configuration differs from the constructor, it
+emits `RuntimeWarning` and adopts the checkpoint configuration before restoring
+state. This prevents enabled histories from changing halfway through a run.
+When the problem supports aux logging, legacy checkpoints that advertise an
+enabled aux history but store no array for it are aligned with `None` entries up
+to `log_call_count` before evaluation resumes.
+
 ### `tick`: periodic checkpointing
 
 `tick` is called by `Objective._log_to_file` after each evaluation. The manager checks the cadence (`save_every`); if a checkpoint is due, it lazily calls `state_factory` to build a `RunState`, saves it, and returns the wall-clock duration of the save. The `Objective` then advances `_start_time` by that duration, so the checkpoint write does not consume wall-clock budget. If no checkpoint is due, `tick` returns `0.0` and `state_factory` is never called.
@@ -344,7 +361,7 @@ The storage components remain modular and individually testable (see the section
 
 ## `RunState` invariant contract
 
-A `RunState` is the scoring contract: every metric the competition computes derives from one. A buggy or adversarial submitter algorithm can produce a state whose fields disagree (e.g. `best_loss` doesn't match `loss_history`, or a history length diverges from `eval_count`). Without a gate, that mismatch surfaces as a crash deep inside a serializer or the scoring layer, with no clean rejection path.
+A `RunState` is the scoring contract: every metric the competition computes derives from one. A buggy or adversarial submitter algorithm can produce a state whose fields disagree (e.g. `best_loss` doesn't match `loss_history`, or a non-empty history length diverges from `log_call_count`). Without a gate, that mismatch surfaces as a crash deep inside a serializer or the scoring layer, with no clean rejection path.
 
 `validate_run_state(state, *, strict=True) -> ValidationReport` is the gate. It is a pure function: no I/O, and it does not raise on a malformed state. It collects every violation, so a rejection report lists all problems in one pass rather than one at a time.
 
@@ -365,7 +382,7 @@ if not report.ok:
 
 | Tier | Checks | When |
 |------|--------|------|
-| **Structural (A)** | Types, shapes, ranges: `eval_count` is a non-negative int; the six histories are `np.ndarray` (first axis = time; N-D allowed since NumPy collapses uniform object arrays); `best_params` is 1-D float64 or empty; `eval_type_counts` is a dict with int keys / non-negative int values; `metadata` is a `RunMetadata`; scalar counters are non-negative ints. A3: every non-empty history's first-axis length equals `eval_count`. Empty is allowed; it means that history was disabled by `SaveConfig` or dropped by `RunData.to_run_state`. | Always |
+| **Structural (A)** | Types, shapes, ranges: `eval_count` is a non-negative int; all 13 history fields are `np.ndarray` (first axis = logged call; N-D allowed since NumPy collapses uniform object arrays); `best_params` is 1-D float64 or empty; `eval_type_counts` is a dict with int keys / non-negative int values; `metadata` is a `RunMetadata`; scalar counters are non-negative ints. A3: every non-empty history's first-axis length equals `log_call_count`. Empty is allowed; it means that history was disabled by `SaveConfig` or dropped by `RunData.to_run_state`. Legacy reduced states whose `log_call_count` is zero fall back to `eval_count`. | Always |
 | **Semantic (B)** | Cross-field consistency, skipped when `strict=False`: `best_loss` is finite iff a non-NaN loss was recorded (grad-only / hessian-only calls increment `eval_count` and append NaN to `loss_history` without updating `best_loss`, so `best_loss == inf` with `eval_count > 0` is legal); `best_loss == nanmin(loss_history)` within `1e-9`; `sum(eval_type_counts.values()) == log_call_count`; `improvement_count <= log_call_count`; `evals_since_improvement <= eval_count`. | `strict=True` only |
 
 The on-disk `format_version` is not re-checked here. It is already enforced at deserialization (`RunMetadata.from_dict` and each serializer's `deserialize`), and a constructed `RunMetadata` always reports `FORMAT_VERSION` via `to_dict`, so a future-version metadata cannot exist by construction.
@@ -374,7 +391,7 @@ The on-disk `format_version` is not re-checked here. It is already enforced at d
 
 These are deliberately out of scope for the current contract; see plan #2 for the rationale:
 
-- NaN inside histories (legal placeholder for missing grad/hessian/params when a `SaveConfig` flag is off).
+- Placeholder contents are not semantically validated. `loss_history` uses NaN when a derivative-only call has no returned loss; enabled standard or aux histories use `None` when that result is absent; disabled histories are empty.
 - Batched-array internal shapes (expensive, fragile).
 - `metadata.extra["problem_spec"]` contents. Validated at construction by `ProblemSpec.__post_init__` (type/version/params shape) and at reconstruction by `build_problem_from_spec` (registry lookup). The `RunState` validator itself does not re-check the spec.
 - `SaveConfig` internal coherence (e.g. `grad=True` vs `batched_grad=False`). Belongs to `SaveConfig`.

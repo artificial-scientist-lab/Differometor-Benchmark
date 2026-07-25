@@ -36,7 +36,7 @@ class ConstrainedVoyagerProblem(OpticalSetupProblem):
 
         Args:
             n_frequencies (int): Number of frequency points for sensitivity calculation.
-                Defaults to 100.
+                Defaults to 50.
             power_penalty_fn: A callable ``fn(value, threshold) -> penalty`` applied
                 per-element to compute power-constraint violations.  Built-in
                 options are ``squashed_relu_penalty`` (default),

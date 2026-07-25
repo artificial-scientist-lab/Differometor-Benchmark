@@ -271,19 +271,38 @@ while not obj.budget_exceeded:
 | `obj.vmap_hessian(batch)` | Batched second-order optimization | batch hessians, batch params |
 | `obj.vmap_value_grad_and_hessian(batch)` | Batched second-order optimization | batch losses, grads, hessians, params |
 | `obj.value_function(...)` | Raw JAX callable for custom JIT loops | nothing; use `log_evaluation` afterwards |
-| `obj.log_evaluation(...)` | Custom JIT'd loop | whatever you pass, including optional Hessians |
+| `obj.value_function_aux(...)` | Raw `(loss, aux)` JAX callable for custom JIT loops | nothing; use `log_evaluation` afterwards |
+| `obj.log_evaluation(...)` | Custom JIT'd loop | supplied values; aux only for matching save tokens |
 
-**Important:** `obj.grad()` and `obj.hessian()` do **not** log a loss value. If you need the loss too, use `obj.value_and_grad()` or `obj.value_grad_and_hessian()`.
+**Important:** `obj.grad()` and `obj.hessian()` do **not** log a loss value or produce aux diagnostics. If aux histories are enabled, derivative-only methods append aligned `None` entries. With an aux save token, `obj.value_and_grad()` and `obj.value_grad_and_hessian()` auto-log primal aux while retaining their standard return signatures. Use `obj.value_and_grad_aux()` when the algorithm itself must receive aux.
 
 ### Custom JIT-compiled loops with `log_evaluation()`
 
 Some optimizers (e.g. Optax's L-BFGS) need to call `value_and_grad` *inside* a JIT-compiled function, for instance because the optimizer's line-search requires the raw value function. In that case you can't use `obj.value_and_grad()` (which has Python-side logging). Instead:
 
-1. Get an unlogged raw value function from `obj.value_function(...)`
+1. Get an unlogged scalar callable from `obj.value_function(...)`, or an aux-aware callable from `obj.value_function_aux(...)` whose invocation yields `(loss, aux)`
 2. Build your own JIT-compiled step
-3. After each step, call `obj.log_evaluation(params, loss, grad, hessian=None)` to record the results
+3. After each step, call `obj.log_evaluation(params, loss, grad, hessian=None, aux=None)` to record the results
 
-`obj.value_function(unbounded=None)` follows the Objective's active space mode by default. Pass `unbounded=True` when the JIT loop works in unbounded coordinates and needs Objective's mapping into problem bounds; pass `unbounded=False` for bounded coordinates. The callable deliberately does not log anything.
+`obj.value_function(unbounded=None)` follows the Objective's active space mode by default. Pass `unbounded=True` when the JIT loop works in unbounded coordinates and needs Objective's mapping into problem bounds; pass `unbounded=False` for bounded coordinates. `obj.value_function_aux(...)` follows the same mapping rules and returns an unlogged callable whose invocation yields `(loss, aux)`, or `None` when the problem has no aux objective. Neither callable logs anything.
+
+`log_evaluation()` never computes missing aux diagnostics. If the Objective has aux save tokens and the custom loop does not pass `aux`, each selected aux history receives `None` for that call. A custom loop that already computed a conforming aux pytree may pass it explicitly.
+
+To compute mapped aux inside the custom loop, preserve it as auxiliary output during differentiation:
+
+```python
+value_aux_fn = obj.value_function_aux()
+if value_aux_fn is None:
+    raise RuntimeError("this problem has no aux objective")
+value_and_grad_aux_fn = jax.jit(jax.value_and_grad(value_aux_fn, has_aux=True))
+
+_ = value_and_grad_aux_fn(params)  # JIT warmup before timing
+obj.start_logging()
+(loss, aux), grads = value_and_grad_aux_fn(params)
+obj.log_evaluation(params, loss, grads, aux=aux)
+```
+
+Only aux fields selected in the Objective's `save` configuration are persisted.
 
 ```python
 # Get the raw function for JIT compilation
