@@ -105,13 +105,16 @@ class TestSetPenaltyFn:
 
     def test_set_penalty_fn_takes_effect(self, problem):
         """Switching to zero_penalty removes the penalty term from the loss."""
-        obj = Objective(problem)
         params = jnp.array([0.0, 0.0])  # zero base loss -> loss == penalty
 
-        default_loss = float(obj.value(params))
+        default_obj = Objective(_PenaltyStubProblem())
+        default_obj.start_logging()
+        default_loss = float(default_obj.value(params))
         assert default_loss > 0.0  # squashed_relu produces a penalty
 
+        obj = Objective(problem)
         obj.set_penalty_fn(zero_penalty)
+        obj.start_logging()
         zero_loss = float(obj.value(params))
         assert zero_loss == pytest.approx(0.0)
 
@@ -127,6 +130,7 @@ class TestSetPenaltyFn:
         params = jnp.array([0.5, -0.5])
 
         obj.set_penalty_fn(zero_penalty)
+        obj.start_logging()
         grad_zero = np.array(obj.grad(params))
 
         np.testing.assert_allclose(grad_zero, np.array([1.0, -1.0]), atol=1e-6)
@@ -145,13 +149,16 @@ class TestSetPenaltyFn:
 
     def test_set_penalty_fn_composes_with_set_space_mode(self, problem):
         """Order independence: both rebinds apply before start_logging."""
-        obj = Objective(problem, unbounded=False)
         params = jnp.array([0.0, 0.0])
 
-        loss_bounded = float(obj.value(params))
+        bounded_obj = Objective(_PenaltyStubProblem(), unbounded=False)
+        bounded_obj.start_logging()
+        loss_bounded = float(bounded_obj.value(params))
 
+        obj = Objective(problem, unbounded=False)
         obj.set_penalty_fn(zero_penalty)
         obj.set_space_mode(True)
+        obj.start_logging()
         loss_composed = float(obj.value(params))
 
         # In unbounded space the params are sigmoid-mapped away from the
@@ -162,13 +169,16 @@ class TestSetPenaltyFn:
 
     def test_set_penalty_fn_relu_differs_from_squashed(self, problem):
         """relu_penalty and squashed_relu_penalty give different magnitudes."""
-        obj = Objective(problem)
         params = jnp.array([0.0, 0.0])
 
-        obj.set_penalty_fn(squashed_relu_penalty)
-        squashed_loss = float(obj.value(params))
+        squashed_obj = Objective(_PenaltyStubProblem())
+        squashed_obj.set_penalty_fn(squashed_relu_penalty)
+        squashed_obj.start_logging()
+        squashed_loss = float(squashed_obj.value(params))
 
+        obj = Objective(problem)
         obj.set_penalty_fn(relu_penalty)
+        obj.start_logging()
         relu_loss = float(obj.value(params))
 
         # relu is unbounded; squashed saturates below 1 per element.
@@ -335,6 +345,7 @@ class TestObjectiveFunctionAux:
 class TestObjectiveValueAux:
     def test_value_aux_returns_loss_and_aux(self, problem):
         obj = Objective(problem)
+        obj.start_logging()
         params = jnp.array([0.0, 0.0])
         loss, aux = obj.value_aux(params)
         assert float(loss) == pytest.approx(
@@ -357,6 +368,7 @@ class TestObjectiveValueAux:
 
     def test_value_aux_raises_on_unsupported_problem(self, mock_problem):
         obj = Objective(mock_problem)
+        obj.start_logging()
         with pytest.raises(RuntimeError, match="does not expose"):
             obj.value_aux(jnp.array([0.0, 0.0]))
 
@@ -378,11 +390,13 @@ class TestObjectiveValueAux:
 
     def test_value_and_grad_aux_raises_on_unsupported(self, mock_problem):
         obj = Objective(mock_problem)
+        obj.start_logging()
         with pytest.raises(RuntimeError, match="does not expose"):
             obj.value_and_grad_aux(jnp.array([0.0, 0.0]))
 
     def test_vmap_value_aux_batched_aux_pytree(self, problem):
         obj = Objective(problem)
+        obj.start_logging()
         params = jnp.array([[0.0, 0.0], [0.3, -0.2], [1.0, 1.0]])
         losses, aux = obj.vmap_value_aux(params)
         assert losses.shape == (3,)
@@ -397,6 +411,7 @@ class TestObjectiveValueAux:
 
     def test_vmap_value_aux_raises_on_unsupported(self, mock_problem):
         obj = Objective(mock_problem)
+        obj.start_logging()
         params = jnp.zeros((2, mock_problem._n_params))
         with pytest.raises(RuntimeError, match="does not expose"):
             obj.vmap_value_aux(params)

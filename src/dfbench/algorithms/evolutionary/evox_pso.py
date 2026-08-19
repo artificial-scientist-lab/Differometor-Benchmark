@@ -180,12 +180,10 @@ class EvoxPSO(OptimizationAlgorithm):
             monitor=monitor,
         )
 
-        # Initialize workflow BEFORE starting the timer
-        # This does JIT compilation and initial population evaluation
-        # We start logging AFTER this so init overhead doesn't count against time budget
-        workflow.init_step()
-
+        # EvoX init_step evaluates the initial population, so it belongs to
+        # the timed and logged lifecycle.
         obj.start_logging()
+        workflow.init_step()
 
         # Run generations
         iteration = 0

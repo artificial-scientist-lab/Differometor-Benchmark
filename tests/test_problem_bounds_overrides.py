@@ -23,8 +23,8 @@ from dfbench.problems.base_problem import (
 class _StubProblem(OpticalSetupProblem):
     """Minimal concrete subclass for unit-testing base-class helpers."""
 
-    def __init__(self):
-        super().__init__(name="stub", n_frequencies=10)
+    def __init__(self, signal_floor: float = 1e-20):
+        super().__init__(name="stub", n_frequencies=10, signal_floor=signal_floor)
         self._build_objective_function()
 
     def _build_objective_function(self) -> None:
@@ -95,6 +95,13 @@ class TestApplyPropertyBoundsOverrides:
             problem._apply_property_bounds_overrides(
                 default, bounds_overrides={"nonexistent": (-0.5, 0.5)}
             )
+
+
+def test_base_problem_spec_includes_signal_floor():
+    """The reconstructive spec preserves an objective-affecting signal floor."""
+    problem = _StubProblem(signal_floor=3e-12)
+
+    assert problem.to_spec()["signal_floor"] == 3e-12
 
 
 # ======================================================================

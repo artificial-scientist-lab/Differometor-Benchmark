@@ -261,6 +261,12 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
         )
         adam_state = adam_opt.init(params)
 
+        # Compile the regular Objective path outside the timed region. The raw
+        # callable used by the custom L-BFGS step is exposed only after logging
+        # starts, so compilation of that custom step is benchmarked.
+        obj.warmup_value_and_grad()
+        obj.start_logging()
+
         value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
         lbfgs_opt = optax.lbfgs(**lbfgs_kwargs)
@@ -280,11 +286,9 @@ class AdamToLBFGSJAX(OptimizationAlgorithm):
             new_p = optax.apply_updates(p, updates)
             return new_p, new_state, loss, grad
 
-        obj.warmup_value_and_grad()
         warm_state = lbfgs_opt.init(params)
         _, warm_state, _, _ = _lbfgs_step(params, warm_state)
         _ = _lbfgs_step(params, warm_state)
-        obj.start_logging()
 
         # Stage 1: Adam exploration
         # Use Objective's tightest-budget fraction so this works uniformly for

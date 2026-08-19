@@ -324,6 +324,9 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
         )
 
         x0 = np.asarray(self._resolve_init_params(obj, init_params), dtype=float)
+        # Building and warming the custom SciPy adapter requires the raw
+        # callable, which is exposed only during the timed lifecycle.
+        obj.start_logging()
         adapter = SciPyObjectiveAdapter(
             obj,
             SciPyConfig(
@@ -361,8 +364,6 @@ class ScipyMinimizeAlgorithm(OptimizationAlgorithm):
             minimize_kwargs["hess"] = adapter.hess
         elif adapter.config.hessian_update_strategy is not None:
             minimize_kwargs["hess"] = adapter.config.hessian_update_strategy
-
-        obj.start_logging()
 
         restart_count = 0
         while not obj.budget_exceeded:

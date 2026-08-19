@@ -1,5 +1,6 @@
 import time
 import warnings
+from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -133,7 +134,12 @@ class Objective:
     +------------------------------------+---------------------------------------------------+
     | ``n_params``                       | Number of optimisable parameters.                 |
     +------------------------------------+---------------------------------------------------+
+    | ``optimization_pairs``             | Component/property context for each parameter.    |
+    +------------------------------------+---------------------------------------------------+
     | ``problem_name``                   | Display name of the wrapped problem.              |
+    +------------------------------------+---------------------------------------------------+
+    | ``problem_spec``                   | JSON-safe typed spec for reconstructing the       |
+    |                                    | wrapped problem.                                  |
     +------------------------------------+---------------------------------------------------+
     | ``eval_count``                     | Total evaluations so far.                         |
     +------------------------------------+---------------------------------------------------+
@@ -509,14 +515,16 @@ class Objective:
             return self._inverse_unit_mapping_vmap(normalized)
         return self._inverse_sigmoid_bounding(params, self._problem.bounds)
 
-    def value_function(self, *, unbounded: bool | None = None) -> Callable:
-        """Return an unlogged JAX-compatible scalar value function.
+    def _require_logging_started(self, operation: str) -> None:
+        """Require the timed/logged lifecycle before exposing evaluation results."""
+        if self._start_time is None:
+            raise RuntimeError(
+                f"{operation} requires start_logging() to be called first. "
+                "Use warmup_*() for unlogged JAX compilation before logging."
+            )
 
-        Args:
-            unbounded: If True, map unbounded params to bounded space before
-                calling the problem objective. If False, call the problem
-                objective directly. None uses the Objective's active mode.
-        """
+    def _make_value_function(self, *, unbounded: bool | None = None) -> Callable:
+        """Build the raw scalar callable used by binding and the public getter."""
         use_unbounded = self.unbounded if unbounded is None else unbounded
         if use_unbounded:
 
@@ -527,20 +535,24 @@ class Objective:
             return _unbounded_value
         return self._problem.objective_function
 
-    def value_function_aux(self, *, unbounded: bool | None = None) -> Callable | None:
-        """Return an unlogged JAX-compatible ``(loss, aux)`` value function.
+    def value_function(self, *, unbounded: bool | None = None) -> Callable:
+        """Return an unlogged JAX-compatible scalar value function.
 
-        Mirrors :meth:`value_function` but calls the wrapped problem's
-        ``objective_function_aux``. Returns ``None`` when the problem does
-        not expose an aux objective. Explicit ``*_aux`` methods translate
-        that into a clear ``RuntimeError``. Selecting an aux save token on
-        such a problem emits a warning and leaves automatic aux logging off.
+        Logging must already be active. Use the dedicated ``warmup_*`` methods
+        for compilation before :meth:`start_logging`.
 
         Args:
             unbounded: If True, map unbounded params to bounded space before
-                calling the problem aux objective. If False, call it
-                directly. None uses the Objective's active mode.
+                calling the problem objective. If False, call the problem
+                objective directly. None uses the Objective's active mode.
         """
+        self._require_logging_started("value_function()")
+        return self._make_value_function(unbounded=unbounded)
+
+    def _make_value_function_aux(
+        self, *, unbounded: bool | None = None
+    ) -> Callable | None:
+        """Build the raw aux callable used by binding and the public getter."""
         aux_fn = getattr(self._problem, "objective_function_aux", None)
         if aux_fn is None:
             return None
@@ -553,6 +565,26 @@ class Objective:
 
             return _unbounded_value_aux
         return aux_fn
+
+    def value_function_aux(self, *, unbounded: bool | None = None) -> Callable | None:
+        """Return an unlogged JAX-compatible ``(loss, aux)`` value function.
+
+        Logging must already be active. Use the dedicated ``warmup_*`` methods
+        for compilation before :meth:`start_logging`.
+
+        Mirrors :meth:`value_function` but calls the wrapped problem's
+        ``objective_function_aux``. Returns ``None`` when the problem does
+        not expose an aux objective. Explicit ``*_aux`` methods translate
+        that into a clear ``RuntimeError``. Selecting an aux save token on
+        such a problem emits a warning and leaves automatic aux logging off.
+
+        Args:
+            unbounded: If True, map unbounded params to bounded space before
+                calling the problem aux objective. If False, call it
+                directly. None uses the Objective's active mode.
+        """
+        self._require_logging_started("value_function_aux()")
+        return self._make_value_function_aux(unbounded=unbounded)
 
     def _bind_evaluation_functions(self) -> None:
         """Bind scalar derivative transforms and the selected value family.
@@ -568,8 +600,8 @@ class Objective:
         explicit ``*_aux`` methods remain available on demand. Unsupported aux
         selections warn and fall back to the same scalar path.
         """
-        self._func = self.value_function()
-        self._func_aux = self.value_function_aux()
+        self._func = self._make_value_function()
+        self._func_aux = self._make_value_function_aux()
         self._aux_log_specs = tuple(
             (path, history_name, self._save_config.wants_batched_aux(field))
             for path, history_name, field in self._AUX_HISTORY_SPECS
@@ -797,9 +829,29 @@ class Objective:
             raise ValueError("Cannot determine n_params for unbounded objective.")
 
     @property
+    def optimization_pairs(self) -> list[Any]:
+        """Component/property context aligned with parameter indices.
+
+        Standard entries are ``(component_name, property_name)`` tuples. A
+        coupled parameter may contain a list of such tuples when one value
+        controls multiple component properties. A defensive copy is returned.
+        """
+        return deepcopy(self._problem.optimization_pairs)
+
+    @property
     def problem_name(self) -> str:
         """Display name of the wrapped problem (falls back to 'problem')."""
         return getattr(self._problem, "name", "problem")
+
+    @property
+    def problem_spec(self) -> dict[str, Any]:
+        """JSON-safe typed spec sufficient to reconstruct the wrapped problem.
+
+        The returned mapping has ``type``, ``version``, and ``params`` keys and
+        contains problem configuration only. It does not contain optimization
+        histories or results. A fresh mapping is produced on every access.
+        """
+        return self._problem.to_problem_spec().to_dict()
 
     @property
     def penalty_fn(self) -> Callable | None:
@@ -1893,24 +1945,26 @@ class Objective:
 
     def warmup_value(self) -> None:
         """Warm up ``value()`` twice on deterministic params without logging."""
-        self._warmup_twice(self.value, self._deterministic_warmup_params()[0])
+        self._warmup_twice(self._value_func, self._deterministic_warmup_params()[0])
 
     def warmup_grad(self) -> None:
         """Warm up ``grad()`` twice on deterministic params without logging."""
-        self._warmup_twice(self.grad, self._deterministic_warmup_params()[0])
+        self._warmup_twice(self._grad_func, self._deterministic_warmup_params()[0])
 
     def warmup_hessian(self) -> None:
         """Warm up ``hessian()`` twice on deterministic params without logging."""
-        self._warmup_twice(self.hessian, self._deterministic_warmup_params()[0])
+        self._warmup_twice(self._hessian_func, self._deterministic_warmup_params()[0])
 
     def warmup_value_and_grad(self) -> None:
         """Warm up ``value_and_grad()`` twice on deterministic params."""
-        self._warmup_twice(self.value_and_grad, self._deterministic_warmup_params()[0])
+        self._warmup_twice(
+            self._value_and_grad_func, self._deterministic_warmup_params()[0]
+        )
 
     def warmup_value_grad_and_hessian(self) -> None:
         """Warm up ``value_grad_and_hessian()`` twice on deterministic params."""
         self._warmup_twice(
-            self.value_grad_and_hessian,
+            self._value_grad_and_hessian_func,
             self._deterministic_warmup_params()[0],
         )
 
@@ -1921,7 +1975,7 @@ class Objective:
             batch_size: Number of samples in the warmup batch. Defaults to 2.
         """
         self._warmup_twice(
-            self.vmap_value,
+            self._vmap_func,
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
@@ -1932,7 +1986,7 @@ class Objective:
             batch_size: Number of samples in the warmup batch. Defaults to 2.
         """
         self._warmup_twice(
-            self.vmap_grad,
+            self._vmap_grad_func,
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
@@ -1943,7 +1997,7 @@ class Objective:
             batch_size: Number of samples in the warmup batch. Defaults to 2.
         """
         self._warmup_twice(
-            self.vmap_hessian,
+            self._vmap_hessian_func,
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
@@ -1954,7 +2008,7 @@ class Objective:
             batch_size: Number of samples in the warmup batch. Defaults to 2.
         """
         self._warmup_twice(
-            self.vmap_value_and_grad,
+            self._vmap_value_and_grad_func,
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
@@ -1965,7 +2019,7 @@ class Objective:
             batch_size: Number of samples in the warmup batch. Defaults to 2.
         """
         self._warmup_twice(
-            self.vmap_value_grad_and_hessian,
+            self._vmap_value_grad_and_hessian_func,
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
@@ -1982,7 +2036,8 @@ class Objective:
                     f"{type(self._problem).__name__} has no aux objective; skipping."
                 )
             return
-        self._warmup_twice(self.value_aux, self._deterministic_warmup_params()[0])
+        assert self._value_aux_func is not None
+        self._warmup_twice(self._value_aux_func, self._deterministic_warmup_params()[0])
 
     def warmup_value_and_grad_aux(self) -> None:
         """Warm up ``value_and_grad_aux()`` twice on deterministic params.
@@ -1998,7 +2053,7 @@ class Objective:
                 )
             return
         self._warmup_twice(
-            self.value_and_grad_aux, self._deterministic_warmup_params()[0]
+            self._value_and_grad_aux_func, self._deterministic_warmup_params()[0]
         )
 
     def warmup_vmap_value_aux(self, batch_size: int = 2) -> None:
@@ -2018,7 +2073,7 @@ class Objective:
                 )
             return
         self._warmup_twice(
-            self.vmap_value_aux,
+            self._vmap_func_aux,
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
@@ -2039,7 +2094,7 @@ class Objective:
                 )
             return
         self._warmup_twice(
-            self.vmap_value_and_grad_aux,
+            self._vmap_value_and_grad_aux_func,
             self._deterministic_warmup_params(n_samples=batch_size),
         )
 
@@ -2050,6 +2105,11 @@ class Objective:
         elapsed time (stored in ``_time_offset``) is absorbed into
         ``_start_time`` so that ``time_elapsed`` remains the single source of truth.
         """
+        if self._start_time is not None:
+            raise RuntimeError(
+                "start_logging() has already been called for this run. "
+                "Call reset() before starting a new run."
+            )
         self._start_time = time.time() - self._time_offset
         self._time_offset = 0.0
 
@@ -2069,16 +2129,19 @@ class Objective:
         run, omitting it records ``None`` for each selected aux history. This
         is also what gradient-only and Hessian-only Objective methods do.
         """
+        self._require_logging_started("log_evaluation()")
         self._log(params, loss, grad, hessian, aux=aux)
 
     def value(self, params: Float[Array, "n_params"]) -> Float:
         """Evaluate and log the objective value."""
+        self._require_logging_started("value()")
         loss, aux = self._value_func(params)
         self._log(params, loss, aux=aux)
         return loss
 
     def grad(self, params: Float[Array, "n_params"]) -> Float[Array, "n_params"]:
         """Compute and log the objective gradient without producing aux."""
+        self._require_logging_started("grad()")
         grad = self._grad_func(params)
         self._log(params, grad=grad)
         return grad
@@ -2087,6 +2150,7 @@ class Objective:
         self, params: Float[Array, "n_params"]
     ) -> Float[Array, "n_params n_params"]:
         """Compute and log the objective Hessian without producing aux."""
+        self._require_logging_started("hessian()")
         hessian = self._hessian_func(params)
         self._log(params, hessian=hessian)
         return hessian
@@ -2095,6 +2159,7 @@ class Objective:
         self, params: Float[Array, "n_params"]
     ) -> tuple[Float, Float[Array, "n_params"]]:
         """Compute and log value plus gradient in one transformed call."""
+        self._require_logging_started("value_and_grad()")
         (value, aux), grad = self._value_and_grad_func(params)
         self._log(params, value, grad, aux=aux)
         return value, grad
@@ -2103,6 +2168,7 @@ class Objective:
         self, params: Float[Array, "n_params"]
     ) -> tuple[Float, Float[Array, "n_params"], Float[Array, "n_params n_params"]]:
         """Compute and log value, gradient, and Hessian."""
+        self._require_logging_started("value_grad_and_hessian()")
         (value, aux), grad, hessian = self._value_grad_and_hessian_func(params)
         self._log(params, value, grad, hessian, aux=aux)
         return value, grad, hessian
@@ -2111,6 +2177,7 @@ class Objective:
         self, params: Float[Array, "batch n_params"]
     ) -> Float[Array, "batch"]:
         """Evaluate and log objective values for a parameter batch."""
+        self._require_logging_started("vmap_value()")
         losses, aux = self._vmap_func(params)
         self._log(params, losses, aux=aux)
         return losses
@@ -2119,6 +2186,7 @@ class Objective:
         self, params: Float[Array, "batch n_params"]
     ) -> Float[Array, "batch n_params"]:
         """Compute and log batched gradients without producing aux."""
+        self._require_logging_started("vmap_grad()")
         grads = self._vmap_grad_func(params)
         self._log(params, grad=grads)
         return grads
@@ -2127,6 +2195,7 @@ class Objective:
         self, params: Float[Array, "batch n_params"]
     ) -> Float[Array, "batch n_params n_params"]:
         """Compute and log batched Hessians without producing aux."""
+        self._require_logging_started("vmap_hessian()")
         hessians = self._vmap_hessian_func(params)
         self._log(params, hessian=hessians)
         return hessians
@@ -2135,6 +2204,7 @@ class Objective:
         self, params: Float[Array, "batch n_params"]
     ) -> tuple[Float[Array, "batch"], Float[Array, "batch n_params"]]:
         """Compute and log values plus gradients for a parameter batch."""
+        self._require_logging_started("vmap_value_and_grad()")
         (values, aux), grads = self._vmap_value_and_grad_func(params)
         self._log(params, values, grads, aux=aux)
         return values, grads
@@ -2147,6 +2217,7 @@ class Objective:
         Float[Array, "batch n_params n_params"],
     ]:
         """Compute and log values, gradients, and Hessians for a batch."""
+        self._require_logging_started("vmap_value_grad_and_hessian()")
         (values, aux), grads, hessians = self._vmap_value_grad_and_hessian_func(params)
         self._log(params, values, grads, hessians, aux=aux)
         return values, grads, hessians
@@ -2198,6 +2269,7 @@ class Objective:
 
     def value_aux(self, params: Float[Array, "n_params"]) -> tuple[Float, dict]:
         """Evaluate, return, and optionally persist ``(loss, aux)``."""
+        self._require_logging_started("value_aux()")
         self._require_aux()
         assert self._value_aux_func is not None
         loss, aux = self._value_aux_func(params)
@@ -2208,6 +2280,7 @@ class Objective:
         self, params: Float[Array, "n_params"]
     ) -> tuple[Float, Float[Array, "n_params"], dict]:
         """Evaluate value, gradient, and aux in one forward/backward pass."""
+        self._require_logging_started("value_and_grad_aux()")
         self._require_aux()
         assert self._value_and_grad_aux_func is not None
         (value, aux), grad = self._value_and_grad_aux_func(params)
@@ -2218,6 +2291,7 @@ class Objective:
         self, params: Float[Array, "batch n_params"]
     ) -> tuple[Float[Array, "batch"], dict]:
         """Evaluate and return batched values plus a batched aux pytree."""
+        self._require_logging_started("vmap_value_aux()")
         self._require_aux()
         assert self._vmap_func_aux is not None
         losses, aux = self._vmap_func_aux(params)
@@ -2228,6 +2302,7 @@ class Objective:
         self, params: Float[Array, "batch n_params"]
     ) -> tuple[Float[Array, "batch"], Float[Array, "batch n_params"], dict]:
         """Evaluate and return batched values, gradients, and aux."""
+        self._require_logging_started("vmap_value_and_grad_aux()")
         self._require_aux()
         assert self._vmap_value_and_grad_aux_func is not None
         (values, aux), grads = self._vmap_value_and_grad_aux_func(params)

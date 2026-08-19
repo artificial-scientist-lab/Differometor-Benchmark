@@ -40,6 +40,22 @@ class TestConstruction:
         """5.3 n_params matches problem."""
         assert seeded_obj.n_params == mock_problem.n_params
 
+    def test_optimization_pairs_are_available_before_logging(self, mock_problem):
+        """Parameter context is public metadata aligned with parameter indices."""
+        obj = Objective(mock_problem)
+        assert obj.optimization_pairs == [
+            ("comp_0", "param"),
+            ("comp_1", "param"),
+        ]
+        assert len(obj.optimization_pairs) == obj.n_params
+
+    def test_optimization_pairs_returns_a_defensive_copy(self, mock_problem):
+        """Changing returned parameter context must not mutate the problem."""
+        obj = Objective(mock_problem)
+        pairs = obj.optimization_pairs
+        pairs[0] = ("changed", "changed")
+        assert obj.optimization_pairs[0] == ("comp_0", "param")
+
     def test_initial_state(self, mock_problem):
         """5.4 eval_count==0, best_loss is None, budget_exceeded is False."""
         obj = Objective(mock_problem)
@@ -111,6 +127,75 @@ class TestWarmup:
         obj.start_logging()
         with pytest.raises(RuntimeError):
             obj.warmup_value()
+
+
+# ======================================================================
+# Logging lifecycle
+# ======================================================================
+
+
+class TestLoggingLifecycle:
+    @pytest.mark.parametrize(
+        "operation",
+        [
+            lambda obj, p, batch: obj.value(p),
+            lambda obj, p, batch: obj.grad(p),
+            lambda obj, p, batch: obj.hessian(p),
+            lambda obj, p, batch: obj.value_and_grad(p),
+            lambda obj, p, batch: obj.value_grad_and_hessian(p),
+            lambda obj, p, batch: obj.vmap_value(batch),
+            lambda obj, p, batch: obj.vmap_grad(batch),
+            lambda obj, p, batch: obj.vmap_hessian(batch),
+            lambda obj, p, batch: obj.vmap_value_and_grad(batch),
+            lambda obj, p, batch: obj.vmap_value_grad_and_hessian(batch),
+            lambda obj, p, batch: obj.value_aux(p),
+            lambda obj, p, batch: obj.value_and_grad_aux(p),
+            lambda obj, p, batch: obj.vmap_value_aux(batch),
+            lambda obj, p, batch: obj.vmap_value_and_grad_aux(batch),
+            lambda obj, p, batch: obj.log_evaluation(p, jnp.float32(1.0)),
+        ],
+    )
+    def test_result_apis_raise_before_logging(self, mock_problem, operation):
+        """No evaluation result can be obtained or injected before timing starts."""
+        obj = Objective(mock_problem)
+        p = obj.random_params_bounded()
+        batch = obj.random_params_bounded(n_samples=2)
+        with pytest.raises(RuntimeError, match="start_logging"):
+            operation(obj, p, batch)
+        assert obj.eval_count == 0
+
+    def test_value_function_getters_raise_before_logging(self, mock_problem):
+        """Raw scalar and aux callables are unavailable before timing starts."""
+        obj = Objective(mock_problem)
+        with pytest.raises(RuntimeError, match="start_logging"):
+            obj.value_function()
+        with pytest.raises(RuntimeError, match="start_logging"):
+            obj.value_function_aux()
+
+    def test_guard_runs_before_objective_computation(self, mock_problem):
+        """A rejected value call must not execute the underlying objective."""
+        obj = Objective(mock_problem)
+        called = False
+
+        def must_not_run(params):
+            nonlocal called
+            called = True
+            return jnp.sum(params**2), None
+
+        obj._value_func = must_not_run
+        with pytest.raises(RuntimeError, match="start_logging"):
+            obj.value(jnp.zeros(obj.n_params))
+        assert called is False
+
+    def test_start_logging_cannot_restart_active_timer(self, mock_problem):
+        """Calling start twice cannot silently reset the benchmark clock."""
+        obj = Objective(mock_problem)
+        obj.start_logging()
+        with pytest.raises(RuntimeError, match="already been called"):
+            obj.start_logging()
+
+        obj.reset()
+        obj.start_logging()
 
 
 # ======================================================================

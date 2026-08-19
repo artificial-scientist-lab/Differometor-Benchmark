@@ -386,6 +386,11 @@ class MyAlgorithm(OptimizationAlgorithm):
 | `obj.value_function_aux(...)` | Raw aux-aware callable for custom JIT loops | nothing; use `log_evaluation` afterwards |
 | `obj.log_evaluation(...)` | Custom JIT'd loop | supplied values; aux only for matching save tokens |
 
+Evaluation methods, raw callable getters, and `log_evaluation()` require
+`start_logging()` first. Problem metadata (`bounds`, `n_params`, `problem_spec`,
+and `optimization_pairs`), random sampling, and pre-run configuration are
+available before logging starts.
+
 ### Register It
 
 Add your import to `src/dfbench/algorithms/<category>/__init__.py` and `src/dfbench/algorithms/__init__.py`.
@@ -412,6 +417,8 @@ obj.best_params_bounded     # best params in physical (bounded) space
 obj.eval_count              # total evaluations performed
 obj.loss_history            # full loss history
 obj.time_steps              # elapsed time at each evaluation
+obj.problem_spec            # JSON-safe reconstructive problem configuration
+obj.optimization_pairs      # component/property context for each parameter index
 ```
 
 See [Objective API Reference](https://github.com/artificial-scientist-lab/Differometor-Benchmark/wiki/Objective-API-Reference) for the complete interface.

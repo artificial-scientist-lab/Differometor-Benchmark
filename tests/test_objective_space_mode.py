@@ -20,11 +20,15 @@ class TestObjectiveSpaceMode:
             )
 
     def test_set_space_mode_rebinds_evaluation_functions(self, mock_problem):
-        obj = Objective(mock_problem, unbounded=False)
         params = jnp.array([1.0, -1.0])
 
-        bounded_loss = float(obj.value(params))
+        bounded_obj = Objective(mock_problem, unbounded=False)
+        bounded_obj.start_logging()
+        bounded_loss = float(bounded_obj.value(params))
+
+        obj = Objective(mock_problem, unbounded=False)
         obj.set_space_mode(True)
+        obj.start_logging()
         unbounded_loss = float(obj.value(params))
 
         assert obj.unbounded is True
@@ -47,10 +51,11 @@ class TestObjectiveSpaceMode:
             )
 
     def test_set_space_mode_custom_mapping_rebinds_objective(self, mock_problem):
-        obj = Objective(mock_problem, unbounded=True)
         params = jnp.array([0.0, 0.0])
 
-        default_loss = float(obj.value(params))
+        default_obj = Objective(mock_problem, unbounded=True)
+        default_obj.start_logging()
+        default_loss = float(default_obj.value(params))
 
         def forward(x):
             # deterministic alternative [0,1] mapping for test visibility
@@ -59,12 +64,13 @@ class TestObjectiveSpaceMode:
         def inverse(x):
             return x
 
-        obj.reset()
+        obj = Objective(mock_problem, unbounded=True)
         obj.set_space_mode(
             True,
             unit_mapping=forward,
             inverse_unit_mapping=inverse,
         )
+        obj.start_logging()
         mapped_loss = float(obj.value(params))
 
         assert mapped_loss != pytest.approx(default_loss)

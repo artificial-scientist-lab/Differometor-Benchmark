@@ -392,6 +392,7 @@ class OpticalSetupProblem(ContinuousProblem):
         spec: dict[str, Any] = {
             "n_frequencies": int(self._frequencies.shape[0]),
             "power_penalty_fn": penalty_fn_to_name(self._power_penalty_fn),
+            "signal_floor": self._signal_floor,
         }
         return spec
 

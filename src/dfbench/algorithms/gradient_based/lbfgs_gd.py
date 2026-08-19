@@ -110,8 +110,9 @@ class LBFGSGD(OptimizationAlgorithm):
         else:
             params = init_params
 
-        # Build the JIT-compiled step using an unlogged value function,
-        # since optax.lbfgs needs a raw callable for line-search.
+        # The raw callable is available only during the timed lifecycle.
+        # Optax L-BFGS needs it inside its JIT-compiled line-search step.
+        obj.start_logging()
         value_fn = obj.value_function(unbounded=True)
         value_and_grad_fn = jax.value_and_grad(value_fn)
 
@@ -138,8 +139,6 @@ class LBFGSGD(OptimizationAlgorithm):
             obj.random_params_unbounded(), warmup_optimizer_state
         )
         _ = _step(obj.random_params_unbounded(), warmup_optimizer_state)
-
-        obj.start_logging()
 
         while not obj.budget_exceeded:
             prior_params = params

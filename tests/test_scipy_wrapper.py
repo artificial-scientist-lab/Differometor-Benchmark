@@ -21,13 +21,13 @@ class TestSciPyObjectiveAdapter:
             max_evals=10,
             save=["grad"],
         )
+        obj.start_logging()
         adapter = SciPyObjectiveAdapter(
             obj,
             SciPyConfig(method="BFGS", unbounded=True, use_bounds=False),
         )
 
         adapter.warmup()
-        obj.start_logging()
 
         x = np.array([0.1, -0.2])
         _ = adapter.fun(x)
@@ -45,6 +45,7 @@ class TestSciPyObjectiveAdapter:
             max_evals=10,
             save=["grad"],
         )
+        obj.start_logging()
         adapter = SciPyObjectiveAdapter(
             obj,
             SciPyConfig(
@@ -57,7 +58,6 @@ class TestSciPyObjectiveAdapter:
         )
 
         adapter.warmup()
-        obj.start_logging()
 
         x = np.array([0.25, -0.5])
         vector = np.array([1.0, 1.0])

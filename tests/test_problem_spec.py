@@ -155,6 +155,26 @@ class TestProblemSpec:
         assert ps.type == "QuadraticProblem"
         assert ps.params == {"n_params": 2}
 
+    def test_objective_problem_spec_is_available_before_logging(self, mock_problem):
+        """Objective exposes the JSON-safe typed spec without changing run state."""
+        obj = Objective(mock_problem)
+
+        assert obj.problem_spec == {
+            "type": "QuadraticProblem",
+            "version": PROBLEM_SPEC_VERSION,
+            "params": {"n_params": 2},
+        }
+        assert obj.eval_count == 0
+        assert obj.time_elapsed == 0.0
+
+    def test_objective_problem_spec_returns_a_fresh_mapping(self, mock_problem):
+        """Caller mutation of one returned spec does not affect later reads."""
+        obj = Objective(mock_problem)
+        spec = obj.problem_spec
+        spec["params"]["n_params"] = 99
+
+        assert obj.problem_spec["params"]["n_params"] == 2
+
     def test_build_from_spec_accepts_problem_spec(self):
         ps = ProblemSpec(type="QuadraticProblem", params={"n_params": 3})
         p = build_problem_from_spec(ps)

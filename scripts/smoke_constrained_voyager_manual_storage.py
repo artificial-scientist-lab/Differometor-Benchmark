@@ -88,6 +88,7 @@ def run(n_frequencies: int) -> None:
         )
         objective.set_penalty_fn(zero_penalty)
 
+        objective.start_logging()
         raw_aux_fn = objective.value_function_aux()
         assert raw_aux_fn is not None
         raw_value_and_grad = jax.jit(jax.value_and_grad(raw_aux_fn, has_aux=True))
@@ -99,7 +100,6 @@ def run(n_frequencies: int) -> None:
         assert float(aux["penalty"]) == 0.0
         assert bool(jnp.all(aux["violations"] == 0.0))
 
-        objective.start_logging()
         objective.log_evaluation(midpoint, loss, grad, aux=aux)
         objective.log_evaluation(midpoint, loss, grad)
         _assert_mixed_aux_history(objective)

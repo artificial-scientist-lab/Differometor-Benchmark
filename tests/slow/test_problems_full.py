@@ -60,6 +60,7 @@ class TestVoyagerProblem:
         mid = (b[0] + b[1]) / 2
         unbounded = inverse_sigmoid_bounding(mid, b)
         obj = Objective(self.problem, unbounded=True)
+        obj.start_logging()
         loss = obj.value_function(unbounded=True)(unbounded)
         assert jnp.isfinite(loss)
 
@@ -80,6 +81,7 @@ class TestVoyagerProblem:
         mid = (b[0] + b[1]) / 2
         unbounded = inverse_sigmoid_bounding(mid, b)
         obj = Objective(self.problem, unbounded=True)
+        obj.start_logging()
         g = jax.grad(obj.value_function(unbounded=True))(unbounded)
         assert g.shape == (self.problem.n_params,)
         assert jnp.all(jnp.isfinite(g))
