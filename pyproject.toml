@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "dfbench"
-version = "0.3.2"
+version = "0.3.3"
 description = "dfbench: A Black-Box Optimization Framework for JAX-Differentiable Gravitational Wave Detector Discovery"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -134,8 +134,10 @@ exclude = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dfbench"]
+core-metadata-version = "2.4"
 
 [tool.hatch.build.targets.sdist]
+core-metadata-version = "2.4"
 only-include = [
     "docs",
     "LICENSE",

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3] - 2026-08-19
+
+### Added
+- `Objective.problem_spec`: a fresh JSON-safe typed problem specification available before logging starts.
+- `Objective.optimization_pairs`: defensive-copy component and property context aligned with every parameter index and available before logging starts.
+- Objective lifecycle regression tests covering every scalar, batched, auxiliary, raw-callable, and manual-logging entry point.
+
+### Changed
+- Result-producing Objective methods, raw value-function getters, and `log_evaluation()` now raise `RuntimeError` until `start_logging()` is called. Problem metadata, bounds, random sampling, warmup helpers, and pre-run configuration remain available before logging.
+- `start_logging()` now rejects a second call during the same run. Call `reset()` before starting another run.
+- Custom JAX, Optax L-BFGS, SciPy, and EvoX paths now include raw-callable compilation or initial evaluated workflow setup in the timed lifecycle.
+- Objective warmup helpers compile their bound internal callables directly so official warmup remains available before logging without exposing an evaluation result.
+
+### Fixed
+- Optical problem specifications now preserve `signal_floor`, ensuring reconstruction retains this objective-affecting setting.
+- Wheel and source-distribution builds now emit Core Metadata 2.4 for compatibility with current Twine and PyPI validation tooling.
+
+### Documentation
+- Updated the README, Objective API, architecture, problem, and algorithm-authoring documentation for the public problem context and enforced logging lifecycle.
+
 ## [0.3.2] - 2026-07-25
 
 ### Added
