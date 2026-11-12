@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is loosely based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Algorithm package and subpackage imports now load implementations lazily. This prevents missing optional dependencies for unrelated backends from blocking imports like `AdamGD`. Package structure didn't change.
+
 ## [0.3.3] - 2026-08-19
 
 ### Added

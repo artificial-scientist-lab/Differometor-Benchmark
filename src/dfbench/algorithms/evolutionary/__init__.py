@@ -1,33 +1,37 @@
 """Evolutionary optimization algorithms."""
 
-from dfbench.algorithms.evolutionary.evox_es import EvoxES
-from dfbench.algorithms.evolutionary.evox_pso import EvoxPSO
-from dfbench.algorithms.evolutionary.nevergrad.ngopt import NevergradNGOpt
-from dfbench.algorithms.evolutionary.nevergrad.oneplusone import NevergradOnePlusOne
-from dfbench.algorithms.evolutionary.nevergrad.tbpsa import NevergradTBPSA
-from dfbench.algorithms.evolutionary.pycma_cmaes import (
-    PyCMACMAES,
-    PyCMAActiveCMAES,
-    PyCMAIPOP,
-    PyCMABIPOP,
-)
-from dfbench.algorithms.evolutionary.cmaes_sep_cma import CMAESSepCMA
-from dfbench.algorithms.evolutionary.evosax_es import EvosaxMAES, EvosaxLMMAES
-from dfbench.algorithms.evolutionary.jax_es import JAXOnePlusOneES, JAXMuLambdaES
+from importlib import import_module as _import_module
 
-__all__ = [
-    "EvoxES",
-    "EvoxPSO",
-    "NevergradNGOpt",
-    "NevergradOnePlusOne",
-    "NevergradTBPSA",
-    "PyCMACMAES",
-    "PyCMAActiveCMAES",
-    "PyCMAIPOP",
-    "PyCMABIPOP",
-    "CMAESSepCMA",
-    "EvosaxMAES",
-    "EvosaxLMMAES",
-    "JAXOnePlusOneES",
-    "JAXMuLambdaES",
-]
+# Resolve public names on demand so unrelated optional backends stay unloaded.
+_EXPORTS = {
+    "EvoxES": ".evox_es",
+    "EvoxPSO": ".evox_pso",
+    "NevergradNGOpt": ".nevergrad.ngopt",
+    "NevergradOnePlusOne": ".nevergrad.oneplusone",
+    "NevergradTBPSA": ".nevergrad.tbpsa",
+    "PyCMACMAES": ".pycma_cmaes",
+    "PyCMAActiveCMAES": ".pycma_cmaes",
+    "PyCMAIPOP": ".pycma_cmaes",
+    "PyCMABIPOP": ".pycma_cmaes",
+    "CMAESSepCMA": ".cmaes_sep_cma",
+    "EvosaxMAES": ".evosax_es",
+    "EvosaxLMMAES": ".evosax_es",
+    "JAXOnePlusOneES": ".jax_es",
+    "JAXMuLambdaES": ".jax_es",
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name: str):
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module = _import_module(_EXPORTS[name], package=__name__)
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

@@ -1,7 +1,13 @@
 """Section 12: Package-level import smoke tests.
 
 Tests 12.1-12.5: verify that all public API symbols are importable.
+Lazy-import regressions use fresh interpreters to avoid cached modules.
 """
+
+
+import subprocess
+import sys
+import textwrap
 
 
 # 12.1
@@ -114,3 +120,84 @@ class TestCoreImports:
         ):
             assert hasattr(dfbench, name), f"'{name}' missing from dfbench"
             assert name in dfbench.__all__, f"'{name}' missing from dfbench.__all__"
+
+
+def run_isolated(source):
+    result = subprocess.run(
+        [sys.executable, "-c", textwrap.dedent(source)],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_package_imports_do_not_load_implementations():
+    run_isolated('''
+        import importlib
+        import importlib.abc
+        import pathlib
+        import sys
+        import dfbench
+
+        root = pathlib.Path(dfbench.__file__).parent / "algorithms"
+        packages = {
+            "dfbench." + ".".join(path.parent.relative_to(root.parent).parts)
+            for path in root.rglob("__init__.py")
+        }
+
+        class BlockImplementations(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname.startswith("dfbench.algorithms.") and fullname not in packages:
+                    raise AssertionError(f"Eager implementation import: {fullname}")
+
+        sys.meta_path.insert(0, BlockImplementations())
+        for name in sorted(packages):
+            package = importlib.import_module(name)
+            assert set(getattr(package, "__all__", ())) <= set(dir(package))
+            try:
+                package.nonexistent_algorithm
+            except AttributeError:
+                pass
+            else:
+                raise AssertionError("Unknown attributes must raise AttributeError")
+    ''')
+
+
+def test_shorthands_work_without_unrelated_optional_dependencies():
+    run_isolated('''
+        import importlib.abc
+        import sys
+
+        class BlockOptional(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname.split(".")[0] in {
+                    "torch", "evox", "nevergrad", "botorch",
+                    "gpytorch", "ax", "hebo", "smac", "cma", "cmaes", "evosax",
+                }:
+                    raise ModuleNotFoundError(f"Blocked optional dependency: {fullname}", name=fullname)
+
+        sys.meta_path.insert(0, BlockOptional())
+        from dfbench.algorithms import AdamGD, JAXOnePlusOneES
+        from dfbench.algorithms.gradient_based import AdamGD as GradientAdam
+        from dfbench.algorithms.gradient_based.adam_gd import AdamGD as DirectAdam
+        from dfbench.algorithms.evolutionary import JAXOnePlusOneES as EvolutionES
+        from dfbench.algorithms.gradient_based.scipy import BFGS
+        from dfbench.algorithms import BFGS as TopBFGS
+        assert AdamGD is GradientAdam is DirectAdam
+        assert JAXOnePlusOneES is EvolutionES
+        assert BFGS is TopBFGS
+
+        import dfbench.algorithms as algorithms
+        assert algorithms.__dict__["AdamGD"] is AdamGD
+        for package in (algorithms, sys.modules["dfbench.algorithms.evolutionary"]):
+            try:
+                package.EvoxES
+            except ImportError as exc:
+                assert "evox and torch are required" in str(exc)
+            else:
+                raise AssertionError("Requesting EvoxES must report missing dependencies")
+            assert "EvoxES" not in package.__dict__
+        assert algorithms.AdamGD is DirectAdam
+    ''')

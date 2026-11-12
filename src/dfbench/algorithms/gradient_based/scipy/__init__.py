@@ -1,31 +1,36 @@
 """SciPy-based gradient optimizers."""
 
-from dfbench.algorithms.gradient_based.scipy.bfgs import BFGS
-from dfbench.algorithms.gradient_based.scipy.cobyla import COBYLA
-from dfbench.algorithms.gradient_based.scipy.cobyqa import COBYQA
-from dfbench.algorithms.gradient_based.scipy.dogleg import Dogleg
-from dfbench.algorithms.gradient_based.scipy.lbfgsb import LBFGSB
-from dfbench.algorithms.gradient_based.scipy.newton_cg import NewtonCG
-from dfbench.algorithms.gradient_based.scipy.nonlinear_cg import NonlinearCG
-from dfbench.algorithms.gradient_based.scipy.slsqp import SLSQP
-from dfbench.algorithms.gradient_based.scipy.sr1 import SR1
-from dfbench.algorithms.gradient_based.scipy.tnc import TNC
-from dfbench.algorithms.gradient_based.scipy.trust_constr import TrustConstr
-from dfbench.algorithms.gradient_based.scipy.trust_krylov import TrustKrylov
-from dfbench.algorithms.gradient_based.scipy.trust_ncg import TrustNCG
+from importlib import import_module as _import_module
 
-__all__ = [
-    "BFGS",
-    "COBYLA",
-    "COBYQA",
-    "Dogleg",
-    "LBFGSB",
-    "NewtonCG",
-    "NonlinearCG",
-    "SLSQP",
-    "SR1",
-    "TNC",
-    "TrustConstr",
-    "TrustKrylov",
-    "TrustNCG",
-]
+# Resolve public names on demand so unrelated optional backends stay unloaded.
+_EXPORTS = {
+    "BFGS": ".bfgs",
+    "COBYLA": ".cobyla",
+    "COBYQA": ".cobyqa",
+    "Dogleg": ".dogleg",
+    "LBFGSB": ".lbfgsb",
+    "NewtonCG": ".newton_cg",
+    "NonlinearCG": ".nonlinear_cg",
+    "SLSQP": ".slsqp",
+    "SR1": ".sr1",
+    "TNC": ".tnc",
+    "TrustConstr": ".trust_constr",
+    "TrustKrylov": ".trust_krylov",
+    "TrustNCG": ".trust_ncg",
+}
+
+__all__ = list(_EXPORTS)
+
+
+def __getattr__(name: str):
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    module = _import_module(_EXPORTS[name], package=__name__)
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
+
+
+def __dir__():
+    return sorted(set(globals()) | set(__all__))

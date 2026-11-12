@@ -1,262 +1,125 @@
 """Optimization algorithms."""
 
-from dfbench.algorithms.derivative_free.nelder_mead import NelderMead
-from dfbench.algorithms.derivative_free.powell import Powell
-from dfbench.algorithms.global_search.basin_hopping import BasinHopping
-from dfbench.algorithms.global_search.dual_annealing import DualAnnealing
-from dfbench.algorithms.global_search.random_search import RandomSearch
-from dfbench.algorithms.evolutionary.jax_es import JAXOnePlusOneES, JAXMuLambdaES
-from dfbench.algorithms.gradient_based.adam_gd import AdamGD
-from dfbench.algorithms.gradient_based.custom_jax import (
-    ARCJAX,
-    ASAMJAX,
-    AdamToLBFGSJAX,
-    EntropySGDJAX,
-    GDRestartsJAX,
-    GaussianSmoothingGDJAX,
-    NoisyAdamJAX,
-    OAdamJAX,
-    OGDJAX,
-    PerturbedGDJAX,
-    SGHMCJAX,
-    SGLDJAX,
-)
-from dfbench.algorithms.gradient_based.lbfgs_gd import LBFGSGD
-from dfbench.algorithms.gradient_based.na_adam_gd import NAAdamGD
-from dfbench.algorithms.gradient_based.sa_gd import SAGD
-from dfbench.algorithms.surrogate_based.restir import ReSTIR
-from dfbench.algorithms.generative.vae_sampling import VAESampling
+from importlib import import_module as _import_module
 
-# DFO extra: OMADS, PDFO, Py-BOBYQA
-try:
-    from dfbench.algorithms.derivative_free.omads_mads import OmadsMADS, OmadsOrthoMADS
-except ImportError:
-    pass
-try:
-    from dfbench.algorithms.derivative_free.pdfo.uobyqa import PDFOUOBYQA
-    from dfbench.algorithms.derivative_free.pdfo.newuoa import PDFONEWUOA
-    from dfbench.algorithms.derivative_free.pdfo.lincoa import PDFOLINCOA
-except ImportError:
-    pass
-try:
-    from dfbench.algorithms.derivative_free.pybobyqa import PyBOBYQA
-except ImportError:
-    pass
+# Resolve public names on demand so unrelated optional backends stay unloaded.
+_EXPORTS = {
+    "BasinHopping": ".global_search.basin_hopping",
+    "DualAnnealing": ".global_search.dual_annealing",
+    "RandomSearch": ".global_search.random_search",
+    "NelderMead": ".derivative_free.nelder_mead",
+    "OmadsMADS": ".derivative_free.omads_mads",
+    "OmadsOrthoMADS": ".derivative_free.omads_mads",
+    "Powell": ".derivative_free.powell",
+    "EvoxES": ".evolutionary.evox_es",
+    "EvoxPSO": ".evolutionary.evox_pso",
+    "NevergradNGOpt": ".evolutionary.nevergrad.ngopt",
+    "NevergradOnePlusOne": ".evolutionary.nevergrad.oneplusone",
+    "NevergradTBPSA": ".evolutionary.nevergrad.tbpsa",
+    "PyCMACMAES": ".evolutionary.pycma_cmaes",
+    "PyCMAActiveCMAES": ".evolutionary.pycma_cmaes",
+    "PyCMAIPOP": ".evolutionary.pycma_cmaes",
+    "PyCMABIPOP": ".evolutionary.pycma_cmaes",
+    "CMAESSepCMA": ".evolutionary.cmaes_sep_cma",
+    "EvosaxMAES": ".evolutionary.evosax_es",
+    "EvosaxLMMAES": ".evolutionary.evosax_es",
+    "JAXOnePlusOneES": ".evolutionary.jax_es",
+    "JAXMuLambdaES": ".evolutionary.jax_es",
+    "AdamGD": ".gradient_based.adam_gd",
+    "SGLDJAX": ".gradient_based.custom_jax",
+    "ASAMJAX": ".gradient_based.custom_jax",
+    "AdamToLBFGSJAX": ".gradient_based.custom_jax",
+    "EntropySGDJAX": ".gradient_based.custom_jax",
+    "SGHMCJAX": ".gradient_based.custom_jax",
+    "ARCJAX": ".gradient_based.custom_jax",
+    "OGDJAX": ".gradient_based.custom_jax",
+    "OAdamJAX": ".gradient_based.custom_jax",
+    "PerturbedGDJAX": ".gradient_based.custom_jax",
+    "NoisyAdamJAX": ".gradient_based.custom_jax",
+    "GDRestartsJAX": ".gradient_based.custom_jax",
+    "GaussianSmoothingGDJAX": ".gradient_based.custom_jax",
+    "BFGS": ".gradient_based.scipy.bfgs",
+    "COBYLA": ".gradient_based.scipy.cobyla",
+    "COBYQA": ".gradient_based.scipy.cobyqa",
+    "Dogleg": ".gradient_based.scipy.dogleg",
+    "LBFGSGD": ".gradient_based.lbfgs_gd",
+    "LBFGSB": ".gradient_based.scipy.lbfgsb",
+    "NAAdamGD": ".gradient_based.na_adam_gd",
+    "NewtonCG": ".gradient_based.scipy.newton_cg",
+    "NonlinearCG": ".gradient_based.scipy.nonlinear_cg",
+    "SAGD": ".gradient_based.sa_gd",
+    "SLSQP": ".gradient_based.scipy.slsqp",
+    "SR1": ".gradient_based.scipy.sr1",
+    "TNC": ".gradient_based.scipy.tnc",
+    "TrustConstr": ".gradient_based.scipy.trust_constr",
+    "TrustKrylov": ".gradient_based.scipy.trust_krylov",
+    "TrustNCG": ".gradient_based.scipy.trust_ncg",
+    "BotorchBO": ".surrogate_based.botorch.botorch_bo",
+    "BotorchTuRBO": ".surrogate_based.botorch.botorch_turbo",
+    "ReSTIR": ".surrogate_based.restir",
+    "AxSAASBO": ".surrogate_based.ax_saasbo",
+    "BAxUS": ".surrogate_based.ax_baxus",
+    "BotorchQNEI": ".surrogate_based.botorch.botorch_qnei",
+    "BotorchqKG": ".surrogate_based.botorch.botorch_qkg",
+    "REMBO": ".surrogate_based.botorch.botorch_rembo",
+    "GEBO": ".surrogate_based.botorch.botorch_gebo",
+    "LineBO": ".surrogate_based.botorch.botorch_linebo",
+    "HEBO": ".surrogate_based.hebo_bo",
+    "SMAC": ".surrogate_based.smac_bo",
+    "TuRBOLBFGS": ".surrogate_based.turbo_lbfgs",
+    "VAESampling": ".generative.vae_sampling",
+    "PDFOUOBYQA": ".derivative_free.pdfo.uobyqa",
+    "PDFONEWUOA": ".derivative_free.pdfo.newuoa",
+    "PDFOLINCOA": ".derivative_free.pdfo.lincoa",
+    "PyBOBYQA": ".derivative_free.pybobyqa",
+    "OptaxAdam": ".gradient_based.optax.adam",
+    "OptaxAdamW": ".gradient_based.optax.adamw",
+    "OptaxAdaBelief": ".gradient_based.optax.adabelief",
+    "OptaxAdafactor": ".gradient_based.optax.adafactor",
+    "OptaxAMSGrad": ".gradient_based.optax.amsgrad",
+    "OptaxAdaGrad": ".gradient_based.optax.adagrad",
+    "OptaxAdaDelta": ".gradient_based.optax.adadelta",
+    "OptaxAdaMax": ".gradient_based.optax.adamax",
+    "OptaxAdaMaxW": ".gradient_based.optax.adamaxw",
+    "OptaxAdan": ".gradient_based.optax.adan",
+    "OptaxLion": ".gradient_based.optax.lion",
+    "OptaxLAMB": ".gradient_based.optax.lamb",
+    "OptaxNadam": ".gradient_based.optax.nadam",
+    "OptaxNadamW": ".gradient_based.optax.nadamw",
+    "OptaxRMSProp": ".gradient_based.optax.rmsprop",
+    "OptaxRProp": ".gradient_based.optax.rprop",
+    "OptaxRAdam": ".gradient_based.optax.radam",
+    "OptaxSGD": ".gradient_based.optax.sgd",
+    "OptaxSGDM": ".gradient_based.optax.sgd",
+    "OptaxNAG": ".gradient_based.optax.sgd",
+    "OptaxNoisySGD": ".gradient_based.optax.noisy_sgd",
+    "OptaxPolyakSGD": ".gradient_based.optax.polyak_sgd",
+    "OptaxSAM": ".gradient_based.optax.sam",
+    "OptaxSophia": ".gradient_based.optax.sophia",
+    "OptaxLookahead": ".gradient_based.optax.lookahead",
+    "OptaxScheduleFreeAdam": ".gradient_based.optax.schedule_free_adam",
+    "OptaxYogi": ".gradient_based.optax.yogi",
+    "OptaxNovoGrad": ".gradient_based.optax.novograd",
+    "OptaxOGD": ".gradient_based.optax.ogd",
+    "OptaxOAdam": ".gradient_based.optax.oadam",
+    "OptaxSignSGD": ".gradient_based.optax.sign",
+    "OptaxSignum": ".gradient_based.optax.sign",
+    "OptaxSM3": ".gradient_based.optax.sm3",
+    "OptaxLBFGS": ".gradient_based.optax_lbfgs",
+}
 
-# SciPy extra
-try:
-    from dfbench.algorithms.gradient_based.scipy.bfgs import BFGS
-    from dfbench.algorithms.gradient_based.scipy.cobyla import COBYLA
-    from dfbench.algorithms.gradient_based.scipy.cobyqa import COBYQA
-    from dfbench.algorithms.gradient_based.scipy.dogleg import Dogleg
-    from dfbench.algorithms.gradient_based.scipy.lbfgsb import LBFGSB
-    from dfbench.algorithms.gradient_based.scipy.newton_cg import NewtonCG
-    from dfbench.algorithms.gradient_based.scipy.nonlinear_cg import NonlinearCG
-    from dfbench.algorithms.gradient_based.scipy.slsqp import SLSQP
-    from dfbench.algorithms.gradient_based.scipy.sr1 import SR1
-    from dfbench.algorithms.gradient_based.scipy.tnc import TNC
-    from dfbench.algorithms.gradient_based.scipy.trust_constr import TrustConstr
-    from dfbench.algorithms.gradient_based.scipy.trust_krylov import TrustKrylov
-    from dfbench.algorithms.gradient_based.scipy.trust_ncg import TrustNCG
-except ImportError:
-    pass
+__all__ = list(_EXPORTS)
 
-# Evolution extra: evox, nevergrad, pycma, cmaes, evosax, torch
-try:
-    from dfbench.algorithms.evolutionary.evox_es import EvoxES
-    from dfbench.algorithms.evolutionary.evox_pso import EvoxPSO
-except ImportError:
-    pass
-try:
-    from dfbench.algorithms.evolutionary.nevergrad.ngopt import NevergradNGOpt
-    from dfbench.algorithms.evolutionary.nevergrad.oneplusone import NevergradOnePlusOne
-    from dfbench.algorithms.evolutionary.nevergrad.tbpsa import NevergradTBPSA
-except ImportError:
-    pass
-try:
-    from dfbench.algorithms.evolutionary.pycma_cmaes import (
-        PyCMACMAES,
-        PyCMAActiveCMAES,
-        PyCMAIPOP,
-        PyCMABIPOP,
-    )
-except ImportError:
-    pass
-try:
-    from dfbench.algorithms.evolutionary.cmaes_sep_cma import CMAESSepCMA
-except ImportError:
-    pass
-try:
-    from dfbench.algorithms.evolutionary.evosax_es import EvosaxMAES, EvosaxLMMAES
-except ImportError:
-    pass
 
-# BO extra: botorch, ax, gpytorch, torch. HEBO is an unbundled backend.
-try:
-    from dfbench.algorithms.surrogate_based.botorch.botorch_bo import BotorchBO
-    from dfbench.algorithms.surrogate_based.botorch.botorch_turbo import BotorchTuRBO
-    from dfbench.algorithms.surrogate_based.botorch.botorch_qnei import BotorchQNEI
-    from dfbench.algorithms.surrogate_based.botorch.botorch_qkg import BotorchqKG
-    from dfbench.algorithms.surrogate_based.botorch.botorch_rembo import REMBO
-    from dfbench.algorithms.surrogate_based.botorch.botorch_gebo import GEBO
-    from dfbench.algorithms.surrogate_based.botorch.botorch_linebo import LineBO
-    from dfbench.algorithms.surrogate_based.ax_baxus import BAxUS
-    from dfbench.algorithms.surrogate_based.ax_saasbo import AxSAASBO
-    from dfbench.algorithms.surrogate_based.hebo_bo import HEBO
-    from dfbench.algorithms.surrogate_based.turbo_lbfgs import TuRBOLBFGS
-except ImportError:
-    pass
+def __getattr__(name: str):
+    if name not in _EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-# Optax extra
-try:
-    from dfbench.algorithms.gradient_based.optax.adam import OptaxAdam
-    from dfbench.algorithms.gradient_based.optax.adamw import OptaxAdamW
-    from dfbench.algorithms.gradient_based.optax.adabelief import OptaxAdaBelief
-    from dfbench.algorithms.gradient_based.optax.adafactor import OptaxAdafactor
-    from dfbench.algorithms.gradient_based.optax.amsgrad import OptaxAMSGrad
-    from dfbench.algorithms.gradient_based.optax.adagrad import OptaxAdaGrad
-    from dfbench.algorithms.gradient_based.optax.adadelta import OptaxAdaDelta
-    from dfbench.algorithms.gradient_based.optax.adamax import OptaxAdaMax
-    from dfbench.algorithms.gradient_based.optax.adamaxw import OptaxAdaMaxW
-    from dfbench.algorithms.gradient_based.optax.adan import OptaxAdan
-    from dfbench.algorithms.gradient_based.optax.lion import OptaxLion
-    from dfbench.algorithms.gradient_based.optax.lamb import OptaxLAMB
-    from dfbench.algorithms.gradient_based.optax.nadam import OptaxNadam
-    from dfbench.algorithms.gradient_based.optax.nadamw import OptaxNadamW
-    from dfbench.algorithms.gradient_based.optax.rmsprop import OptaxRMSProp
-    from dfbench.algorithms.gradient_based.optax.rprop import OptaxRProp
-    from dfbench.algorithms.gradient_based.optax.radam import OptaxRAdam
-    from dfbench.algorithms.gradient_based.optax.sgd import (
-        OptaxSGD,
-        OptaxSGDM,
-        OptaxNAG,
-    )
-    from dfbench.algorithms.gradient_based.optax.noisy_sgd import OptaxNoisySGD
-    from dfbench.algorithms.gradient_based.optax.polyak_sgd import OptaxPolyakSGD
-    from dfbench.algorithms.gradient_based.optax.sam import OptaxSAM
-    from dfbench.algorithms.gradient_based.optax.sophia import OptaxSophia
-    from dfbench.algorithms.gradient_based.optax.lookahead import OptaxLookahead
-    from dfbench.algorithms.gradient_based.optax.schedule_free_adam import (
-        OptaxScheduleFreeAdam,
-    )
-    from dfbench.algorithms.gradient_based.optax.yogi import OptaxYogi
-    from dfbench.algorithms.gradient_based.optax.novograd import OptaxNovoGrad
-    from dfbench.algorithms.gradient_based.optax.ogd import OptaxOGD
-    from dfbench.algorithms.gradient_based.optax.oadam import OptaxOAdam
-    from dfbench.algorithms.gradient_based.optax.sign import OptaxSignSGD, OptaxSignum
-    from dfbench.algorithms.gradient_based.optax.sm3 import OptaxSM3
-    from dfbench.algorithms.gradient_based.optax_lbfgs import OptaxLBFGS
-except ImportError:
-    pass
+    module = _import_module(_EXPORTS[name], package=__name__)
+    value = getattr(module, name)
+    globals()[name] = value
+    return value
 
-# SMAC extra
-try:
-    from dfbench.algorithms.surrogate_based.smac_bo import SMAC
-except ImportError:
-    pass
 
-__all__ = [
-    "BasinHopping",
-    "DualAnnealing",
-    "RandomSearch",
-    "NelderMead",
-    "OmadsMADS",
-    "OmadsOrthoMADS",
-    "Powell",
-    "EvoxES",
-    "EvoxPSO",
-    "NevergradNGOpt",
-    "NevergradOnePlusOne",
-    "NevergradTBPSA",
-    "PyCMACMAES",
-    "PyCMAActiveCMAES",
-    "PyCMAIPOP",
-    "PyCMABIPOP",
-    "CMAESSepCMA",
-    "EvosaxMAES",
-    "EvosaxLMMAES",
-    "JAXOnePlusOneES",
-    "JAXMuLambdaES",
-    "AdamGD",
-    "SGLDJAX",
-    "ASAMJAX",
-    "AdamToLBFGSJAX",
-    "EntropySGDJAX",
-    "SGHMCJAX",
-    "ARCJAX",
-    "OGDJAX",
-    "OAdamJAX",
-    "PerturbedGDJAX",
-    "NoisyAdamJAX",
-    "GDRestartsJAX",
-    "GaussianSmoothingGDJAX",
-    "BFGS",
-    "COBYLA",
-    "COBYQA",
-    "Dogleg",
-    "LBFGSGD",
-    "LBFGSB",
-    "NAAdamGD",
-    "NewtonCG",
-    "NonlinearCG",
-    "SAGD",
-    "SLSQP",
-    "SR1",
-    "TNC",
-    "TrustConstr",
-    "TrustKrylov",
-    "TrustNCG",
-    "BotorchBO",
-    "BotorchTuRBO",
-    "ReSTIR",
-    "AxSAASBO",
-    "BAxUS",
-    "BotorchQNEI",
-    "BotorchqKG",
-    "REMBO",
-    "GEBO",
-    "LineBO",
-    "HEBO",
-    "SMAC",
-    "TuRBOLBFGS",
-    "VAESampling",
-    "PDFOUOBYQA",
-    "PDFONEWUOA",
-    "PDFOLINCOA",
-    "PyBOBYQA",
-    # Optax batch
-    "OptaxAdam",
-    "OptaxAdamW",
-    "OptaxAdaBelief",
-    "OptaxAdafactor",
-    "OptaxAMSGrad",
-    "OptaxAdaGrad",
-    "OptaxAdaDelta",
-    "OptaxAdaMax",
-    "OptaxAdaMaxW",
-    "OptaxAdan",
-    "OptaxLion",
-    "OptaxLAMB",
-    "OptaxNadam",
-    "OptaxNadamW",
-    "OptaxRMSProp",
-    "OptaxRProp",
-    "OptaxRAdam",
-    "OptaxSGD",
-    "OptaxSGDM",
-    "OptaxNAG",
-    "OptaxNoisySGD",
-    "OptaxPolyakSGD",
-    "OptaxSAM",
-    "OptaxSophia",
-    "OptaxLookahead",
-    "OptaxScheduleFreeAdam",
-    "OptaxYogi",
-    "OptaxNovoGrad",
-    "OptaxOGD",
-    "OptaxOAdam",
-    "OptaxSignSGD",
-    "OptaxSignum",
-    "OptaxSM3",
-    "OptaxLBFGS",
-]
+def __dir__():
+    return sorted(set(globals()) | set(__all__))
